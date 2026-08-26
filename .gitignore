@@ -9,3 +9,4 @@ coverage/
 .vite/
 # 准入材料本地存储目录（开发环境）
 apps/api/uploads/
+*.tsbuildinfo
