@@ -20,12 +20,13 @@ export default {
       quoteHistory: "往期报价",
       access: "业务准入",
       accessMaterials: "材料上传",
-      accessDocuments: "补件处理",
+      accessDocuments: "审核跟踪",
       compliance: "合规管理",
       complianceReview: "审核队列",
       complianceKycConfig: "KYC list 配置",
       admin: "系统管理",
       adminUsers: "用户管理",
+      adminReviewAssignment: "审核分配",
     },
   },
   quote: {
@@ -126,6 +127,7 @@ export default {
       source: "数据源：XE Global",
       online: "连线中",
       refreshed: "已同步最新渠道汇率，可点击一键计算报价",
+      synced: "已从 XE 行情源同步最新汇率，可点击一键计算报价",
     },
     variable: {
       title: "插入变量",

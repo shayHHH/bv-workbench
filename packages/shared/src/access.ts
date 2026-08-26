@@ -1,10 +1,10 @@
 /**
  * 业务准入域共享定义（KYC 材料清单配置 / 准入申请 / 合规审核工单）。
- * 依据 PRD §4.7-4.10、§5.2 状态机、§6.2-6.4 数据需求；
+ * 交互与结构以 demo（bv-workbench-go/index.html + app.js）为准，PRD §4.7-4.10 仅作背景；
  * 持久化只存稳定英文代码，中文展示走 *Label 映射（规范 §5.2）。
  */
 
-/* ---------------- KYC 材料清单配置（业务类型 → 渠道 → 材料项） ---------------- */
+/* ---------------- KYC 材料清单配置（demo 四层：业务类型 → 渠道 → 材料模块 → 材料项） ---------------- */
 
 /** 材料项类型 */
 export const KycItemType = {
@@ -32,26 +32,57 @@ export const KycScenarioStatusLabel: Record<KycScenarioStatus, string> = {
   PUBLISHED: "已发布",
 };
 
-export interface KycChannel {
-  channel_code: string;
-  channel_name: string;
-  /** 渠道特殊规则/限制银行/补充说明 */
-  restriction_note: string | null;
+/** 材料有效期要求（demo：无 / 1 个月内 / 3 个月内） */
+export const KycItemValidity = {
+  NONE: "NONE",
+  ONE_MONTH: "ONE_MONTH",
+  THREE_MONTHS: "THREE_MONTHS",
+} as const;
+export type KycItemValidity = (typeof KycItemValidity)[keyof typeof KycItemValidity];
+
+export const KycItemValidityLabel: Record<KycItemValidity, string> = {
+  NONE: "无有效期限制",
+  ONE_MONTH: "需 1 个月内有效",
+  THREE_MONTHS: "需 3 个月内有效",
+};
+
+/** 渠道标识颜色（demo 渠道 Matrix 主题色） */
+export const KycChannelTheme = {
+  RED: "red",
+  BLUE: "blue",
+  TEAL: "teal",
+  AMBER: "amber",
+} as const;
+export type KycChannelTheme = (typeof KycChannelTheme)[keyof typeof KycChannelTheme];
+
+export const KycChannelThemeLabel: Record<KycChannelTheme, string> = {
+  red: "红色",
+  blue: "蓝色",
+  teal: "青绿色",
+  amber: "琥珀色",
+};
+
+/** 渠道限制条目（demo：银行禁令 / 特殊证明要求） */
+export const KycRestrictionType = {
+  BANK_BAN: "bank_ban",
+  SPECIAL_PROOF: "special_proof",
+} as const;
+export type KycRestrictionType = (typeof KycRestrictionType)[keyof typeof KycRestrictionType];
+
+export interface KycRestriction {
+  type: KycRestrictionType;
+  content: string;
 }
 
 export interface KycItem {
   /** 场景内稳定 ID（提交后材料关联、退回指定都引用它） */
   item_id: string;
   item_name: string;
+  /** 补充要求（demo 的 subRequirement） */
   item_description: string | null;
   item_type: KycItemType;
   required: boolean;
-  /** 份数上限 */
-  max_count: number;
-  /** 有效期规则说明（先做展示文案，过期引擎后续迭代） */
-  validity_note: string | null;
-  /** 适用渠道代码；null/空 = 全渠道适用 */
-  channel_codes: string[] | null;
+  validity: KycItemValidity;
 }
 
 export interface KycSection {
@@ -59,16 +90,24 @@ export interface KycSection {
   items: KycItem[];
 }
 
+/** 渠道：demo 口径下每个渠道持有独立的材料模块清单 */
+export interface KycChannel {
+  channel_code: string;
+  channel_name: string;
+  theme: KycChannelTheme;
+  restrictions: KycRestriction[];
+  sections: KycSection[];
+}
+
 export interface KycScenarioVO {
   id: string;
   scenario_code: string;
   scenario_name: string;
-  /** 业务流程与约束说明（审核详情页"人工审核要求"引用） */
+  /** 业务流程与约束说明（材料上传页"业务审核要点"、审核详情"人工审核要求"引用） */
   process_description: string | null;
   status: KycScenarioStatus;
   is_builtin: boolean;
   channels: KycChannel[];
-  sections: KycSection[];
   published_at: string | null;
   updated_at: string;
 }
@@ -78,7 +117,6 @@ export interface SaveKycScenarioInput {
   scenario_name: string;
   process_description?: string | null;
   channels: KycChannel[];
-  sections: KycSection[];
 }
 
 /* ---------------- 准入申请（客户 × 业务类型 × 渠道，PRD §5.2 状态机） ---------------- */
@@ -95,16 +133,43 @@ export const AccessStatus = {
 } as const;
 export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
 
+/**
+ * demo 八态与结论语义：合规「驳回」→ 待补件（补件回路）；合规「终止」→ 审核拒绝（可重新发起）；
+ * 已过期/已暂停沿用 demo：仅展示，无自动引擎。
+ */
 export const AccessStatusLabel: Record<AccessStatus, string> = {
   DRAFT: "草稿",
   PENDING_REVIEW: "待审核",
-  /** 已废弃（2026-08-26 用户拍板合并进"驳回"）；仅为历史数据保留 */
   SUPPLEMENT_REQUIRED: "待补件",
   REJECTED: "审核拒绝",
   APPROVED: "审核通过",
   EXPIRED: "已过期",
   SUSPENDED: "已暂停",
   CANCELLED: "已取消",
+};
+
+/** demo 工单列表的状态说明文案（materialStatusFlow.desc） */
+export const AccessStatusDesc: Record<AccessStatus, string> = {
+  DRAFT: "草稿已保存，还未提交审核",
+  PENDING_REVIEW: "材料已提交，等待合规官审核",
+  SUPPLEMENT_REQUIRED: "合规要求补充/修改材料，需重新上传",
+  REJECTED: "合规明确拒绝该业务准入",
+  APPROVED: "合规审核已通过",
+  EXPIRED: "曾经通过，有效期过期，需重新提交",
+  SUSPENDED: "风控或人工暂停该业务准入",
+  CANCELLED: "申请已取消或作废",
+};
+
+/** 提交模式（demo 底部提交坞三选一中的两个合规通道；材料库归档不生成工单） */
+export const ReviewType = {
+  FX: "FX",
+  USDT: "USDT",
+} as const;
+export type ReviewType = (typeof ReviewType)[keyof typeof ReviewType];
+
+export const ReviewTypeLabel: Record<ReviewType, string> = {
+  FX: "找换",
+  USDT: "U相关",
 };
 
 /** 材料来源（PRD §6.2） */
@@ -194,6 +259,9 @@ export interface AccessApplicationVO {
   scenario_code: string | null;
   scenario_name: string | null;
   channel_code: string | null;
+  channel_name: string | null;
+  /** 提交模式（找换/U相关）；草稿期为空，提交时写入 */
+  review_type: ReviewType | null;
   form: ApplicationFormVO;
   materials: ApplicationMaterialVO[];
   status: AccessStatus;
@@ -217,6 +285,11 @@ export interface AccessApplicationVO {
 
 export interface CreateApplicationInput {
   customer_id: string;
+}
+
+export interface SubmitApplicationInput {
+  /** 提交模式：找换 / U相关（demo 底部提交坞选择） */
+  review_type: ReviewType;
 }
 
 export interface SaveApplicationDraftInput {
@@ -327,6 +400,8 @@ export interface ReviewCaseVO {
   customer_code: string | null;
   scenario_name: string | null;
   channel_code: string | null;
+  channel_name: string | null;
+  review_type: ReviewType | null;
   audit_type: ReviewAuditType;
   status: ReviewCaseStatus;
   final_result: ReviewFinalResult | null;

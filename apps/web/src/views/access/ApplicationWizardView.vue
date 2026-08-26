@@ -4,10 +4,12 @@ import {
   AccessStatusLabel,
   ApplicationMaterialStatus,
   ApplicationMaterialStatusLabel,
+  KycItemValidityLabel,
   LEGACY_DECISION_ACTION_LABEL,
   MaterialSource,
   MaterialSourceLabel,
   ReviewDecisionActionLabel,
+  ReviewType,
   UPLOAD_ACCEPT_EXTS,
   UPLOAD_MAX_SIZE,
   type ApplicationMaterialVO,
@@ -70,17 +72,10 @@ const currentChannel = computed(
   () => currentScenario.value?.channels.find(c => c.channel_code === draft.channel_code) ?? null,
 );
 
-/** 当前渠道适用的材料模块（KYC 清单） */
+/** 当前渠道的材料模块（demo 四层结构：材料清单挂在渠道下） */
 const applicableSections = computed(() => {
-  if (!currentScenario.value || !draft.channel_code) return [];
-  return currentScenario.value.sections
-    .map(section => ({
-      section_name: section.section_name,
-      items: section.items.filter(
-        item => !item.channel_codes?.length || item.channel_codes.includes(draft.channel_code),
-      ),
-    }))
-    .filter(section => section.items.length);
+  if (!currentChannel.value) return [];
+  return currentChannel.value.sections.filter(section => section.items.length);
 });
 
 const applicableItems = computed(() => applicableSections.value.flatMap(s => s.items));
@@ -170,7 +165,9 @@ function onScenarioChange() {
     draft.channel_code = scenario.channels.length === 1 ? scenario.channels[0].channel_code : "";
   }
   // 清掉新模板中不存在的材料项关联
-  const validIds = new Set(scenario.sections.flatMap(s => s.items.map(i => i.item_id)));
+  const validIds = new Set(
+    scenario.channels.flatMap(c => c.sections.flatMap(s => s.items.map(i => i.item_id))),
+  );
   for (const material of draft.materials) {
     if (material.requirement_item_id && !validIds.has(material.requirement_item_id)) {
       material.requirement_item_id = null;
@@ -305,14 +302,12 @@ async function archiveToLibrary() {
 
 async function submit() {
   await persistDraft(true);
-  if (completeness.value.done < completeness.value.total) {
-    ElMessage.warning(
-      `必填材料未集齐（${completeness.value.done}/${completeness.value.total}），请先补齐`,
-    );
-    return;
-  }
   if (returnedMaterials.value.length) {
     ElMessage.warning("仍有被退回的材料未替换");
+    return;
+  }
+  if (!draft.materials.length) {
+    ElMessage.warning("请至少上传 1 份材料");
     return;
   }
   const isResubmit = application.value?.status !== AccessStatus.DRAFT;
@@ -323,9 +318,11 @@ async function submit() {
   );
   submitting.value = true;
   try {
-    await submitApplication(applicationId);
+    // 沿用上次提交模式；首次提交默认找换（提交模式的主入口在「材料上传」页）
+    const reviewType = (application.value?.review_type as ReviewType) || ReviewType.FX;
+    await submitApplication(applicationId, reviewType);
     ElMessage.success("已提交合规审核");
-    router.push("/access/materials");
+    router.push("/access/documents");
   } finally {
     submitting.value = false;
   }
@@ -455,7 +452,7 @@ onMounted(load);
               >
                 <strong>{{ channel.channel_name }}</strong>
                 <small>{{ channel.channel_code }}</small>
-                <p>{{ channel.restriction_note || "无特殊限制" }}</p>
+                <p>{{ channel.restrictions.length ? channel.restrictions.map(r => r.content).join("；") : "无特殊限制" }}</p>
               </button>
             </div>
           </section>
@@ -507,7 +504,7 @@ onMounted(load);
                   </strong>
                   <small>
                     {{ item.item_description || "—" }}
-                    <template v-if="item.validity_note"> · {{ item.validity_note }}</template>
+                    <template v-if="item.validity !== 'NONE'"> · {{ KycItemValidityLabel[item.validity] }}</template>
                   </small>
                   <ul v-if="materialsOf(item).length" class="file-list">
                     <li v-for="material in materialsOf(item)" :key="material.material_key">
@@ -536,7 +533,7 @@ onMounted(load);
                   type="primary"
                   plain
                   :icon="Upload"
-                  :disabled="!editable || materialsOf(item).length >= item.max_count"
+                  :disabled="!editable"
                   :loading="uploadingItemId === item.item_id"
                   @click="triggerUpload(item.item_id)"
                 >
@@ -642,7 +639,7 @@ onMounted(load);
               </p>
               <p v-if="currentChannel" class="assistant-block restriction">
                 <strong>渠道限制 · {{ currentChannel.channel_name }}</strong><br />
-                <span>{{ currentChannel.restriction_note || "无特殊限制" }}</span>
+                <span>{{ currentChannel.restrictions.length ? currentChannel.restrictions.map(r => r.content).join("；") : "无特殊限制" }}</span>
               </p>
               <template v-if="draft.channel_code">
                 <div class="assistant-block">

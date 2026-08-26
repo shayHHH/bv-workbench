@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
+import { AssignmentModule } from "../assignment/assignment.module";
+import { CustomerModule } from "../customer/customer.module";
 import { Customer, CustomerSchema } from "../customer/customer.schema";
 import { KycModule } from "../kyc/kyc.module";
 import { AccessApplication, AccessApplicationSchema } from "./access-application.schema";
@@ -13,6 +15,8 @@ import { ReviewService } from "./review.service";
 @Module({
   imports: [
     KycModule,
+    CustomerModule,
+    AssignmentModule,
     MongooseModule.forFeature([
       { name: AccessApplication.name, schema: AccessApplicationSchema },
       { name: CustomerMaterial.name, schema: CustomerMaterialSchema },

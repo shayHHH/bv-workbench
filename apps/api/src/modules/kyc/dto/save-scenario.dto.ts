@@ -3,29 +3,27 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
-  IsInt,
   IsOptional,
   IsString,
-  Max,
   MaxLength,
-  Min,
   ValidateNested,
 } from "class-validator";
-import { KycItemType } from "@bv/shared";
+import {
+  KycChannelTheme,
+  KycItemType,
+  KycItemValidity,
+  KycRestrictionType,
+} from "@bv/shared";
 
-export class KycChannelDto {
-  @IsString()
-  @MaxLength(30)
-  channel_code: string;
+/* demo 四层结构：业务类型 → 渠道 → 材料模块 → 材料项（每渠道独立材料清单） */
 
-  @IsString()
-  @MaxLength(50)
-  channel_name: string;
+export class KycRestrictionDto {
+  @IsIn(Object.values(KycRestrictionType))
+  type: KycRestrictionType;
 
-  @IsOptional()
   @IsString()
   @MaxLength(500)
-  restriction_note?: string | null;
+  content: string;
 }
 
 export class KycItemDto {
@@ -37,6 +35,7 @@ export class KycItemDto {
   @MaxLength(100)
   item_name: string;
 
+  /** 补充要求（demo subRequirement） */
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -48,20 +47,8 @@ export class KycItemDto {
   @IsBoolean()
   required: boolean;
 
-  @IsInt()
-  @Min(1)
-  @Max(20)
-  max_count: number;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  validity_note?: string | null;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  channel_codes?: string[] | null;
+  @IsIn(Object.values(KycItemValidity))
+  validity: KycItemValidity;
 }
 
 export class KycSectionDto {
@@ -73,6 +60,29 @@ export class KycSectionDto {
   @ValidateNested({ each: true })
   @Type(() => KycItemDto)
   items: KycItemDto[];
+}
+
+export class KycChannelDto {
+  @IsString()
+  @MaxLength(30)
+  channel_code: string;
+
+  @IsString()
+  @MaxLength(50)
+  channel_name: string;
+
+  @IsIn(Object.values(KycChannelTheme))
+  theme: KycChannelTheme;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => KycRestrictionDto)
+  restrictions: KycRestrictionDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => KycSectionDto)
+  sections: KycSectionDto[];
 }
 
 export class SaveScenarioDto {
@@ -93,9 +103,4 @@ export class SaveScenarioDto {
   @ValidateNested({ each: true })
   @Type(() => KycChannelDto)
   channels: KycChannelDto[];
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => KycSectionDto)
-  sections: KycSectionDto[];
 }

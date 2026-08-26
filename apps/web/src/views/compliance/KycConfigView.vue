@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import {
+  KycChannelTheme,
+  KycChannelThemeLabel,
   KycItemType,
-  KycItemTypeLabel,
-  KycScenarioStatusLabel,
+  KycItemValidity,
+  KycRestrictionType,
+  type KycChannel,
   type KycScenarioVO,
-  type SaveKycScenarioInput,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Plus } from "@element-plus/icons-vue";
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import {
   createScenario,
   deleteScenario,
@@ -17,45 +18,60 @@ import {
   updateScenario,
 } from "@/api/kyc";
 
+/** 可编辑草稿（对选中场景的深拷贝，保存时整体提交） */
+interface EditableScenario {
+  id: string | null;
+  scenario_code: string;
+  scenario_name: string;
+  process_description: string;
+  channels: KycChannel[];
+}
+
 const scenarios = ref<KycScenarioVO[]>([]);
 const loading = ref(false);
 const saving = ref(false);
+const searchQuery = ref("");
 const selectedId = ref<string | null>(null);
+const channelIndex = ref(0);
+const draft = ref<EditableScenario | null>(null);
+const lastSavedAt = ref("");
 
-/** 编辑区草稿（选中场景的可编辑副本；id 为空表示新建未保存） */
-const editor = reactive({
-  id: "" as string,
-  is_builtin: false,
-  status: "DRAFT" as string,
-  form: null as SaveKycScenarioInput | null,
-});
+const filtered = computed(() =>
+  scenarios.value.filter(scenario =>
+    `${scenario.scenario_code}${scenario.scenario_name}`
+      .toLowerCase()
+      .includes(searchQuery.value.trim().toLowerCase()),
+  ),
+);
 
-function cloneToEditor(scenario: KycScenarioVO | null) {
-  if (!scenario) {
-    editor.id = "";
-    editor.is_builtin = false;
-    editor.status = "DRAFT";
-    editor.form = {
-      scenario_code: "",
-      scenario_name: "",
-      process_description: "",
-      channels: [],
-      sections: [{ section_name: "身份材料", items: [] }],
-    };
-    return;
-  }
-  editor.id = scenario.id;
-  editor.is_builtin = scenario.is_builtin;
-  editor.status = scenario.status;
-  editor.form = JSON.parse(
-    JSON.stringify({
-      scenario_code: scenario.scenario_code,
-      scenario_name: scenario.scenario_name,
-      process_description: scenario.process_description ?? "",
-      channels: scenario.channels,
-      sections: scenario.sections,
-    }),
+const metrics = computed(() => ({
+  scenarios: scenarios.value.length,
+  channels: scenarios.value.reduce((n, s) => n + s.channels.length, 0),
+  items: scenarios.value.reduce(
+    (n, s) => n + s.channels.reduce((m, c) => m + c.sections.reduce((k, sec) => k + sec.items.length, 0), 0),
+    0,
+  ),
+}));
+
+const currentChannel = computed(() => draft.value?.channels[channelIndex.value] ?? null);
+
+function itemCountOf(scenario: KycScenarioVO): number {
+  return scenario.channels.reduce(
+    (n, channel) => n + channel.sections.reduce((m, section) => m + section.items.length, 0),
+    0,
   );
+}
+
+function select(scenario: KycScenarioVO) {
+  selectedId.value = scenario.id;
+  channelIndex.value = 0;
+  draft.value = {
+    id: scenario.id,
+    scenario_code: scenario.scenario_code,
+    scenario_name: scenario.scenario_name,
+    process_description: scenario.process_description ?? "",
+    channels: JSON.parse(JSON.stringify(scenario.channels)),
+  };
 }
 
 async function load(keepSelection = false) {
@@ -63,145 +79,232 @@ async function load(keepSelection = false) {
   try {
     scenarios.value = await fetchAllScenarios();
     if (keepSelection && selectedId.value) {
-      const current = scenarios.value.find(s => s.id === selectedId.value) ?? null;
-      cloneToEditor(current);
-      return;
+      const current = scenarios.value.find(s => s.id === selectedId.value);
+      if (current) {
+        const keptChannel = channelIndex.value;
+        select(current);
+        channelIndex.value = Math.min(keptChannel, current.channels.length - 1);
+        return;
+      }
     }
-    if (scenarios.value.length) {
-      selectedId.value = scenarios.value[0].id;
-      cloneToEditor(scenarios.value[0]);
-    } else {
-      selectedId.value = null;
-      cloneToEditor(null);
-    }
+    if (scenarios.value.length) select(scenarios.value[0]);
+    else draft.value = null;
   } finally {
     loading.value = false;
   }
 }
 
-function select(scenario: KycScenarioVO) {
-  selectedId.value = scenario.id;
-  cloneToEditor(scenario);
+/* ---------------- 场景弹窗（新建模式 / 编辑信息） ---------------- */
+
+const scenarioDialog = reactive({
+  visible: false,
+  mode: "new" as "new" | "edit",
+  code: "",
+  name: "",
+  process: "",
+});
+
+function openScenarioDialog(mode: "new" | "edit") {
+  scenarioDialog.mode = mode;
+  scenarioDialog.code = mode === "edit" ? (draft.value?.scenario_code ?? "") : "";
+  scenarioDialog.name = mode === "edit" ? (draft.value?.scenario_name ?? "") : "";
+  scenarioDialog.process = mode === "edit" ? (draft.value?.process_description ?? "") : "";
+  scenarioDialog.visible = true;
 }
 
-function startNew() {
-  selectedId.value = null;
-  cloneToEditor(null);
-}
-
-/* ---- 渠道 / 模块 / 材料项编辑 ---- */
-
-function addChannel() {
-  editor.form!.channels.push({ channel_code: "", channel_name: "", restriction_note: "" });
-}
-
-function removeChannel(index: number) {
-  const removed = editor.form!.channels[index];
-  editor.form!.channels.splice(index, 1);
-  // 清理材料项对该渠道的引用
-  for (const section of editor.form!.sections) {
-    for (const item of section.items) {
-      if (item.channel_codes) {
-        item.channel_codes = item.channel_codes.filter(code => code !== removed.channel_code);
-        if (!item.channel_codes.length) item.channel_codes = null;
-      }
+async function confirmScenarioDialog() {
+  if (!scenarioDialog.code.trim() || !scenarioDialog.name.trim()) {
+    ElMessage.warning("请填写序号和业务类型名称");
+    return;
+  }
+  if (scenarioDialog.mode === "new") {
+    try {
+      const created = await createScenario({
+        scenario_code: scenarioDialog.code.trim(),
+        scenario_name: scenarioDialog.name.trim(),
+        process_description: scenarioDialog.process.trim() || null,
+        channels: [],
+      });
+      scenarioDialog.visible = false;
+      await load();
+      const fresh = scenarios.value.find(s => s.id === created.id);
+      if (fresh) select(fresh);
+      ElMessage.success(`已新建业务模式 #${created.scenario_code}`);
+    } catch {
+      /* 提示由拦截器处理 */
     }
+    return;
+  }
+  if (draft.value) {
+    draft.value.scenario_code = scenarioDialog.code.trim();
+    draft.value.scenario_name = scenarioDialog.name.trim();
+    draft.value.process_description = scenarioDialog.process;
+    scenarioDialog.visible = false;
   }
 }
 
+async function removeScenario() {
+  if (!draft.value?.id) return;
+  try {
+    await ElMessageBox.confirm(
+      `删除业务模式 #${draft.value.scenario_code} · ${draft.value.scenario_name}？删除后材料上传页不再展示该业务类型。`,
+      "删除模式",
+      { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" },
+    );
+    await deleteScenario(draft.value.id);
+    ElMessage.success("业务模式已删除");
+    selectedId.value = null;
+    await load();
+  } catch {
+    /* 取消或接口错误 */
+  }
+}
+
+/* ---------------- 渠道弹窗（新增 / 编辑当前渠道） ---------------- */
+
+const channelDialog = reactive({
+  visible: false,
+  mode: "new" as "new" | "edit",
+  name: "",
+  theme: KycChannelTheme.BLUE as KycChannelTheme,
+  firstSection: "",
+  restrictions: [] as Array<{ type: string; content: string }>,
+});
+
+function openChannelDialog(mode: "new" | "edit") {
+  channelDialog.mode = mode;
+  if (mode === "edit" && currentChannel.value) {
+    channelDialog.name = currentChannel.value.channel_name;
+    channelDialog.theme = currentChannel.value.theme;
+    channelDialog.restrictions = JSON.parse(JSON.stringify(currentChannel.value.restrictions));
+  } else {
+    channelDialog.name = "";
+    channelDialog.theme = KycChannelTheme.BLUE;
+    channelDialog.firstSection = "";
+    channelDialog.restrictions = [];
+  }
+  channelDialog.visible = true;
+}
+
+function confirmChannelDialog() {
+  if (!draft.value) return;
+  const name = channelDialog.name.trim();
+  if (!name) {
+    ElMessage.warning("请输入渠道名称");
+    return;
+  }
+  const restrictions = channelDialog.restrictions
+    .filter(item => item.content.trim())
+    .map(item => ({ type: item.type as KycRestrictionType, content: item.content.trim() }));
+  if (channelDialog.mode === "edit" && currentChannel.value) {
+    currentChannel.value.channel_name = name;
+    currentChannel.value.theme = channelDialog.theme;
+    currentChannel.value.restrictions = restrictions;
+  } else {
+    const duplicated = draft.value.channels.some(c => c.channel_name === name);
+    if (duplicated) {
+      ElMessage.warning("同一业务模式下渠道名称不能重复");
+      return;
+    }
+    draft.value.channels.push({
+      channel_code: `CH_${Date.now().toString(36).toUpperCase()}`,
+      channel_name: name,
+      theme: channelDialog.theme,
+      restrictions,
+      sections: [
+        {
+          section_name: channelDialog.firstSection.trim() || `${name} 基础收集材料`,
+          items: [],
+        },
+      ],
+    });
+    channelIndex.value = draft.value.channels.length - 1;
+  }
+  channelDialog.visible = false;
+}
+
+async function removeChannel() {
+  if (!draft.value || !currentChannel.value) return;
+  try {
+    await ElMessageBox.confirm(`删除渠道「${currentChannel.value.channel_name}」及其材料清单？`, "删除渠道", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+    });
+    draft.value.channels.splice(channelIndex.value, 1);
+    channelIndex.value = Math.max(0, channelIndex.value - 1);
+  } catch {
+    /* 取消 */
+  }
+}
+
+/* ---------------- 材料模块 / 材料项 ---------------- */
+
 function addSection() {
-  editor.form!.sections.push({ section_name: "新模块", items: [] });
+  currentChannel.value?.sections.push({ section_name: "新材料模块", items: [] });
 }
 
 function removeSection(index: number) {
-  editor.form!.sections.splice(index, 1);
+  currentChannel.value?.sections.splice(index, 1);
 }
 
 function addItem(sectionIndex: number) {
-  editor.form!.sections[sectionIndex].items.push({
-    item_id: crypto.randomUUID().slice(0, 8),
+  currentChannel.value?.sections[sectionIndex].items.push({
+    item_id: `KYC-${Math.random().toString(36).slice(2, 9)}`,
     item_name: "",
-    item_description: "",
+    item_description: null,
     item_type: KycItemType.FILE,
     required: true,
-    max_count: 3,
-    validity_note: "",
-    channel_codes: null,
+    validity: KycItemValidity.NONE,
   });
 }
 
 function removeItem(sectionIndex: number, itemIndex: number) {
-  editor.form!.sections[sectionIndex].items.splice(itemIndex, 1);
+  currentChannel.value?.sections[sectionIndex].items.splice(itemIndex, 1);
 }
 
-/* ---- 保存 / 发布 / 删除 ---- */
+/* ---------------- 保存并发布 ---------------- */
 
-function validateForm(): boolean {
-  const form = editor.form!;
-  if (!form.scenario_code.trim() || !form.scenario_name.trim()) {
-    ElMessage.warning("请填写业务编号与业务名称");
-    return false;
-  }
-  if (form.channels.some(c => !c.channel_code.trim() || !c.channel_name.trim())) {
-    ElMessage.warning("渠道代码与名称不能为空");
-    return false;
-  }
-  for (const section of form.sections) {
-    if (section.items.some(item => !item.item_name.trim())) {
-      ElMessage.warning(`模块「${section.section_name}」存在未命名的材料项`);
-      return false;
+async function saveAndPublish() {
+  const current = draft.value;
+  if (!current) return;
+  for (const channel of current.channels) {
+    for (const section of channel.sections) {
+      if (section.items.some(item => !item.item_name.trim())) {
+        ElMessage.warning(`「${channel.channel_name} / ${section.section_name}」存在未命名材料项`);
+        return;
+      }
     }
   }
-  return true;
-}
-
-async function save(): Promise<boolean> {
-  if (!validateForm()) return false;
   saving.value = true;
   try {
-    if (editor.id) {
-      await updateScenario(editor.id, editor.form!);
-    } else {
-      const created = await createScenario(editor.form!);
-      selectedId.value = created.id;
-      editor.id = created.id;
-    }
-    ElMessage.success("配置已保存");
+    const payload = {
+      scenario_code: current.scenario_code,
+      scenario_name: current.scenario_name,
+      process_description: current.process_description.trim() || null,
+      channels: current.channels,
+    };
+    const saved = current.id
+      ? await updateScenario(current.id, payload)
+      : await createScenario(payload);
+    await publishScenario(saved.id);
+    lastSavedAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
+    ElMessage.success(`合规规则配置已保存并发布：#${saved.scenario_code} ${saved.scenario_name}`);
+    selectedId.value = saved.id;
     await load(true);
-    return true;
+  } catch {
+    /* 提示由拦截器处理 */
   } finally {
     saving.value = false;
   }
 }
 
-async function publish() {
-  if (!(await save())) return;
-  await ElMessageBox.confirm(
-    "发布后材料上传页将实时引用该模板。确认发布？",
-    "发布配置",
-    { type: "warning", confirmButtonText: "发布", cancelButtonText: "取消" },
-  );
-  saving.value = true;
-  try {
-    await publishScenario(editor.id);
-    ElMessage.success("已发布");
-    await load(true);
-  } finally {
-    saving.value = false;
-  }
-}
-
-async function remove() {
-  await ElMessageBox.confirm("删除后交易员将无法再选择该业务类型（历史申请保留快照）。确认删除？", "删除业务类型", {
-    type: "warning",
-    confirmButtonText: "删除",
-    cancelButtonText: "取消",
-  });
-  await deleteScenario(editor.id);
-  ElMessage.success("已删除");
-  selectedId.value = null;
-  await load();
-}
+const themeDot: Record<string, string> = {
+  red: "#c45656",
+  blue: "#4a7dbd",
+  teal: "#2f9e8f",
+  amber: "#c2660a",
+};
 
 onMounted(() => load());
 </script>
@@ -209,148 +312,241 @@ onMounted(() => load());
 <template>
   <div>
     <header class="page-header">
-      <p class="eyebrow">COMPLIANCE CONFIG</p>
-      <h1>KYC list 配置</h1>
-      <p class="subtitle">业务类型 → 渠道 → 材料项三层模板；发布后供材料上传页实时引用。</p>
+      <div>
+        <p class="eyebrow">COMPLIANCE ROUTING ENGINE</p>
+        <h1>合规材料与渠道路由配置中心</h1>
+        <p class="subtitle">以业务场景为入口，维护渠道路由、限制规则、材料模块和前台提交要求。</p>
+      </div>
+      <div class="head-actions">
+        <span class="muted">上一次保存时间：{{ lastSavedAt || "--" }}</span>
+        <el-button type="primary" :loading="saving" :disabled="!draft" @click="saveAndPublish">
+          保存并发布新版本
+        </el-button>
+      </div>
     </header>
 
-    <div class="config-layout">
-      <!-- 左侧：业务类型列表 -->
-      <el-card shadow="never" class="scenario-list" v-loading="loading">
-        <el-button type="primary" :icon="Plus" class="new-btn" @click="startNew">新增业务类型</el-button>
-        <button
-          v-for="scenario in scenarios"
-          :key="scenario.id"
-          type="button"
-          class="scenario-row"
-          :class="{ selected: scenario.id === selectedId }"
-          @click="select(scenario)"
-        >
-          <div>
-            <strong>{{ scenario.scenario_name }}</strong>
-            <small>{{ scenario.scenario_code }} · {{ scenario.channels.length }} 个渠道</small>
-          </div>
-          <el-tag :type="scenario.status === 'PUBLISHED' ? 'success' : 'info'" size="small">
-            {{ KycScenarioStatusLabel[scenario.status] }}
-          </el-tag>
-        </button>
-      </el-card>
-
-      <!-- 右侧：编辑区 -->
-      <el-card v-if="editor.form" shadow="never" class="editor">
-        <div class="editor-head">
-          <h3>{{ editor.id ? "编辑业务类型" : "新增业务类型" }}<el-tag v-if="editor.is_builtin" size="small" class="builtin-tag">内置</el-tag></h3>
-          <div class="editor-actions">
-            <el-button v-if="editor.id && !editor.is_builtin" type="danger" plain @click="remove">删除</el-button>
-            <el-button :loading="saving" @click="save">保存配置</el-button>
-            <el-button type="primary" :loading="saving" @click="publish">发布配置</el-button>
-          </div>
-        </div>
-
-        <div class="base-grid">
-          <el-form-item label="业务编号">
-            <el-input v-model="editor.form.scenario_code" :disabled="editor.is_builtin" maxlength="30" placeholder="如 SINO" />
-          </el-form-item>
-          <el-form-item label="业务名称">
-            <el-input v-model="editor.form.scenario_name" maxlength="50" placeholder="如 SINO 找换" />
-          </el-form-item>
-        </div>
-        <el-form-item label="流程与约束说明（审核详情『人工审核要求』引用）">
-          <el-input
-            v-model="editor.form.process_description as string"
-            type="textarea"
-            :rows="3"
-            maxlength="2000"
-          />
-        </el-form-item>
-
-        <h4 class="section-title">渠道 Matrix</h4>
-        <div v-for="(channel, index) in editor.form.channels" :key="index" class="channel-row">
-          <el-input v-model="channel.channel_code" placeholder="渠道代码" class="channel-code" maxlength="30" />
-          <el-input v-model="channel.channel_name" placeholder="渠道名称" class="channel-name" maxlength="50" />
-          <el-input v-model="channel.restriction_note as string" placeholder="渠道限制说明（限制银行、特殊规则等）" class="channel-note" maxlength="500" />
-          <el-button type="danger" link @click="removeChannel(index)">删除</el-button>
-        </div>
-        <el-button size="small" :icon="Plus" @click="addChannel">新增渠道</el-button>
-
-        <template v-for="(section, sectionIndex) in editor.form.sections" :key="sectionIndex">
-          <div class="section-head">
-            <el-input v-model="section.section_name" class="section-name" maxlength="50" />
-            <el-button type="danger" link @click="removeSection(sectionIndex)">删除模块</el-button>
-          </div>
-          <el-table :data="section.items" size="small" class="item-table">
-            <el-table-column label="#" type="index" width="44" />
-            <el-table-column label="材料名称" min-width="140">
-              <template #default="{ row }">
-                <el-input v-model="row.item_name" size="small" maxlength="100" />
-              </template>
-            </el-table-column>
-            <el-table-column label="说明" min-width="160">
-              <template #default="{ row }">
-                <el-input v-model="row.item_description" size="small" maxlength="500" />
-              </template>
-            </el-table-column>
-            <el-table-column label="类型" width="110">
-              <template #default="{ row }">
-                <el-select v-model="row.item_type" size="small">
-                  <el-option v-for="(label, value) in KycItemTypeLabel" :key="value" :value="value" :label="label" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="必填" width="70">
-              <template #default="{ row }">
-                <el-switch v-model="row.required" size="small" />
-              </template>
-            </el-table-column>
-            <el-table-column label="份数" width="90">
-              <template #default="{ row }">
-                <el-input-number v-model="row.max_count" size="small" :min="1" :max="20" controls-position="right" class="count-input" />
-              </template>
-            </el-table-column>
-            <el-table-column label="有效期" width="120">
-              <template #default="{ row }">
-                <el-input v-model="row.validity_note" size="small" maxlength="200" placeholder="如 3 个月内" />
-              </template>
-            </el-table-column>
-            <el-table-column label="适用渠道" width="150">
-              <template #default="{ row }">
-                <el-select
-                  v-model="row.channel_codes"
-                  size="small"
-                  multiple
-                  collapse-tags
-                  clearable
-                  placeholder="全渠道"
-                >
-                  <el-option
-                    v-for="channel in editor.form!.channels"
-                    :key="channel.channel_code"
-                    :value="channel.channel_code"
-                    :label="channel.channel_name || channel.channel_code"
-                  />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="" width="60">
-              <template #default="{ $index }">
-                <el-button type="danger" link size="small" @click="removeItem(sectionIndex, $index)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-button size="small" :icon="Plus" class="add-item" @click="addItem(sectionIndex)">新增材料项</el-button>
-        </template>
-
-        <div class="add-section">
-          <el-button size="small" :icon="Plus" @click="addSection">新增材料模块</el-button>
-        </div>
-      </el-card>
+    <div class="metrics">
+      <div class="metric"><strong>{{ metrics.scenarios }}</strong><span>业务模式</span></div>
+      <div class="metric"><strong>{{ metrics.channels }}</strong><span>绑定渠道</span></div>
+      <div class="metric"><strong>{{ metrics.items }}</strong><span>材料/字段项</span></div>
     </div>
+
+    <div class="shell">
+      <!-- 左：业务类型配置库 -->
+      <aside class="library" v-loading="loading">
+        <div class="library-head">
+          <strong>业务类型配置库</strong>
+          <el-button size="small" type="primary" plain @click="openScenarioDialog('new')">＋ 新建模式</el-button>
+        </div>
+        <el-input v-model="searchQuery" placeholder="搜索业务类型或序号" clearable size="small" class="library-search" />
+        <div class="scenario-list">
+          <button
+            v-for="scenario in filtered"
+            :key="scenario.id"
+            type="button"
+            class="scenario-card"
+            :class="{ active: scenario.id === selectedId }"
+            @click="select(scenario)"
+          >
+            <span class="card-top">
+              <em>#{{ scenario.scenario_code }}</em>
+              <small>渠道 {{ scenario.channels.length }}</small>
+            </span>
+            <strong>{{ scenario.scenario_name }}</strong>
+            <small class="card-meta">
+              {{ itemCountOf(scenario) }} 项材料 ·
+              {{ scenario.channels.length ? scenario.channels.map(c => c.channel_name).join(" / ") : "未绑定渠道" }}
+            </small>
+          </button>
+          <el-empty v-if="!loading && !filtered.length" description="未找到匹配业务类型" :image-size="60" />
+        </div>
+      </aside>
+
+      <!-- 右：编辑器 -->
+      <main v-if="draft" class="editor">
+        <div class="scenario-head">
+          <span class="code-pill">#{{ draft.scenario_code }}</span>
+          <el-input v-model="draft.scenario_name" class="name-input" placeholder="业务类型名称" />
+          <div class="scenario-actions">
+            <el-button size="small" @click="openScenarioDialog('edit')">编辑信息</el-button>
+            <el-button size="small" type="danger" plain :disabled="!draft.id" @click="removeScenario">
+              删除模式
+            </el-button>
+          </div>
+        </div>
+        <p class="scenario-sub">请定义该业务交易模式下的整体流转逻辑与各渠道收集规则</p>
+
+        <div class="field-block">
+          <label>业务流程、时效与约束说明（面向业务人员与合规预检，材料上传页"业务审核要点"引用）</label>
+          <el-input v-model="draft.process_description" type="textarea" :rows="6" maxlength="2000" />
+        </div>
+
+        <div class="matrix-head">
+          <div>
+            <strong>通道渠道与材料收集规则 Matrix</strong>
+            <small>同一业务模式可绑定多个渠道，每个渠道维护独立限制和材料模块。</small>
+          </div>
+          <div class="matrix-actions">
+            <el-button size="small" :disabled="!currentChannel" @click="openChannelDialog('edit')">编辑当前渠道</el-button>
+            <el-button size="small" :disabled="!currentChannel" @click="removeChannel">删除当前渠道</el-button>
+            <el-button size="small" type="primary" plain @click="openChannelDialog('new')">＋ 新增绑定渠道</el-button>
+          </div>
+        </div>
+
+        <div v-if="draft.channels.length" class="channel-tabs">
+          <button
+            v-for="(channel, index) in draft.channels"
+            :key="channel.channel_code"
+            type="button"
+            class="channel-tab"
+            :class="{ active: index === channelIndex }"
+            @click="channelIndex = index"
+          >
+            <i :style="{ background: themeDot[channel.theme] }" />
+            {{ channel.channel_name }} 渠道材料库
+            <small>{{ channel.sections.reduce((n, s) => n + s.items.length, 0) }} 项材料</small>
+          </button>
+        </div>
+        <el-empty v-else description="该业务模式暂未绑定渠道，点击「＋ 新增绑定渠道」开始配置" :image-size="70" />
+
+        <template v-if="currentChannel">
+          <div v-if="currentChannel.restrictions.length" class="restriction-strip">
+            <strong>渠道限制</strong>
+            <span v-for="restriction in currentChannel.restrictions" :key="restriction.content">
+              {{ restriction.content }}
+            </span>
+          </div>
+
+          <section v-for="(section, sIndex) in currentChannel.sections" :key="sIndex" class="material-section">
+            <header>
+              <span class="section-no">模块 {{ sIndex + 1 }}</span>
+              <el-input v-model="section.section_name" class="section-name" size="small" placeholder="模块名称" />
+              <el-button size="small" type="primary" plain @click="addItem(sIndex)">
+                ＋ 添加需要收集的材料/字段
+              </el-button>
+              <el-button size="small" text type="danger" @click="removeSection(sIndex)">⌫ 删除模块</el-button>
+            </header>
+            <div v-for="(item, iIndex) in section.items" :key="item.item_id" class="item-row">
+              <span class="drag">⋮⋮</span>
+              <el-input v-model="item.item_name" size="small" class="item-name" placeholder="材料名称" />
+              <el-input
+                :model-value="item.item_description ?? ''"
+                size="small"
+                class="item-desc"
+                placeholder="补充要求"
+                @update:model-value="(value: string) => (item.item_description = value || null)"
+              />
+              <el-select v-model="item.item_type" size="small" class="item-type">
+                <el-option :value="KycItemType.FILE" label="文件上传（PDF/图片）" />
+                <el-option :value="KycItemType.TEXT" label="文本输入框" />
+                <el-option :value="KycItemType.BANK_ACCOUNT" label="银行账户多字段" />
+              </el-select>
+              <el-checkbox v-model="item.required" size="small">{{ item.required ? "必填" : "选填" }}</el-checkbox>
+              <el-select v-model="item.validity" size="small" class="item-validity">
+                <el-option :value="KycItemValidity.NONE" label="无有效期限制" />
+                <el-option :value="KycItemValidity.ONE_MONTH" label="需 1 个月内有效" />
+                <el-option :value="KycItemValidity.THREE_MONTHS" label="需 3 个月内有效" />
+              </el-select>
+              <el-button size="small" text type="danger" @click="removeItem(sIndex, iIndex)">⌫</el-button>
+            </div>
+            <p v-if="!section.items.length" class="item-empty">该模块暂无材料项</p>
+          </section>
+          <el-button class="add-section" plain @click="addSection">＋ 新增材料模块</el-button>
+        </template>
+      </main>
+      <main v-else class="editor">
+        <el-empty description="左侧选择或新建一个业务模式开始配置" />
+      </main>
+    </div>
+
+    <!-- 场景弹窗 -->
+    <el-dialog
+      v-model="scenarioDialog.visible"
+      :title="scenarioDialog.mode === 'new' ? '新建业务模式' : '编辑业务模式'"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-position="top">
+        <el-form-item label="序号" required>
+          <el-input v-model="scenarioDialog.code" placeholder="如 22 或 16B" maxlength="30" />
+          <div class="hint">显示为 #序号，不能与现有业务模式重复。</div>
+        </el-form-item>
+        <el-form-item label="业务类型名称" required>
+          <el-input v-model="scenarioDialog.name" maxlength="50" />
+        </el-form-item>
+        <el-form-item label="业务流程、时效与约束说明">
+          <el-input v-model="scenarioDialog.process" type="textarea" :rows="4" maxlength="2000" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scenarioDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmScenarioDialog">
+          {{ scenarioDialog.mode === "new" ? "创建" : "保存" }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 渠道弹窗 -->
+    <el-dialog
+      v-model="channelDialog.visible"
+      :title="channelDialog.mode === 'new' ? '新增绑定渠道' : '编辑渠道信息'"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-position="top">
+        <div class="dialog-grid">
+          <el-form-item label="渠道名称" required>
+            <el-input v-model="channelDialog.name" maxlength="50" />
+            <div class="hint">同一业务模式下渠道名称不能重复。</div>
+          </el-form-item>
+          <el-form-item label="标识颜色">
+            <el-select v-model="channelDialog.theme" style="width: 100%">
+              <el-option
+                v-for="(label, value) in KycChannelThemeLabel"
+                :key="value"
+                :value="value"
+                :label="label"
+              />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item v-if="channelDialog.mode === 'new'" label="首个材料模块名称">
+          <el-input v-model="channelDialog.firstSection" placeholder="留空默认「{渠道名} 基础收集材料」" maxlength="50" />
+        </el-form-item>
+        <el-form-item label="渠道限制条目">
+          <div v-for="(restriction, index) in channelDialog.restrictions" :key="index" class="restriction-row">
+            <el-select v-model="restriction.type" class="restriction-type" size="small">
+              <el-option :value="KycRestrictionType.BANK_BAN" label="银行禁令" />
+              <el-option :value="KycRestrictionType.SPECIAL_PROOF" label="特殊证明" />
+            </el-select>
+            <el-input v-model="restriction.content" size="small" placeholder="限制说明" maxlength="500" />
+            <el-button size="small" text type="danger" @click="channelDialog.restrictions.splice(index, 1)">⌫</el-button>
+          </div>
+          <el-button
+            size="small"
+            plain
+            @click="channelDialog.restrictions.push({ type: KycRestrictionType.SPECIAL_PROOF, content: '' })"
+          >
+            ＋ 添加限制条目
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="channelDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmChannelDialog">
+          {{ channelDialog.mode === "new" ? "新增渠道" : "保存" }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
 .page-header {
-  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
 }
 
 .eyebrow {
@@ -370,128 +566,322 @@ h1 {
   margin: 0;
 }
 
-.config-layout {
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.muted {
+  color: #909399;
+  font-size: 13px;
+}
+
+.metrics {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(3, 180px);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.metric {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.metric strong {
+  font-size: 20px;
+}
+
+.metric span {
+  color: #909399;
+  font-size: 13px;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
 }
 
-.new-btn {
-  width: 100%;
-  margin-bottom: 12px;
+.library {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 14px;
 }
 
-.scenario-row {
-  width: 100%;
+.library-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.library-search {
+  margin-bottom: 10px;
+}
+
+.scenario-list {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  text-align: left;
-  border: 1px solid #e4e7ed;
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+.scenario-card {
+  border: 1px solid #ebeef5;
   border-radius: 8px;
   background: #fff;
   padding: 10px 12px;
-  margin-bottom: 8px;
+  text-align: left;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.scenario-row.selected {
+.scenario-card.active {
   border-color: #ff7a00;
-  box-shadow: 0 0 0 2px rgba(255, 122, 0, 0.12);
+  background: #fffaf5;
 }
 
-.scenario-row small {
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-top em {
+  font-style: normal;
+  color: #ff7a00;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.card-top small,
+.card-meta {
+  color: #909399;
+  font-size: 12px;
+}
+
+.editor {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.scenario-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.code-pill {
+  flex: none;
+  background: #231c17;
+  color: #ff7a00;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.name-input {
+  max-width: 420px;
+}
+
+.scenario-actions {
+  margin-left: auto;
+  flex: none;
+}
+
+.scenario-sub {
+  color: #909399;
+  font-size: 13px;
+  margin: 6px 0 14px;
+}
+
+.field-block {
+  margin-bottom: 16px;
+}
+
+.field-block label {
+  display: block;
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 6px;
+}
+
+.matrix-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.matrix-head small {
   display: block;
   color: #909399;
 }
 
-.editor-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
+.matrix-actions {
+  flex: none;
 }
 
-.editor-head h3 {
-  margin: 0;
+.channel-tabs {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.channel-tab {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
 }
 
-.builtin-tag {
-  font-weight: normal;
+.channel-tab i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
-.editor-actions {
+.channel-tab small {
+  color: #909399;
+}
+
+.channel-tab.active {
+  border-color: #ff7a00;
+  background: #fffaf5;
+  font-weight: 600;
+}
+
+.restriction-strip {
+  border: 1px solid #fde2e2;
+  background: #fef6f6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
 }
 
-.base-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
+.restriction-strip strong {
+  color: #c45656;
 }
 
-.section-title {
-  margin: 18px 0 10px;
-  color: #606266;
+.material-section {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
 }
 
-.channel-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  align-items: center;
-}
-
-.channel-code {
-  width: 130px;
-}
-
-.channel-name {
-  width: 150px;
-}
-
-.channel-note {
-  flex: 1;
-}
-
-.section-head {
+.material-section > header {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 20px 0 8px;
+  margin-bottom: 10px;
+}
+
+.section-no {
+  flex: none;
+  color: #909399;
+  font-size: 12px;
 }
 
 .section-name {
-  width: 220px;
+  max-width: 260px;
 }
 
-.item-table {
+.material-section > header .el-button:last-child {
+  margin-left: auto;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
-.count-input {
-  width: 70px;
+.drag {
+  color: #c0c4cc;
+  cursor: default;
+  font-size: 12px;
 }
 
-.add-item {
-  margin-bottom: 6px;
+.item-name {
+  width: 200px;
+}
+
+.item-desc {
+  flex: 1;
+  min-width: 120px;
+}
+
+.item-type {
+  width: 175px;
+  flex: none;
+}
+
+.item-validity {
+  width: 150px;
+  flex: none;
+}
+
+.item-empty {
+  color: #c0c4cc;
+  font-size: 13px;
+  margin: 4px 0;
 }
 
 .add-section {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px dashed #e4e7ed;
+  width: 100%;
+  border-style: dashed;
 }
 
-@media (max-width: 1100px) {
-  .config-layout {
-    grid-template-columns: 1fr;
-  }
+.dialog-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 14px;
+}
+
+.hint {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+}
+
+.restriction-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.restriction-type {
+  width: 120px;
+  flex: none;
 }
 </style>

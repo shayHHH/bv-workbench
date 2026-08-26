@@ -13,4 +13,10 @@ export default () => ({
    * 公司对象存储信息确认后切换 S3 兼容适配器，见 modules/file/storage.service.ts。
    */
   uploadDir: process.env.UPLOAD_DIR || "uploads",
+  /**
+   * 渠道即时汇率（XE）行情源（预留）。留空表示未接入，「刷新」仅重读库中人工数据。
+   * 拿到 API 文档后：配置这两个变量，并在 datasources/xe-rates.service.ts 补全请求与字段映射。
+   */
+  xeRatesApiUrl: process.env.XE_RATES_API_URL || "",
+  xeRatesApiKey: process.env.XE_RATES_API_KEY || "",
 });

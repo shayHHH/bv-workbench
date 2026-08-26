@@ -69,6 +69,18 @@ export const router = createRouter({
           path: "access/documents",
           name: "accessDocuments",
           component: () => import("@/views/access/SupplementView.vue"),
+          meta: { title: "审核跟踪", roles: ["AGENT", "OPS"] },
+        },
+        {
+          path: "access/documents/:id",
+          name: "accessOrderDetail",
+          component: () => import("@/views/access/OrderDetailView.vue"),
+          meta: { title: "审核工单", roles: ["AGENT", "OPS"] },
+        },
+        {
+          path: "access/documents/:id/supplement",
+          name: "accessSupplementWork",
+          component: () => import("@/views/access/SupplementWorkView.vue"),
           meta: { title: "补件处理", roles: ["AGENT", "OPS"] },
         },
         {
@@ -105,6 +117,12 @@ export const router = createRouter({
           name: "adminUsers",
           component: () => import("@/views/admin/UserManagementView.vue"),
           meta: { title: "用户管理", roles: ["ADMIN"] },
+        },
+        {
+          path: "admin/review-assignment",
+          name: "adminReviewAssignment",
+          component: () => import("@/views/admin/ReviewAssignmentView.vue"),
+          meta: { title: "审核分配", roles: ["ADMIN"] },
         },
       ],
     },

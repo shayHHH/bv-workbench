@@ -6,6 +6,7 @@ import configuration from "./config/configuration";
 import { InternalWarehouseModule } from "./datasources/internal-warehouse.module";
 import { HealthModule } from "./health/health.module";
 import { AccessModule } from "./modules/access/access.module";
+import { AssignmentModule } from "./modules/assignment/assignment.module";
 import { CustomerModule } from "./modules/customer/customer.module";
 import { FileModule } from "./modules/file/file.module";
 import { KycModule } from "./modules/kyc/kyc.module";
@@ -36,6 +37,7 @@ import { UserModule } from "./modules/user/user.module";
     QuoteModule,
     KycModule,
     AccessModule,
+    AssignmentModule,
     FileModule,
   ],
 })

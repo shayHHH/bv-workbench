@@ -40,6 +40,14 @@ export class AccessApplication {
   @Prop({ type: String, default: null })
   channel_code: string | null;
 
+  /** 渠道名冗余快照（配置改名后申请仍可读） */
+  @Prop({ type: String, default: null })
+  channel_name: string | null;
+
+  /** 提交模式：找换 / U相关（demo 提交坞选择；草稿期为空） */
+  @Prop({ type: String, default: null })
+  review_type: string | null;
+
   @Prop({ type: Object, default: { customer_cn_name: null, customer_en_name: null, business_note: null } })
   form: ApplicationFormVO;
 

@@ -8,6 +8,7 @@ import {
 } from "@bv/shared";
 import { Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
+import { XeRatesService } from "../../datasources/xe-rates.service";
 import {
   QuoteBenchmark,
   QuoteBenchmarkDocument,
@@ -31,6 +32,7 @@ export class QuoteMarketService {
     private readonly snapshotModel: Model<QuoteBenchmarkSnapshotDocument>,
     @InjectModel(QuoteChannelRate.name)
     private readonly channelModel: Model<QuoteChannelRateDocument>,
+    private readonly xeRates: XeRatesService,
   ) {}
 
   async getBenchmarkState(): Promise<BenchmarkStateVO> {
@@ -146,6 +148,33 @@ export class QuoteMarketService {
       sort: doc.sort,
       updated_at: doc.updated_at?.toISOString() ?? null,
     }));
+  }
+
+  /**
+   * 从 XE 行情源同步渠道汇率。未配置行情源时 synced=false，仅返回库中现值
+   * （前端「刷新」按钮据此区分提示文案）；接入步骤见 datasources/xe-rates.service.ts。
+   */
+  async syncChannelRates(
+    operator: JwtPayload,
+  ): Promise<{ synced: boolean; rates: ChannelRateVO[] }> {
+    if (!this.xeRates.isConfigured) {
+      return { synced: false, rates: await this.listChannelRates() };
+    }
+    const latest = await this.xeRates.fetchLatestRates();
+    if (latest) {
+      for (const [code, value] of latest) {
+        await this.channelModel.updateOne(
+          { code, is_deleted: false },
+          {
+            $set: {
+              value: Types.Decimal128.fromString(value),
+              updated_by: new Types.ObjectId(operator.sub),
+            },
+          },
+        );
+      }
+    }
+    return { synced: true, rates: await this.listChannelRates() };
   }
 
   /** 手工维护渠道汇率（真实行情源接入前的过渡通道） */

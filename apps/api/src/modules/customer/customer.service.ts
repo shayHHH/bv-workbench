@@ -38,6 +38,17 @@ export class CustomerService {
     private readonly eventModel: Model<CustomerEventDocument>,
   ) {}
 
+  /** 供其他业务模块（如准入）写入客户档案事件的公开入口 */
+  async recordEvent(
+    customerId: Types.ObjectId,
+    eventType: CustomerEventType,
+    title: string,
+    detail: string,
+    operator?: JwtPayload,
+  ): Promise<void> {
+    await this.logEvent(customerId, eventType, title, detail, operator);
+  }
+
   /** 追加档案事件（只 insert；失败不阻断主流程，但记录到进程日志） */
   private async logEvent(
     customerId: Types.ObjectId,

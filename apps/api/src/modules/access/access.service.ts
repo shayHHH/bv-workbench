@@ -11,19 +11,22 @@ import {
   AccessStatus,
   ApplicationMaterialStatus,
   ApplicationMaterialVO,
+  CustomerEventType,
   CustomerMaterialVO,
   KycChannel,
-  KycSection,
   MaterialSource,
   PageResult,
   ReviewAuditType,
   ReviewCaseStatus,
   ReviewDecisionAction,
+  ReviewType,
+  ReviewTypeLabel,
 } from "@bv/shared";
 import { Connection, Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
 import { nextBusinessNo } from "../../common/sequence";
 import { Customer, CustomerDocument } from "../customer/customer.schema";
+import { CustomerService } from "../customer/customer.service";
 import { KycScenario, KycScenarioDocument } from "../kyc/kyc-scenario.schema";
 import { AccessApplication, AccessApplicationDocument } from "./access-application.schema";
 import { CustomerMaterial, CustomerMaterialDocument } from "./customer-material.schema";
@@ -36,11 +39,17 @@ import {
   parseStatusList,
 } from "./dto/access.dto";
 
-/** 允许交易员编辑/提交/取消的状态（PRD §5.2；SUPPLEMENT_REQUIRED 已废弃并入 REJECTED，历史数据兼容保留） */
-const EDITABLE_STATUSES: AccessStatus[] = [
-  AccessStatus.DRAFT,
-  AccessStatus.SUPPLEMENT_REQUIRED,
+/**
+ * demo 状态语义：草稿/待补件可直接编辑提交；审核拒绝、已过期、已取消需先「重新提交」
+ * 回到草稿（reopen）再走工作台。
+ */
+const EDITABLE_STATUSES: AccessStatus[] = [AccessStatus.DRAFT, AccessStatus.SUPPLEMENT_REQUIRED];
+
+/** 可通过「重新提交」重开为草稿的状态（demo materialStatusFlow 的 ⟳ 重新提交） */
+const REOPENABLE_STATUSES: AccessStatus[] = [
   AccessStatus.REJECTED,
+  AccessStatus.EXPIRED,
+  AccessStatus.CANCELLED,
 ];
 
 /** 视为"占用 客户×业务×渠道"的活跃状态：存在时不允许再提交同组合申请 */
@@ -52,7 +61,6 @@ type ScenarioLean = {
   scenario_name: string;
   process_description: string | null;
   channels: KycChannel[];
-  sections: KycSection[];
 };
 
 @Injectable()
@@ -68,6 +76,7 @@ export class AccessService {
     private readonly scenarioModel: Model<KycScenarioDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
+    private readonly customerService: CustomerService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -153,6 +162,7 @@ export class AccessService {
         doc.scenario_code = null;
         doc.scenario_name = null;
         doc.channel_code = null;
+        doc.channel_name = null;
       } else {
         const scenario = await this.scenarioModel.findOne({
           _id: dto.scenario_id,
@@ -166,6 +176,7 @@ export class AccessService {
         // 换业务类型后原渠道可能不存在
         if (doc.channel_code && !scenario.channels.some(c => c.channel_code === doc.channel_code)) {
           doc.channel_code = null;
+          doc.channel_name = null;
         }
       }
     }
@@ -173,14 +184,17 @@ export class AccessService {
     if (dto.channel_code !== undefined) {
       if (dto.channel_code === null) {
         doc.channel_code = null;
+        doc.channel_name = null;
       } else {
         const scenario = doc.scenario_id
           ? await this.scenarioModel.findOne({ _id: doc.scenario_id, is_deleted: false })
           : null;
-        if (!scenario?.channels.some(c => c.channel_code === dto.channel_code)) {
+        const channel = scenario?.channels.find(c => c.channel_code === dto.channel_code);
+        if (!channel) {
           throw new BadRequestException("渠道不在所选业务类型内");
         }
-        doc.channel_code = dto.channel_code;
+        doc.channel_code = channel.channel_code;
+        doc.channel_name = channel.channel_name;
       }
     }
 
@@ -217,8 +231,8 @@ export class AccessService {
     return this.toVO(doc.toObject(), await this.loadScenarioMap([doc.scenario_id]));
   }
 
-  /** 提交合规：生成审核工单（追加型），申请转待审核 */
-  async submit(id: string, operator: JwtPayload): Promise<AccessApplicationVO> {
+  /** 提交合规：生成审核工单（追加型），申请转待审核；review_type=找换/U相关（demo 提交坞） */
+  async submit(id: string, reviewType: ReviewType, operator: JwtPayload): Promise<AccessApplicationVO> {
     const doc = await this.findOrFail(id);
     this.assertEditable(doc);
     if (!doc.scenario_id || !doc.channel_code) {
@@ -233,11 +247,10 @@ export class AccessService {
         `仍有 ${returned.length} 份被退回材料未替换：${returned.map(m => m.name).join("、")}`,
       );
     }
+    /* demo 口径：完整度由右侧 KYC 助手动态提示，不做提交硬拦截（合规审核驱动补件回路） */
     const completeness = computeCompleteness(scenario as unknown as ScenarioLean, doc.channel_code, doc.materials);
-    if (completeness.total > 0 && completeness.done < completeness.total) {
-      throw new BadRequestException(
-        `必填材料未集齐（${completeness.done}/${completeness.total}），请先补齐再提交`,
-      );
+    if (!doc.materials.length) {
+      throw new BadRequestException("请至少上传 1 份材料再提交");
     }
 
     // 同 客户×业务×渠道 只允许一条活跃申请
@@ -258,10 +271,10 @@ export class AccessService {
     const customer = await this.customerModel.findOne({ _id: doc.customer_id }).lean();
     const priorCase = await this.reviewCaseModel.exists({ application_id: doc._id, is_deleted: false });
     const channel = scenario.channels.find(c => c.channel_code === doc.channel_code);
-    const requirementParts = [
-      scenario.process_description,
-      channel?.restriction_note ? `渠道限制（${channel.channel_name}）：${channel.restriction_note}` : null,
-    ].filter(Boolean);
+    const restrictionText = channel?.restrictions?.length
+      ? `渠道限制（${channel.channel_name}）：\n${channel.restrictions.map(r => `- ${r.content}`).join("\n")}`
+      : null;
+    const requirementParts = [scenario.process_description, restrictionText].filter(Boolean);
     const now = new Date();
 
     await this.reviewCaseModel.create({
@@ -273,6 +286,8 @@ export class AccessService {
       customer_code: doc.customer_snapshot.customer_code,
       scenario_name: doc.scenario_name,
       channel_code: doc.channel_code,
+      channel_name: doc.channel_name,
+      review_type: reviewType,
       audit_type: priorCase ? ReviewAuditType.RESUBMIT : ReviewAuditType.NEW,
       status: ReviewCaseStatus.PENDING,
       risk_level: customer?.risk_level ?? null,
@@ -289,6 +304,7 @@ export class AccessService {
 
     const fromStatus = doc.status;
     doc.status = AccessStatus.PENDING_REVIEW;
+    doc.review_type = reviewType;
     doc.submitted_at = now;
     // timeline 为 Mixed 数组，原地 push 不触发 Mongoose 变更检测，必须整组赋值
     doc.timeline = [
@@ -299,6 +315,37 @@ export class AccessService {
         action: fromStatus === AccessStatus.DRAFT ? "提交合规审核" : "补件后重新提交",
         from_status: fromStatus,
         to_status: AccessStatus.PENDING_REVIEW,
+        note: null,
+      },
+    ];
+    doc.set("updated_by", new Types.ObjectId(operator.sub));
+    await doc.save();
+    await this.customerService.recordEvent(
+      doc.customer_id,
+      CustomerEventType.ACCESS,
+      "提交准入审核",
+      `${doc.scenario_name ?? "未选业务类型"} · ${doc.channel_name ?? "-"} · 提交到合规（${ReviewTypeLabel[reviewType]}），申请 ${doc.application_no}`,
+      operator,
+    );
+    return this.toVO(doc.toObject(), await this.loadScenarioMap([doc.scenario_id]));
+  }
+
+  /** 重新提交（demo ⟳）：审核拒绝/已过期/已取消 → 重开为草稿，回工作台继续 */
+  async reopen(id: string, operator: JwtPayload): Promise<AccessApplicationVO> {
+    const doc = await this.findOrFail(id);
+    if (!REOPENABLE_STATUSES.includes(doc.status)) {
+      throw new ConflictException(`当前状态（${doc.status}）不支持重新发起`);
+    }
+    const fromStatus = doc.status;
+    doc.status = AccessStatus.DRAFT;
+    doc.timeline = [
+      ...doc.timeline,
+      {
+        at: new Date(),
+        by_name: operator.display_name,
+        action: "重新发起提交",
+        from_status: fromStatus,
+        to_status: AccessStatus.DRAFT,
         note: null,
       },
     ];
@@ -423,6 +470,8 @@ export class AccessService {
       scenario_code: doc.scenario_code,
       scenario_name: doc.scenario_name,
       channel_code: doc.channel_code,
+      channel_name: doc.channel_name,
+      review_type: (doc.review_type as AccessApplicationVO["review_type"]) ?? null,
       form: doc.form,
       materials: doc.materials,
       status: doc.status,
@@ -448,16 +497,16 @@ export class AccessService {
   }
 }
 
-/** 必填材料完整度：按所选渠道适用的必填材料项统计（KYC 规则助手同口径） */
+/** 必填材料完整度：按所选渠道的必填材料项统计（demo 四层结构：材料清单挂在渠道下） */
 export function computeCompleteness(
-  scenario: Pick<ScenarioLean, "sections">,
+  scenario: Pick<ScenarioLean, "channels">,
   channelCode: string,
   materials: ApplicationMaterialVO[],
 ): AccessCompletenessVO {
-  const requiredItems = scenario.sections
+  const channel = scenario.channels.find(item => item.channel_code === channelCode);
+  const requiredItems = (channel?.sections ?? [])
     .flatMap(section => section.items)
-    .filter(item => item.required)
-    .filter(item => !item.channel_codes?.length || item.channel_codes.includes(channelCode));
+    .filter(item => item.required);
   const done = requiredItems.filter(item =>
     materials.some(
       material =>

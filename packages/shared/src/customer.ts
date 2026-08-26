@@ -118,6 +118,8 @@ export const CustomerEventType = {
   RISK_CHANGED: "RISK_CHANGED",
   KIND_CHANGED: "KIND_CHANGED",
   DELETED: "DELETED",
+  /** 业务准入相关事件（提交合规/审核结论），由准入模块写入 */
+  ACCESS: "ACCESS",
 } as const;
 export type CustomerEventType = (typeof CustomerEventType)[keyof typeof CustomerEventType];
 

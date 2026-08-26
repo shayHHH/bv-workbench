@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -8,6 +9,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import {
   AccessStatus,
   ApplicationMaterialStatus,
+  CustomerEventType,
   PageResult,
   ReviewCaseStatus,
   ReviewCaseVO,
@@ -16,15 +18,20 @@ import {
 } from "@bv/shared";
 import { Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
+import { AssignmentService } from "../assignment/assignment.service";
+import { CustomerService } from "../customer/customer.service";
 import { AccessApplication, AccessApplicationDocument } from "./access-application.schema";
 import { ReviewCase, ReviewCaseDocument } from "./review-case.schema";
 import { QueryReviewDto, ReviewDecisionDto } from "./dto/access.dto";
 
-/** 合规结论 → 申请状态（PRD §5.2；"要求补件"路径已按用户决定并入驳回） */
+/**
+ * 合规结论 → 申请状态（demo 语义）：
+ * 驳回 → 待补件（退回交易员补充后重新提交）；终止 → 审核拒绝（需重新发起新申请）。
+ */
 const ACTION_TO_STATUS: Record<ReviewDecisionAction, AccessStatus> = {
   APPROVE: AccessStatus.APPROVED,
-  REJECT: AccessStatus.REJECTED,
-  TERMINATE: AccessStatus.CANCELLED,
+  REJECT: AccessStatus.SUPPLEMENT_REQUIRED,
+  TERMINATE: AccessStatus.REJECTED,
 };
 
 const ACTION_TO_FINAL: Record<ReviewDecisionAction, ReviewFinalResult> = {
@@ -33,10 +40,11 @@ const ACTION_TO_FINAL: Record<ReviewDecisionAction, ReviewFinalResult> = {
   TERMINATE: ReviewFinalResult.TERMINATED,
 };
 
+/** demo 工单 history 文案口径 */
 const ACTION_LABEL: Record<ReviewDecisionAction, string> = {
   APPROVE: "合规审核通过",
-  REJECT: "合规审核驳回",
-  TERMINATE: "合规终止审核",
+  REJECT: "合规审核驳回，等待交易员补充后重新提交",
+  TERMINATE: "合规审核终止，需重新发起新申请",
 };
 
 @Injectable()
@@ -46,6 +54,8 @@ export class ReviewService {
     private readonly caseModel: Model<ReviewCaseDocument>,
     @InjectModel(AccessApplication.name)
     private readonly applicationModel: Model<AccessApplicationDocument>,
+    private readonly customerService: CustomerService,
+    private readonly assignmentService: AssignmentService,
   ) {}
 
   async list(query: QueryReviewDto): Promise<PageResult<ReviewCaseVO>> {
@@ -54,6 +64,8 @@ export class ReviewService {
     const filter: Record<string, unknown> = { is_deleted: false };
     if (query.status) filter.status = query.status;
     if (query.audit_type) filter.audit_type = query.audit_type;
+    if (query.review_type) filter.review_type = query.review_type;
+    if (query.final_result) filter.final_result = query.final_result;
     if (query.keyword) {
       const pattern = new RegExp(escapeRegExp(query.keyword.trim()), "i");
       filter.$or = [
@@ -91,6 +103,10 @@ export class ReviewService {
     const caseDoc = await this.findOrFail(id);
     if (caseDoc.status !== ReviewCaseStatus.PENDING) {
       throw new ConflictException("该工单已处理，不能重复出具结论");
+    }
+    /* 审核分配（admin 配置）：指派专人的审核类型仅负责人可出结论；未配置兜底全员，ADMIN 始终可办 */
+    if (!(await this.assignmentService.canDecide((caseDoc.review_type as never) ?? null, operator))) {
+      throw new ForbiddenException("该类型审核已指派专人处理，你当前只可查看");
     }
     const needReason = dto.action !== ReviewDecisionAction.APPROVE;
     if (needReason && !dto.reason?.trim()) {
@@ -186,6 +202,20 @@ export class ReviewService {
     application.set("updated_by", new Types.ObjectId(operator.sub));
     await application.save();
 
+    const eventTitle =
+      dto.action === ReviewDecisionAction.APPROVE
+        ? "准入审核通过"
+        : dto.action === ReviewDecisionAction.REJECT
+          ? "准入审核驳回"
+          : "准入审核终止";
+    await this.customerService.recordEvent(
+      application.customer_id,
+      CustomerEventType.ACCESS,
+      eventTitle,
+      `${application.scenario_name ?? "-"} · ${application.channel_name ?? "-"} · 申请 ${application.application_no}${caseDoc.decision?.reason ? `：${caseDoc.decision.reason}` : ""}`,
+      operator,
+    );
+
     return toVO(caseDoc.toObject());
   }
 
@@ -210,6 +240,8 @@ function toVO(
     customer_code: doc.customer_code,
     scenario_name: doc.scenario_name,
     channel_code: doc.channel_code,
+    channel_name: doc.channel_name,
+    review_type: (doc.review_type as ReviewCaseVO["review_type"]) ?? null,
     audit_type: doc.audit_type,
     status: doc.status,
     final_result: doc.final_result,

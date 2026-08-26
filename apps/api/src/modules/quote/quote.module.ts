@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
+import { XeRatesModule } from "../../datasources/xe-rates.module";
 import { Customer, CustomerSchema } from "../customer/customer.schema";
 import { QuoteController } from "./quote.controller";
 import { QuoteGroupService } from "./quote-group.service";
@@ -18,6 +19,7 @@ import { QuoteRecord, QuoteRecordSchema } from "./schemas/quote-record.schema";
 
 @Module({
   imports: [
+    XeRatesModule,
     MongooseModule.forFeature([
       { name: QuoteBenchmark.name, schema: QuoteBenchmarkSchema },
       { name: QuoteBenchmarkSnapshot.name, schema: QuoteBenchmarkSnapshotSchema },

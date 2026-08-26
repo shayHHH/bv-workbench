@@ -1,68 +1,132 @@
 <script setup lang="ts">
 import {
   AccessStatus,
+  AccessStatusDesc,
   AccessStatusLabel,
-  ApplicationMaterialStatus,
-  LEGACY_DECISION_ACTION_LABEL,
-  ReviewDecisionActionLabel,
+  ReviewTypeLabel,
   type AccessApplicationVO,
-  type ReviewDecisionAction,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { cancelApplication, fetchApplications } from "@/api/access";
+import { cancelApplication, fetchApplications, reopenApplication } from "@/api/access";
+import { formatRelative } from "@/utils/format";
 
 const router = useRouter();
-const list = ref<AccessApplicationVO[]>([]);
+
 const loading = ref(false);
-const query = reactive({ keyword: "", page: 1, page_size: 8, total: 0 });
+const items = ref<AccessApplicationVO[]>([]);
+const total = ref(0);
+const summary = reactive({ all: 0, draft: 0, supplement: 0, pending: 0 });
+
+const query = reactive({
+  keyword: "",
+  status: "" as "" | AccessStatus,
+  page: 1,
+  page_size: 10,
+});
 
 async function load() {
   loading.value = true;
   try {
-    const page = await fetchApplications({
-      status: `${AccessStatus.SUPPLEMENT_REQUIRED},${AccessStatus.REJECTED}`,
-      keyword: query.keyword || undefined,
-      page: query.page,
-      page_size: query.page_size,
-    });
-    list.value = page.items;
-    query.total = page.total;
+    const [pageResult, all, draft, supplement, pending] = await Promise.all([
+      fetchApplications({
+        keyword: query.keyword || undefined,
+        status: query.status || undefined,
+        page: query.page,
+        page_size: query.page_size,
+      }),
+      fetchApplications({ page: 1, page_size: 1 }),
+      fetchApplications({ status: AccessStatus.DRAFT, page: 1, page_size: 1 }),
+      fetchApplications({ status: AccessStatus.SUPPLEMENT_REQUIRED, page: 1, page_size: 1 }),
+      fetchApplications({ status: AccessStatus.PENDING_REVIEW, page: 1, page_size: 1 }),
+    ]);
+    items.value = pageResult.items;
+    total.value = pageResult.total;
+    summary.all = all.total;
+    summary.draft = draft.total;
+    summary.supplement = supplement.total;
+    summary.pending = pending.total;
   } finally {
     loading.value = false;
   }
 }
 
-function returnedNames(row: AccessApplicationVO) {
-  return row.materials
-    .filter(m => m.status === ApplicationMaterialStatus.RETURNED)
-    .map(m => m.name);
+function search() {
+  query.page = 1;
+  load();
 }
 
-function actionLabel(row: AccessApplicationVO) {
-  const action = row.latest_review?.action as string | undefined;
-  if (!action) return "—";
-  return (
-    ReviewDecisionActionLabel[action as ReviewDecisionAction] ??
-    LEGACY_DECISION_ACTION_LABEL[action] ??
-    action
-  );
+const statusTagType: Record<AccessStatus, "primary" | "success" | "warning" | "info" | "danger"> = {
+  DRAFT: "info",
+  PENDING_REVIEW: "primary",
+  SUPPLEMENT_REQUIRED: "warning",
+  REJECTED: "danger",
+  APPROVED: "success",
+  EXPIRED: "info",
+  SUSPENDED: "info",
+  CANCELLED: "info",
+};
+
+/** demo materialStatusFlow：状态 → 主/次操作 */
+function primaryAction(row: AccessApplicationVO): { label: string; run: () => void } {
+  switch (row.status) {
+    case AccessStatus.DRAFT:
+      return { label: "继续提交", run: () => router.push(`/access/materials/${row.id}`) };
+    case AccessStatus.SUPPLEMENT_REQUIRED:
+      return { label: "处理补件", run: () => router.push(`/access/documents/${row.id}/supplement`) };
+    case AccessStatus.REJECTED:
+    case AccessStatus.EXPIRED:
+    case AccessStatus.CANCELLED:
+      return { label: "⟳ 重新提交", run: () => reopen(row) };
+    default:
+      return { label: "查看详情", run: () => router.push(`/access/documents/${row.id}`) };
+  }
 }
 
-function goSupplement(row: AccessApplicationVO) {
-  router.push(`/access/materials/${row.id}`);
+function initials(name: string): string {
+  return /^[a-zA-Z]/.test(name) ? name.slice(0, 2).toUpperCase() : name.slice(0, 1);
+}
+
+/* el-table 插槽 row 无类型，统一经带类型的辅助函数取展示内容 */
+const reviewTypeText = (row: AccessApplicationVO) =>
+  row.review_type ? ` · ${ReviewTypeLabel[row.review_type]}` : "";
+const statusType = (row: AccessApplicationVO) => statusTagType[row.status];
+const statusText = (row: AccessApplicationVO) => AccessStatusLabel[row.status];
+const statusDesc = (row: AccessApplicationVO) => AccessStatusDesc[row.status];
+
+async function reopen(row: AccessApplicationVO) {
+  try {
+    await ElMessageBox.confirm(
+      `重新发起 ${row.application_no}？工单将回到草稿，继续完善材料后重新提交合规。`,
+      "重新提交",
+      { confirmButtonText: "重新发起", cancelButtonText: "取消" },
+    );
+    const updated = await reopenApplication(row.id);
+    ElMessage.success(`${row.application_no} 已重新发起`);
+    router.push(`/access/materials/${updated.id}`);
+  } catch {
+    /* 取消或接口错误 */
+  }
 }
 
 async function cancelRow(row: AccessApplicationVO) {
-  await ElMessageBox.confirm(
-    `确定取消申请 ${row.application_no}（${row.customer_snapshot.name}）？客户放弃补件时使用。`,
-    "取消申请",
-    { type: "warning", confirmButtonText: "取消申请", cancelButtonText: "再想想" },
-  );
-  await cancelApplication(row.id, "客户放弃补件，交易员取消");
-  ElMessage.success("申请已取消");
-  load();
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `取消工单 ${row.application_no}？长时间未补件或客户放弃时可取消申请；取消后进入已取消，可重新发起新申请。`,
+      "取消工单",
+      {
+        inputPlaceholder: "取消原因（如：客户放弃本次申请）",
+        confirmButtonText: "确认取消",
+        cancelButtonText: "返回",
+      },
+    );
+    await cancelApplication(row.id, value?.trim() || "交易员手动取消申请。");
+    ElMessage.success(`工单已取消：${row.application_no} 已作废，可重新发起申请`);
+    load();
+  } catch {
+    /* 取消或接口错误 */
+  }
 }
 
 onMounted(load);
@@ -71,72 +135,116 @@ onMounted(load);
 <template>
   <div>
     <header class="page-header">
-      <p class="eyebrow">BUSINESS ACCESS</p>
-      <h1>补件处理</h1>
-      <p class="subtitle">合规驳回的申请在此跟进：按驳回意见补充或替换材料后重新提交审核。</p>
+      <p class="eyebrow">REVIEW WORK ORDERS</p>
+      <h1>审核跟踪</h1>
+      <p class="subtitle">查看已提交的客户审核工单、材料草稿与补件状态，按状态推进后续处理。</p>
     </header>
 
+    <div class="summary">
+      <div class="summary-card">
+        <strong>{{ summary.all }}</strong><span>进行中与历史工单</span>
+      </div>
+      <div class="summary-card">
+        <strong>{{ summary.draft }}</strong><span>草稿待提交</span>
+      </div>
+      <div class="summary-card">
+        <strong>{{ summary.supplement }}</strong><span>待处理补件</span>
+      </div>
+      <div class="summary-card">
+        <strong>{{ summary.pending }}</strong><span>待合规审核</span>
+      </div>
+    </div>
+
     <el-card shadow="never">
-      <div class="filter-row">
+      <div class="toolbar">
         <el-input
           v-model="query.keyword"
-          placeholder="搜索申请单号 / 客户名称 / 编号"
-          clearable
           class="keyword"
-          @keyup.enter="(query.page = 1), load()"
-          @clear="(query.page = 1), load()"
+          placeholder="搜索工单号、客户名称或编号"
+          clearable
+          @keyup.enter="search"
+          @clear="search"
         />
-        <el-button @click="load">刷新</el-button>
+        <el-select v-model="query.status" class="filter" placeholder="全部状态" clearable @change="search">
+          <el-option
+            v-for="(label, value) in AccessStatusLabel"
+            :key="value"
+            :label="label"
+            :value="value"
+          />
+        </el-select>
+        <span class="count">{{ total }} 个工单</span>
       </div>
 
-      <el-table v-loading="loading" :data="list">
-        <el-table-column prop="application_no" label="申请单号" width="170" />
-        <el-table-column label="客户" min-width="140">
+      <el-table v-loading="loading" :data="items" row-key="id">
+        <el-table-column label="客户" min-width="210">
           <template #default="{ row }">
-            <strong>{{ row.customer_snapshot.name }}</strong>
-            <span v-if="row.customer_snapshot.customer_code" class="muted">
-              · {{ row.customer_snapshot.customer_code }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="业务类型 / 渠道" min-width="130">
-          <template #default="{ row }">
-            {{ row.scenario_name || "—" }}<span v-if="row.channel_code" class="muted"> · {{ row.channel_code }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag type="danger" size="small">{{ AccessStatusLabel[row.status as AccessStatus] }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="合规结论" min-width="220">
-          <template #default="{ row }">
-            <div v-if="row.latest_review">
-              <strong>{{ actionLabel(row) }}</strong>
-              <span class="muted"> · {{ row.latest_review.reviewer_name }} · {{ new Date(row.latest_review.reviewed_at).toLocaleString() }}</span>
-              <p class="reason">{{ row.latest_review.reason }}</p>
-              <p v-if="returnedNames(row).length" class="returned">
-                被退回：{{ returnedNames(row).join("、") }}
-              </p>
+            <div class="cell-primary">
+              <span class="avatar">{{ initials(row.customer_snapshot.name) }}</span>
+              <span class="name-block">
+                <strong>{{ row.customer_snapshot.name }}</strong>
+                <small>
+                  {{ row.customer_snapshot.customer_code || "无编号" }} · {{ row.application_no }}
+                </small>
+              </span>
             </div>
-            <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="业务类型 / 渠道" min-width="170">
           <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="goSupplement(row)">去补件</el-button>
-            <el-button size="small" type="danger" link @click="cancelRow(row)">取消申请</el-button>
+            {{ row.scenario_name || "未选业务类型" }}
+            <div class="muted">{{ row.channel_name || "-" }}{{ reviewTypeText(row) }}</div>
           </template>
         </el-table-column>
+        <el-table-column label="当前状态" min-width="180">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row)" effect="light">{{ statusText(row) }}</el-tag>
+            <div class="muted">{{ statusDesc(row) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="材料完整度" min-width="100">
+          <template #default="{ row }">
+            {{ row.completeness.done }} / {{ row.completeness.total }}
+            <div class="muted">当前有效材料</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="最后更新" min-width="100">
+          <template #default="{ row }">
+            <span class="muted">{{ formatRelative(row.updated_at) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" min-width="170" align="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" plain @click="primaryAction(row).run()">
+              {{ primaryAction(row).label }}
+            </el-button>
+            <el-button
+              v-if="row.status === AccessStatus.SUPPLEMENT_REQUIRED"
+              size="small"
+              @click="cancelRow(row)"
+            >
+              取消
+            </el-button>
+            <el-button
+              v-else-if="[AccessStatus.REJECTED, AccessStatus.EXPIRED, AccessStatus.CANCELLED].includes(row.status)"
+              size="small"
+              @click="router.push(`/access/documents/${row.id}`)"
+            >
+              记录
+            </el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无审核工单，在「材料上传」提交合规后会出现在这里" />
+        </template>
       </el-table>
-      <el-empty v-if="!loading && !list.length" description="当前没有待补件或被驳回的申请" />
 
       <div class="pager">
         <el-pagination
           v-model:current-page="query.page"
-          layout="prev, pager, next, total"
-          :total="query.total"
-          :page-size="query.page_size"
+          v-model:page-size="query.page_size"
+          :total="total"
+          layout="total, prev, pager, next, jumper"
           @current-change="load"
         />
       </div>
@@ -166,34 +274,91 @@ h1 {
   margin: 0;
 }
 
-.filter-row {
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-card {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 14px 16px;
   display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-card strong {
+  font-size: 22px;
+}
+
+.summary-card span {
+  color: #909399;
+  font-size: 13px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .keyword {
   width: 280px;
 }
 
-.muted {
-  color: #909399;
+.filter {
+  width: 150px;
 }
 
-.reason {
-  margin: 4px 0 0;
+.count {
+  margin-left: auto;
+  color: #909399;
   font-size: 13px;
 }
 
-.returned {
-  margin: 2px 0 0;
+.cell-primary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  background: #eef1f6;
+  color: #4a5261;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.name-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name-block small {
+  color: #909399;
+}
+
+.muted {
+  color: #909399;
   font-size: 12px;
-  color: #f56c6c;
 }
 
 .pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 </style>

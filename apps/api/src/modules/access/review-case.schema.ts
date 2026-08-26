@@ -43,6 +43,13 @@ export class ReviewCase {
   @Prop({ type: String, default: null })
   channel_code: string | null;
 
+  @Prop({ type: String, default: null })
+  channel_name: string | null;
+
+  /** 提交模式：找换 / U相关（demo 提交坞选择） */
+  @Prop({ type: String, default: null })
+  review_type: string | null;
+
   @Prop({ type: String, required: true, enum: Object.values(ReviewAuditType) })
   audit_type: ReviewAuditType;
 

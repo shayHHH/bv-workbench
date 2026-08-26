@@ -66,6 +66,12 @@ export class QuoteController {
     return this.marketService.updateChannelRates(dto, operator);
   }
 
+  /** 从 XE 行情源同步（未配置行情源时 synced=false，仅回读库中现值） */
+  @Post("channel-rates/sync")
+  syncChannelRates(@CurrentUser() operator: JwtPayload) {
+    return this.marketService.syncChannelRates(operator);
+  }
+
   /* ---------- 客户报价配置 ---------- */
 
   @Get("variables/:customerId")

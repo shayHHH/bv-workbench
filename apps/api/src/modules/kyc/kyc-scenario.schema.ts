@@ -1,11 +1,11 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { KycChannel, KycScenarioStatus, KycSection } from "@bv/shared";
+import { KycChannel, KycScenarioStatus } from "@bv/shared";
 import { HydratedDocument } from "mongoose";
 import { addBaseFields, BASE_TIMESTAMPS } from "../../common/base.schema";
 
 /**
- * KYC 材料清单配置（PRD §4.10：业务类型 → 渠道 → 材料项三层模板）。
- * 配置型集合，量级极小；channels/sections 为嵌入数组，发布后被材料上传页实时引用。
+ * KYC 材料清单配置（demo 四层：业务类型 → 渠道 → 材料模块 → 材料项，
+ * 每个渠道持有独立材料清单与限制条目）。配置型集合，量级极小；发布后被材料上传页引用。
  */
 export const KYC_SCENARIO_COLLECTION = "kyc_scenarios";
 
@@ -26,13 +26,9 @@ export class KycScenario {
   @Prop({ type: Boolean, default: false })
   is_builtin: boolean;
 
-  /** 渠道列表：{ channel_code, channel_name, restriction_note } */
+  /** 渠道列表：{ channel_code, channel_name, theme, restrictions[], sections[{ section_name, items[] }] } */
   @Prop({ type: Array, default: [] })
   channels: KycChannel[];
-
-  /** 材料模块列表：{ section_name, items: KycItem[] }；item.channel_codes 为 null 表示全渠道适用 */
-  @Prop({ type: Array, default: [] })
-  sections: KycSection[];
 
   @Prop({ type: Number, default: 0 })
   sort_order: number;

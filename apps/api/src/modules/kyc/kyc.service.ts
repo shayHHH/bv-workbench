@@ -78,9 +78,14 @@ export class KycService {
   /** 发布：材料上传页开始实时引用该版本 */
   async publish(id: string, operator: JwtPayload): Promise<KycScenarioVO> {
     const doc = await this.findOrFail(id);
-    if (!doc.channels.length) throw new BadRequestException("发布前至少配置一个渠道");
-    const itemCount = doc.sections.reduce((sum, section) => sum + section.items.length, 0);
-    if (!itemCount) throw new BadRequestException("发布前至少配置一个材料项");
+    const itemCount = doc.channels.reduce(
+      (sum, channel) => sum + channel.sections.reduce((n, section) => n + section.items.length, 0),
+      0,
+    );
+    /* demo 存在无渠道的业务类型（如 #16 人民币现金买卖），允许发布空渠道场景仅作展示 */
+    if (doc.channels.length && !itemCount) {
+      throw new BadRequestException("发布前请为渠道配置至少一个材料项");
+    }
     doc.status = KycScenarioStatus.PUBLISHED;
     doc.published_at = new Date();
     doc.set("updated_by", new Types.ObjectId(operator.sub));
@@ -104,23 +109,24 @@ export class KycService {
     return doc;
   }
 
-  /** 结构校验：item_id 场景内唯一；材料项适用渠道必须在渠道列表内 */
+  /** 结构校验：渠道代码/名称不重复；item_id 全场景唯一 */
   private validateStructure(dto: SaveScenarioDto): void {
     const channelCodes = new Set(dto.channels.map(channel => channel.channel_code));
     if (channelCodes.size !== dto.channels.length) {
       throw new BadRequestException("渠道代码不能重复");
     }
+    const channelNames = new Set(dto.channels.map(channel => channel.channel_name.trim()));
+    if (channelNames.size !== dto.channels.length) {
+      throw new BadRequestException("同一业务模式下渠道名称不能重复");
+    }
     const itemIds = new Set<string>();
-    for (const section of dto.sections) {
-      for (const item of section.items) {
-        if (itemIds.has(item.item_id)) {
-          throw new BadRequestException(`材料项 ID 重复：${item.item_id}`);
-        }
-        itemIds.add(item.item_id);
-        for (const code of item.channel_codes ?? []) {
-          if (!channelCodes.has(code)) {
-            throw new BadRequestException(`材料项「${item.item_name}」引用了不存在的渠道 ${code}`);
+    for (const channel of dto.channels) {
+      for (const section of channel.sections) {
+        for (const item of section.items) {
+          if (itemIds.has(item.item_id)) {
+            throw new BadRequestException(`材料项 ID 重复：${item.item_id}`);
           }
+          itemIds.add(item.item_id);
         }
       }
     }
@@ -133,20 +139,22 @@ export class KycService {
       process_description: dto.process_description ?? null,
       channels: dto.channels.map(channel => ({
         channel_code: channel.channel_code,
-        channel_name: channel.channel_name,
-        restriction_note: channel.restriction_note ?? null,
-      })),
-      sections: dto.sections.map(section => ({
-        section_name: section.section_name,
-        items: section.items.map(item => ({
-          item_id: item.item_id,
-          item_name: item.item_name,
-          item_description: item.item_description ?? null,
-          item_type: item.item_type,
-          required: item.required,
-          max_count: item.max_count,
-          validity_note: item.validity_note ?? null,
-          channel_codes: item.channel_codes?.length ? item.channel_codes : null,
+        channel_name: channel.channel_name.trim(),
+        theme: channel.theme,
+        restrictions: channel.restrictions.map(restriction => ({
+          type: restriction.type,
+          content: restriction.content,
+        })),
+        sections: channel.sections.map(section => ({
+          section_name: section.section_name,
+          items: section.items.map(item => ({
+            item_id: item.item_id,
+            item_name: item.item_name,
+            item_description: item.item_description ?? null,
+            item_type: item.item_type,
+            required: item.required,
+            validity: item.validity,
+          })),
         })),
       })),
     };
@@ -161,7 +169,6 @@ export class KycService {
       status: doc.status,
       is_builtin: doc.is_builtin,
       channels: doc.channels,
-      sections: doc.sections,
       published_at: doc.published_at ? doc.published_at.toISOString() : null,
       updated_at: doc.updated_at ? doc.updated_at.toISOString() : new Date().toISOString(),
     };

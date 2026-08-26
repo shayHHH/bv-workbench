@@ -107,3 +107,17 @@
 - 提交要求：业务类型/渠道已选、必填材料完整（按渠道适用项）、无未替换的被退回材料；同 客户×业务×渠道 仅一条活跃申请（PENDING_REVIEW/APPROVED）。
 - 文件二进制不入库：`storage_key` 指向存储适配层（当前本地磁盘 `UPLOAD_DIR`，对象存储信息确认后切 S3 兼容适配器），预览/下载统一走 `/api/files` 鉴权流。
 - `counters` 集合：`{_id: "<前缀>_<yyyymmdd>", seq}` 原子自增生成业务单号，见 `apps/api/src/common/sequence.ts`。
+
+---
+
+## 变更记录：2026-08-26 按 demo 对齐重构
+
+用户确认业务准入以 demo（bv-workbench-go/index.html + app.js）为验收标准后的结构调整：
+
+- **kyc_scenarios 改为四层**：业务类型 → 渠道（含 theme/restrictions[]）→ 材料模块 sections[] → 材料项；材料清单挂在渠道下（原 scenario.sections + item.channel_codes 结构废弃）。材料项字段改为 `validity`（NONE/ONE_MONTH/THREE_MONTHS 枚举），移除 max_count/validity_note。seed 为 demo 原样迁移的 21 个业务类型（scripts/demo-kyc-data.mjs）。
+- **合规结论语义对齐 demo**：REJECT（驳回）→ SUPPLEMENT_REQUIRED（待补件，补件回路）；TERMINATE（终止）→ REJECTED（审核拒绝，可通过 reopen 重新发起）。SUPPLEMENT_REQUIRED 恢复为活跃状态。
+- **新增字段**：applications/review_cases 增加 `channel_name` 冗余快照与 `review_type`（FX 找换 / USDT U相关，demo 提交坞选择）；review_cases 查询支持 review_type/final_result 筛选。
+- **新增接口**：`POST /access/applications/:id/reopen`（审核拒绝/已过期/已取消 → 重开草稿）；submit 需携带 `review_type`。
+- **提交校验放宽**：完整度仅 KYC 助手动态提示，不做提交硬拦截（至少 1 份材料；被退回材料未替换仍拦截）。
+- **客户档案联动**：不改客户主档状态；提交/驳回/通过/终止写入 customer_events（ACCESS 类型），客户详情抽屉时间线展示。
+- **页面**：材料上传页为唯一提交入口（单屏五步 + 三模式提交坞）；「补件处理」改为「审核跟踪」工单中心（列表/详情/补件工作台）；合规队列待处理为卡片式、已处理为七列表格；合规详情材料行仅「通过」，退回在结论区多选；审核分配校验接入 decide()（AssignmentService.canDecide）。

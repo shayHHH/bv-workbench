@@ -44,15 +44,13 @@ const roleIds = new Map(
   (await db.collection("roles").find({}).toArray()).map(role => [role.role_code, role._id]),
 );
 
-/* ---- 演示账号（upsert；密码统一 123456，admin 为 admin123） ---- */
+/* ---- 基础账号（upsert，仅首次插入）----
+ * 正式团队账号由 admin 在「用户管理」维护（2026-08-26 用户已录入真实名单），
+ * seed 不再创建演示人员账号——此前用户改名后重跑 seed 曾把旧演示账号复活污染名单。
+ */
 const users = [
   ["admin", "admin123", "系统管理员", "Administrator", "ADMIN"],
-  ["yanglan", "123456", "杨澜", "Junior Trader · JT-018", "AGENT"],
-  ["zhouchen", "123456", "周辰", "Senior Trader · ST-006", "OPS"],
-  ["chenhao", "123456", "陈浩", "Junior Trader · JT-022", "AGENT"],
-  ["tina", "123456", "Tina", "Finance · FN-003", "FINANCE"],
-  ["manager", "123456", "运营经理", "Operations Manager", "MANAGER"],
-  ["helin", "123456", "何琳", "Compliance Officer · CP-002", "COMPLIANCE"],
+  ["quotetest", "123456", "报价测试", "QA · 可随时删除", "AGENT"],
 ];
 for (const [username, password, displayName, title, roleCode] of users) {
   await db.collection("users").updateOne(
@@ -337,114 +335,40 @@ await db.collection("quote_records").insertMany([
   record(chenJianingId, 8, "港币", "sgb", "", "sino每日价格 + 3 * 3", "7.823 + 3 * 3", [{ label: "sino每日价格", value: "7.823" }], "16.8230", 4, "杨澜"),
 ]);
 
-/* ---- KYC 材料清单内置模板（幂等：按 scenario_code upsert，仅首次插入，不覆盖配置界面的修改）
- * 注意：业务类型/渠道/材料项均为演示占位内容，真实 KYC list 由业务方提供后在"KYC list 配置"界面维护。
- */
-const kycItem = (itemId, itemName, itemType, required, extra = {}) => ({
-  item_id: itemId,
-  item_name: itemName,
-  item_description: null,
-  item_type: itemType,
-  required,
-  max_count: 3,
-  validity_note: null,
-  channel_codes: null,
-  ...extra,
-});
-
-const kycScenarios = [
-  {
-    scenario_code: "SINO",
-    scenario_name: "SINO 找换",
-    process_description:
-      "香港找换业务（SINO 通道）。个人需完成 KYC，企业需完成 KYB 并核实 UBO；第三方与公司账户须合规复核后方可继续。",
-    channels: [
-      { channel_code: "SGB", channel_name: "SGB", restriction_note: "SGB 渠道不接受第三方付款账户；单笔上限以渠道公告为准。" },
-      { channel_code: "SINO", channel_name: "SINO", restriction_note: "SINO 渠道要求收付款账户同名。" },
-    ],
-    sections: [
-      {
-        section_name: "身份材料",
-        items: [
-          kycItem("sino_id", "身份证明文件", "FILE", true, { item_description: "身份证 / 护照，个人 KYC 必备", validity_note: "证件须在有效期内" }),
-          kycItem("sino_addr", "地址证明", "FILE", true, { item_description: "近三个月水电煤/银行账单" }),
-        ],
-      },
-      {
-        section_name: "业务与资金",
-        items: [
-          kycItem("sino_fund", "资金来源说明", "FILE", true, { item_description: "受雇收入、经营收入或投资来源证明" }),
-          kycItem("sino_bank", "银行流水", "FILE", false, { item_description: "近三个月流水，单笔大额时必查" }),
-          kycItem("sino_bank_acc", "收款银行账户", "BANK_ACCOUNT", true, { item_description: "同名收款账户信息", channel_codes: ["SINO"] }),
-        ],
-      },
-      {
-        section_name: "企业补充（KYB）",
-        items: [
-          kycItem("sino_br", "公司注册证明 BR/CI", "FILE", false, { item_description: "企业客户必备" }),
-          kycItem("sino_ubo", "UBO 名单（签署版）", "FILE", false, { item_description: "企业客户必备，须最新签署版" }),
-        ],
-      },
-    ],
-  },
-  {
-    scenario_code: "SGB",
-    scenario_name: "SGB 汇款",
-    process_description: "SGB 跨境汇款业务。需说明业务用途与预计月度业务量；高风险地区关联客户须人工复核。",
-    channels: [
-      { channel_code: "SGB", channel_name: "SGB", restriction_note: "限制银行名单见渠道公告；不支持现金存入。" },
-    ],
-    sections: [
-      {
-        section_name: "身份材料",
-        items: [
-          kycItem("sgb_id", "身份证明文件", "FILE", true),
-          kycItem("sgb_addr", "地址证明", "FILE", true),
-        ],
-      },
-      {
-        section_name: "业务说明",
-        items: [
-          kycItem("sgb_purpose", "业务用途说明", "TEXT", true, { item_description: "汇款用途、预计月度业务量" }),
-          kycItem("sgb_invoice", "贸易合同/发票", "FILE", false),
-        ],
-      },
-    ],
-  },
-  {
-    scenario_code: "TRANSFER_EASY",
-    scenario_name: "TransferEasy",
-    process_description: "TransferEasy 通道业务。开通前须完成账户审查；第三方账户需合规复核。",
-    channels: [
-      { channel_code: "TE_STANDARD", channel_name: "标准通道", restriction_note: null },
-    ],
-    sections: [
-      {
-        section_name: "身份材料",
-        items: [
-          kycItem("te_id", "身份证明文件", "FILE", true),
-          kycItem("te_addr", "地址证明", "FILE", false),
-        ],
-      },
-    ],
-  },
-];
-
-for (const [index, scenario] of kycScenarios.entries()) {
-  await db.collection("kyc_scenarios").updateOne(
-    { scenario_code: scenario.scenario_code },
-    {
-      $setOnInsert: {
-        ...scenario,
-        status: "PUBLISHED",
-        is_builtin: true,
-        sort_order: index,
-        published_at: at(24 * 5),
-        ...base(24 * 6, 24 * 5),
-      },
-    },
-    { upsert: true },
-  );
+/* ---- KYC 材料清单（demo 原样迁移：21 个业务类型，四层结构 业务类型→渠道→材料模块→材料项；重建） ---- */
+const { demoKycScenarios } = await import("./demo-kyc-data.mjs");
+const kycValidityMap = { none: "NONE", "1m": "ONE_MONTH", "3m": "THREE_MONTHS" };
+const kycTypeMap = { file: "FILE", text: "TEXT", bank_account: "BANK_ACCOUNT" };
+await db.collection("kyc_scenarios").deleteMany({});
+let kycIndex = 0;
+for (const scenario of demoKycScenarios) {
+  await db.collection("kyc_scenarios").insertOne({
+    scenario_code: String(scenario.code),
+    scenario_name: scenario.name,
+    process_description: scenario.processDescription || null,
+    status: "PUBLISHED",
+    is_builtin: false,
+    channels: (scenario.channels || []).map((channel, channelIndex) => ({
+      channel_code: channel.id ? String(channel.id).toUpperCase() : `CH_${scenario.code}_${channelIndex}`,
+      channel_name: channel.name,
+      theme: channel.theme || "blue",
+      restrictions: (channel.restrictions || []).map(r => ({ type: r.type || "special_proof", content: r.content })),
+      sections: (channel.sections || []).map(section => ({
+        section_name: section.title,
+        items: (section.items || []).map(item => ({
+          item_id: item.id,
+          item_name: item.name,
+          item_description: item.subRequirement || null,
+          item_type: kycTypeMap[item.type] || "FILE",
+          required: item.required !== false,
+          validity: kycValidityMap[item.validity] || "NONE",
+        })),
+      })),
+    })),
+    sort_order: kycIndex++,
+    published_at: at(24 * 5),
+    ...base(24 * 6, 24 * 5),
+  });
 }
 
 const counts = {

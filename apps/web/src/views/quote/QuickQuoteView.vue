@@ -36,6 +36,7 @@ import {
   recalculateQuote,
   saveBenchmarks,
   saveQuoteConfig,
+  syncChannelRates,
 } from "@/api/quote";
 import CustomerCreateDialog from "@/views/customer/CustomerCreateDialog.vue";
 import FormulaEditor from "./FormulaEditor.vue";
@@ -407,13 +408,15 @@ async function saveBenchmarkDraft() {
 
 /* ---------- 渠道汇率 ---------- */
 async function refreshChannels() {
-  channels.value = await fetchChannelRates();
+  /* 配置了 XE 行情源时走真实同步，否则仅重读库中人工数据 */
+  const result = await syncChannelRates();
+  channels.value = result.rates;
   if (selected.value) variables.value = await fetchQuoteVariables(selected.value.id);
   channelFlash.value = true;
   setTimeout(() => {
     channelFlash.value = false;
   }, 650);
-  ElMessage.success(t("quote.channel.refreshed"));
+  ElMessage.success(t(result.synced ? "quote.channel.synced" : "quote.channel.refreshed"));
 }
 
 /* ---------- 初始化 ---------- */

@@ -62,5 +62,5 @@
 
 ## 演进预留
 
-- 渠道汇率接真实行情源 / 内部数仓：由 `apps/api/src/datasources/` 侧写入 `quote_channel_rates`，`source` 字段区分来源，前端与公式引擎无需改动。
+- **渠道汇率 XE 行情源（2026-08-26 用户确认有 API，文档后补）**：接入点已就位——env `XE_RATES_API_URL` / `XE_RATES_API_KEY` + `datasources/xe-rates.service.ts`（补全 `fetchLatestRates()` 的请求与 code 映射即可）；`POST /quote/channel-rates/sync` 未配置时 synced=false 仅回读库中人工数据，配置后写回 `quote_channel_rates`，前端与公式引擎无需改动。平台基准价则维持每日人工录入（用户确认）。
 - 报价 → 交易订单：订单模块上线后 `quote_records._id` 即 PRD 中订单关联的 `quoteId`。

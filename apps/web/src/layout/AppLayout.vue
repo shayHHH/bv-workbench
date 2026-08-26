@@ -74,7 +74,10 @@ const menu: MenuItem[] = [
     titleKey: "layout.menu.admin",
     icon: Setting,
     roles: ["ADMIN"],
-    children: [{ path: "/admin/users", titleKey: "layout.menu.adminUsers" }],
+    children: [
+      { path: "/admin/users", titleKey: "layout.menu.adminUsers" },
+      { path: "/admin/review-assignment", titleKey: "layout.menu.adminReviewAssignment" },
+    ],
   },
 ];
 

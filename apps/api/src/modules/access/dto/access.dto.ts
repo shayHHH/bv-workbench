@@ -12,7 +12,7 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { AccessStatus, FileRef, MaterialSource, ReviewDecisionAction } from "@bv/shared";
+import { AccessStatus, FileRef, MaterialSource, ReviewDecisionAction, ReviewType } from "@bv/shared";
 
 export class CreateApplicationDto {
   @IsMongoId()
@@ -138,6 +138,12 @@ export class CancelApplicationDto {
   note?: string;
 }
 
+export class SubmitApplicationDto {
+  /** 提交模式：找换 / U相关（demo 提交坞选择） */
+  @IsIn(Object.values(ReviewType))
+  review_type: ReviewType;
+}
+
 export class MaterialVerdictDto {
   @IsString()
   @MaxLength(50)
@@ -181,6 +187,16 @@ export class QueryReviewDto {
   @IsOptional()
   @IsIn(["NEW", "RESUBMIT"])
   audit_type?: "NEW" | "RESUBMIT";
+
+  /** 提交模式筛选（FX 找换 / USDT U相关；双合规分工的分配过滤将基于它扩展） */
+  @IsOptional()
+  @IsIn(Object.values(ReviewType))
+  review_type?: ReviewType;
+
+  /** 已处理页签的最终结论筛选 */
+  @IsOptional()
+  @IsIn(["APPROVED", "UNRESOLVED", "TERMINATED"])
+  final_result?: "APPROVED" | "UNRESOLVED" | "TERMINATED";
 
   @IsOptional()
   @IsNumber()

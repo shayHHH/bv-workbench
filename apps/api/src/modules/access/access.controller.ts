@@ -8,6 +8,7 @@ import {
   CreateApplicationDto,
   QueryApplicationDto,
   SaveDraftDto,
+  SubmitApplicationDto,
 } from "./dto/access.dto";
 
 /** 交易员侧准入申请（材料上传/补件处理）；合规与管理员可读 */
@@ -45,8 +46,19 @@ export class AccessController {
 
   @Post("applications/:id/submit")
   @Roles("AGENT", "OPS")
-  submit(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
-    return this.accessService.submit(id, operator);
+  submit(
+    @Param("id") id: string,
+    @Body() dto: SubmitApplicationDto,
+    @CurrentUser() operator: JwtPayload,
+  ) {
+    return this.accessService.submit(id, dto.review_type, operator);
+  }
+
+  /** 重新提交（审核拒绝/已过期/已取消 → 重开为草稿） */
+  @Post("applications/:id/reopen")
+  @Roles("AGENT", "OPS")
+  reopen(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
+    return this.accessService.reopen(id, operator);
   }
 
   @Post("applications/:id/cancel")

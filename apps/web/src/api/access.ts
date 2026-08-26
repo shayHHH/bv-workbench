@@ -6,6 +6,7 @@ import type {
   PageResult,
   ReviewCaseVO,
   ReviewDecisionInput,
+  ReviewType,
   SaveApplicationDraftInput,
 } from "@bv/shared";
 import { http } from "./http";
@@ -50,8 +51,19 @@ export async function saveApplicationDraft(
   return data;
 }
 
-export async function submitApplication(id: string): Promise<AccessApplicationVO> {
-  const { data } = await http.post<AccessApplicationVO>(`/access/applications/${id}/submit`);
+export async function submitApplication(
+  id: string,
+  reviewType: ReviewType,
+): Promise<AccessApplicationVO> {
+  const { data } = await http.post<AccessApplicationVO>(`/access/applications/${id}/submit`, {
+    review_type: reviewType,
+  });
+  return data;
+}
+
+/** 重新提交（审核拒绝/已过期/已取消 → 重开为草稿） */
+export async function reopenApplication(id: string): Promise<AccessApplicationVO> {
+  const { data } = await http.post<AccessApplicationVO>(`/access/applications/${id}/reopen`);
   return data;
 }
 
@@ -121,6 +133,8 @@ export interface ReviewListQuery {
   status?: "PENDING" | "PROCESSED";
   keyword?: string;
   audit_type?: "NEW" | "RESUBMIT";
+  review_type?: ReviewType;
+  final_result?: "APPROVED" | "UNRESOLVED" | "TERMINATED";
   submitted_from?: number;
   submitted_to?: number;
   page?: number;

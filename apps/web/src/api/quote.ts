@@ -44,6 +44,14 @@ export async function fetchChannelRates(): Promise<ChannelRateVO[]> {
   return data;
 }
 
+/** 从 XE 行情源同步；未配置行情源时 synced=false，仅回读库中现值 */
+export async function syncChannelRates(): Promise<{ synced: boolean; rates: ChannelRateVO[] }> {
+  const { data } = await http.post<{ synced: boolean; rates: ChannelRateVO[] }>(
+    "/quote/channel-rates/sync",
+  );
+  return data;
+}
+
 /* ---- 客户报价配置 ---- */
 
 export async function fetchQuoteConfig(customerId: string): Promise<QuoteConfigVO> {
