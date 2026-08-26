@@ -56,6 +56,15 @@ export class UserService {
     if (dto.user_status === UserStatus.DISABLED && doc._id.toString() === operator.sub) {
       throw new BadRequestException("不能停用自己的账号");
     }
+    if (dto.username !== undefined) {
+      const username = dto.username.toLowerCase();
+      if (username !== doc.username) {
+        // 与创建同口径：软删除账号占用的用户名同样不可复用
+        const exists = await this.userModel.exists({ username, _id: { $ne: doc._id } });
+        if (exists) throw new ConflictException(`用户名 ${username} 已存在`);
+        doc.username = username;
+      }
+    }
     if (dto.role_id !== undefined) {
       const role = await this.roleModel.findOne({ _id: dto.role_id, is_deleted: false }).lean();
       if (!role) throw new BadRequestException("所选角色不存在");

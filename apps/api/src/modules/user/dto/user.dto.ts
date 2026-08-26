@@ -36,6 +36,11 @@ export class CreateUserDto {
 export class UpdateUserDto {
   @IsOptional()
   @IsString()
+  @Matches(/^[a-zA-Z0-9_.-]{3,32}$/, { message: "用户名为 3-32 位字母、数字或 _ . -" })
+  username?: string;
+
+  @IsOptional()
+  @IsString()
   @MinLength(1)
   @MaxLength(50)
   display_name?: string;

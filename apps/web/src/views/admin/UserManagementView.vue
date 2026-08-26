@@ -91,6 +91,10 @@ function openEditDialog(user: UserVO) {
 }
 
 async function submitEdit() {
+  if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(editForm.username.trim())) {
+    ElMessage.warning("用户名为 3-32 位字母、数字或 _ . -");
+    return;
+  }
   if (!editForm.display_name.trim()) {
     ElMessage.warning("请输入姓名");
     return;
@@ -102,15 +106,21 @@ async function submitEdit() {
   editSubmitting.value = true;
   try {
     const user = await updateUser(editForm.id, {
+      username: editForm.username.trim(),
       display_name: editForm.display_name.trim(),
       title: editForm.title.trim() || null,
       // 自己的角色与状态由后端拒绝修改，编辑自己时不提交这两项
       ...(editingSelf.value ? {} : { role_id: editForm.role_id, user_status: editForm.user_status }),
     });
-    ElMessage.success(`账号已更新：${user.display_name}（${user.role?.name}）`);
+    ElMessage.success(`账号已更新：${user.display_name}（${user.username}）`);
     editDialog.value = false;
     if (editingSelf.value && auth.user) {
-      auth.setSession(auth.token, { ...auth.user, display_name: user.display_name, title: user.title });
+      auth.setSession(auth.token, {
+        ...auth.user,
+        username: user.username,
+        display_name: user.display_name,
+        title: user.title,
+      });
     }
     load();
   } catch {
@@ -351,18 +361,21 @@ onMounted(load);
 
     <el-dialog v-model="editDialog" title="编辑账号" width="520px" :close-on-click-modal="false">
       <p class="dialog-subtitle">
-        {{ editForm.username }}<template v-if="editingSelf">（当前登录账号，角色与状态不可自改）</template>
-        · 密码修改请使用列表中的「重置密码」
+        <template v-if="editingSelf">当前登录账号，角色与状态不可自改 · </template>
+        密码修改请使用列表中的「重置密码」
       </p>
       <el-form label-position="top">
         <div class="grid">
+          <el-form-item label="用户名（登录名）" required>
+            <el-input v-model="editForm.username" placeholder="3-32 位字母、数字或 _ . -" maxlength="32" />
+          </el-form-item>
           <el-form-item label="姓名" required>
             <el-input v-model="editForm.display_name" placeholder="用于系统内展示" maxlength="50" />
           </el-form-item>
-          <el-form-item label="职位 / 工号">
-            <el-input v-model="editForm.title" placeholder='如 "Junior Trader · JT-018"（可选）' maxlength="100" />
-          </el-form-item>
         </div>
+        <el-form-item label="职位 / 工号">
+          <el-input v-model="editForm.title" placeholder='如 "Junior Trader · JT-018"（可选）' maxlength="100" />
+        </el-form-item>
         <el-form-item label="角色" required>
           <el-select v-model="editForm.role_id" :disabled="editingSelf" placeholder="选择角色" style="width: 100%">
             <el-option

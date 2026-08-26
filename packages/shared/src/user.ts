@@ -67,6 +67,8 @@ export interface CreateUserInput {
 }
 
 export interface UpdateUserInput {
+  /** 登录名；修改后原用户名立即失效，下次登录使用新用户名 */
+  username?: string;
   display_name?: string;
   title?: string | null;
   role_id?: string;
