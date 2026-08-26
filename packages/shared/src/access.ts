@@ -1,0 +1,374 @@
+/**
+ * 业务准入域共享定义（KYC 材料清单配置 / 准入申请 / 合规审核工单）。
+ * 依据 PRD §4.7-4.10、§5.2 状态机、§6.2-6.4 数据需求；
+ * 持久化只存稳定英文代码，中文展示走 *Label 映射（规范 §5.2）。
+ */
+
+/* ---------------- KYC 材料清单配置（业务类型 → 渠道 → 材料项） ---------------- */
+
+/** 材料项类型 */
+export const KycItemType = {
+  FILE: "FILE",
+  TEXT: "TEXT",
+  BANK_ACCOUNT: "BANK_ACCOUNT",
+} as const;
+export type KycItemType = (typeof KycItemType)[keyof typeof KycItemType];
+
+export const KycItemTypeLabel: Record<KycItemType, string> = {
+  FILE: "文件",
+  TEXT: "文本",
+  BANK_ACCOUNT: "银行账户",
+};
+
+/** 配置状态：保存后为草稿，发布后才被材料上传页引用 */
+export const KycScenarioStatus = {
+  DRAFT: "DRAFT",
+  PUBLISHED: "PUBLISHED",
+} as const;
+export type KycScenarioStatus = (typeof KycScenarioStatus)[keyof typeof KycScenarioStatus];
+
+export const KycScenarioStatusLabel: Record<KycScenarioStatus, string> = {
+  DRAFT: "草稿",
+  PUBLISHED: "已发布",
+};
+
+export interface KycChannel {
+  channel_code: string;
+  channel_name: string;
+  /** 渠道特殊规则/限制银行/补充说明 */
+  restriction_note: string | null;
+}
+
+export interface KycItem {
+  /** 场景内稳定 ID（提交后材料关联、退回指定都引用它） */
+  item_id: string;
+  item_name: string;
+  item_description: string | null;
+  item_type: KycItemType;
+  required: boolean;
+  /** 份数上限 */
+  max_count: number;
+  /** 有效期规则说明（先做展示文案，过期引擎后续迭代） */
+  validity_note: string | null;
+  /** 适用渠道代码；null/空 = 全渠道适用 */
+  channel_codes: string[] | null;
+}
+
+export interface KycSection {
+  section_name: string;
+  items: KycItem[];
+}
+
+export interface KycScenarioVO {
+  id: string;
+  scenario_code: string;
+  scenario_name: string;
+  /** 业务流程与约束说明（审核详情页"人工审核要求"引用） */
+  process_description: string | null;
+  status: KycScenarioStatus;
+  is_builtin: boolean;
+  channels: KycChannel[];
+  sections: KycSection[];
+  published_at: string | null;
+  updated_at: string;
+}
+
+export interface SaveKycScenarioInput {
+  scenario_code: string;
+  scenario_name: string;
+  process_description?: string | null;
+  channels: KycChannel[];
+  sections: KycSection[];
+}
+
+/* ---------------- 准入申请（客户 × 业务类型 × 渠道，PRD §5.2 状态机） ---------------- */
+
+export const AccessStatus = {
+  DRAFT: "DRAFT",
+  PENDING_REVIEW: "PENDING_REVIEW",
+  SUPPLEMENT_REQUIRED: "SUPPLEMENT_REQUIRED",
+  REJECTED: "REJECTED",
+  APPROVED: "APPROVED",
+  EXPIRED: "EXPIRED",
+  SUSPENDED: "SUSPENDED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
+
+export const AccessStatusLabel: Record<AccessStatus, string> = {
+  DRAFT: "草稿",
+  PENDING_REVIEW: "待审核",
+  /** 已废弃（2026-08-26 用户拍板合并进"驳回"）；仅为历史数据保留 */
+  SUPPLEMENT_REQUIRED: "待补件",
+  REJECTED: "审核拒绝",
+  APPROVED: "审核通过",
+  EXPIRED: "已过期",
+  SUSPENDED: "已暂停",
+  CANCELLED: "已取消",
+};
+
+/** 材料来源（PRD §6.2） */
+export const MaterialSource = {
+  LOCAL_UPLOAD: "LOCAL_UPLOAD",
+  LIBRARY: "LIBRARY",
+  SYSTEM: "SYSTEM",
+} as const;
+export type MaterialSource = (typeof MaterialSource)[keyof typeof MaterialSource];
+
+export const MaterialSourceLabel: Record<MaterialSource, string> = {
+  LOCAL_UPLOAD: "本地上传",
+  LIBRARY: "材料库复用",
+  SYSTEM: "系统生成",
+};
+
+/** 申请内单份材料的审核状态 */
+export const ApplicationMaterialStatus = {
+  PENDING: "PENDING",
+  ACCEPTED: "ACCEPTED",
+  RETURNED: "RETURNED",
+} as const;
+export type ApplicationMaterialStatus =
+  (typeof ApplicationMaterialStatus)[keyof typeof ApplicationMaterialStatus];
+
+export const ApplicationMaterialStatusLabel: Record<ApplicationMaterialStatus, string> = {
+  PENDING: "待检查",
+  ACCEPTED: "已通过",
+  RETURNED: "被退回",
+};
+
+/** 上传文件引用（对象存储 key + 原始元数据；预览走 /api/files 鉴权流） */
+export interface FileRef {
+  storage_key: string;
+  original_name: string;
+  mime_type: string;
+  size: number;
+}
+
+export interface ApplicationMaterialVO {
+  /** 申请内唯一 key（前端生成 uuid），审核退回按它定位 */
+  material_key: string;
+  /** 关联的 KYC 材料项 item_id；未关联为 null */
+  requirement_item_id: string | null;
+  name: string;
+  source: MaterialSource;
+  file: FileRef | null;
+  /** 来源为材料库复用时指向 customer_materials */
+  library_material_id: string | null;
+  status: ApplicationMaterialStatus;
+  return_reason: string | null;
+  uploaded_at: string;
+}
+
+export interface ApplicationFormVO {
+  customer_cn_name: string | null;
+  customer_en_name: string | null;
+  business_note: string | null;
+}
+
+/** 申请时间线条目（规范 §4.5：每步有操作人/动作/前后状态） */
+export interface AccessTimelineVO {
+  at: string;
+  by_name: string | null;
+  action: string;
+  from_status: AccessStatus | null;
+  to_status: AccessStatus;
+  note: string | null;
+}
+
+export interface AccessCompletenessVO {
+  done: number;
+  total: number;
+}
+
+export interface AccessApplicationVO {
+  id: string;
+  application_no: string;
+  customer_id: string;
+  /** 提交时客户快照（规范 §4.5，审核还原当时输入） */
+  customer_snapshot: {
+    name: string;
+    customer_code: string | null;
+    customer_kind: string;
+  };
+  scenario_id: string | null;
+  scenario_code: string | null;
+  scenario_name: string | null;
+  channel_code: string | null;
+  form: ApplicationFormVO;
+  materials: ApplicationMaterialVO[];
+  status: AccessStatus;
+  /** 必填材料完整度（按所选渠道适用项计算） */
+  completeness: AccessCompletenessVO;
+  owner_name: string | null;
+  /** 最近一次合规结论摘要（补件处理页展示驳回原因） */
+  latest_review: {
+    case_id: string;
+    action: ReviewDecisionAction;
+    reason: string | null;
+    rejected_item_ids: string[];
+    reviewed_at: string;
+    reviewer_name: string | null;
+  } | null;
+  timeline: AccessTimelineVO[];
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateApplicationInput {
+  customer_id: string;
+}
+
+export interface SaveApplicationDraftInput {
+  scenario_id?: string | null;
+  channel_code?: string | null;
+  form?: Partial<ApplicationFormVO>;
+  materials?: Array<{
+    material_key: string;
+    requirement_item_id?: string | null;
+    name: string;
+    source: MaterialSource;
+    file?: FileRef | null;
+    library_material_id?: string | null;
+  }>;
+}
+
+/* ---------------- 客户材料库 ---------------- */
+
+export interface CustomerMaterialVO {
+  id: string;
+  customer_id: string;
+  name: string;
+  /** 归档时关联的材料项名称（展示用途） */
+  category: string | null;
+  file: FileRef;
+  version: number;
+  uploader_name: string | null;
+  created_at: string;
+}
+
+export interface ArchiveMaterialsInput {
+  items: Array<{ name: string; category?: string | null; file: FileRef }>;
+}
+
+/* ---------------- 合规审核工单（PRD §4.8/4.9/6.4；追加型，每次提交新增一条） ---------------- */
+
+export const ReviewAuditType = {
+  NEW: "NEW",
+  RESUBMIT: "RESUBMIT",
+} as const;
+export type ReviewAuditType = (typeof ReviewAuditType)[keyof typeof ReviewAuditType];
+
+export const ReviewAuditTypeLabel: Record<ReviewAuditType, string> = {
+  NEW: "新提交",
+  RESUBMIT: "驳回重审",
+};
+
+export const ReviewCaseStatus = {
+  PENDING: "PENDING",
+  PROCESSED: "PROCESSED",
+} as const;
+export type ReviewCaseStatus = (typeof ReviewCaseStatus)[keyof typeof ReviewCaseStatus];
+
+export const ReviewCaseStatusLabel: Record<ReviewCaseStatus, string> = {
+  PENDING: "待审核",
+  PROCESSED: "已处理",
+};
+
+export const ReviewFinalResult = {
+  APPROVED: "APPROVED",
+  UNRESOLVED: "UNRESOLVED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type ReviewFinalResult = (typeof ReviewFinalResult)[keyof typeof ReviewFinalResult];
+
+export const ReviewFinalResultLabel: Record<ReviewFinalResult, string> = {
+  APPROVED: "审核通过",
+  UNRESOLVED: "未完结",
+  TERMINATED: "审核终止",
+};
+
+/**
+ * 合规结论动作。PRD §5.2 原有"要求补件"与"驳回"两条路径，§8 待确认问题
+ * 2026-08-26 用户拍板：只保留驳回（驳回可退回指定材料，交易员修改后重新提交）。
+ */
+export const ReviewDecisionAction = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+  TERMINATE: "TERMINATE",
+} as const;
+export type ReviewDecisionAction =
+  (typeof ReviewDecisionAction)[keyof typeof ReviewDecisionAction];
+
+export const ReviewDecisionActionLabel: Record<ReviewDecisionAction, string> = {
+  APPROVE: "审核通过",
+  REJECT: "驳回",
+  TERMINATE: "终止",
+};
+
+/** 历史数据中可能存在的已废弃动作代码 → 展示文案兜底 */
+export const LEGACY_DECISION_ACTION_LABEL: Record<string, string> = {
+  REQUEST_SUPPLEMENT: "要求补件（已废弃）",
+};
+
+export interface ReviewMaterialVerdict {
+  material_key: string;
+  verdict: ApplicationMaterialStatus;
+  reason: string | null;
+}
+
+export interface ReviewCaseVO {
+  id: string;
+  case_no: string;
+  application_id: string;
+  application_no: string;
+  customer_id: string;
+  customer_name: string;
+  customer_code: string | null;
+  scenario_name: string | null;
+  channel_code: string | null;
+  audit_type: ReviewAuditType;
+  status: ReviewCaseStatus;
+  final_result: ReviewFinalResult | null;
+  risk_level: string | null;
+  completeness: AccessCompletenessVO;
+  /** 交易员提交说明（业务说明快照） */
+  note: string | null;
+  /** 提交当时的表单与材料快照（规范 §4.5：不可依赖之后被修改的主表） */
+  form_snapshot: ApplicationFormVO;
+  materials_snapshot: ApplicationMaterialVO[];
+  /** 场景审核要求快照（人工审核要求卡片） */
+  review_requirement: string | null;
+  decision: {
+    action: ReviewDecisionAction;
+    reason: string | null;
+    rejected_item_ids: string[];
+  } | null;
+  material_verdicts: ReviewMaterialVerdict[];
+  submitted_by_name: string | null;
+  submitted_at: string;
+  reviewer_name: string | null;
+  reviewed_at: string | null;
+}
+
+export interface ReviewDecisionInput {
+  action: ReviewDecisionAction;
+  /** REQUEST_SUPPLEMENT / REJECT / TERMINATE 必填 */
+  reason?: string | null;
+  /** 要求补件/驳回时指定需重传的材料 */
+  material_verdicts?: ReviewMaterialVerdict[];
+}
+
+/* ---------------- 上传约束（前后端共用） ---------------- */
+
+export const UPLOAD_ACCEPT_MIMES = [
+  "image/jpeg",
+  "image/png",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+] as const;
+
+export const UPLOAD_ACCEPT_EXTS = [".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx"] as const;
+
+export const UPLOAD_MAX_SIZE = 20 * 1024 * 1024;

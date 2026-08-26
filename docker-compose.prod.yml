@@ -1,0 +1,34 @@
+# 部署编排（示例）：
+#   docker compose -f docker-compose.prod.yml up -d --build
+# 线上连公司内部数据库时，在部署机 .env 配置 MONGODB_URI（及后续的 INTERNAL_DW_MONGODB_URI），
+# 不启用本文件中的 mongo 服务（仅测试环境用 --profile with-mongo 启用）。
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      PORT: "3000"
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/bv_workbench}
+      INTERNAL_DW_MONGODB_URI: ${INTERNAL_DW_MONGODB_URI:-}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    profiles: ["with-mongo"]
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

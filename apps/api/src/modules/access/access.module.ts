@@ -1,0 +1,26 @@
+import { Module } from "@nestjs/common";
+import { MongooseModule } from "@nestjs/mongoose";
+import { Customer, CustomerSchema } from "../customer/customer.schema";
+import { KycModule } from "../kyc/kyc.module";
+import { AccessApplication, AccessApplicationSchema } from "./access-application.schema";
+import { AccessController } from "./access.controller";
+import { AccessService } from "./access.service";
+import { CustomerMaterial, CustomerMaterialSchema } from "./customer-material.schema";
+import { ReviewCase, ReviewCaseSchema } from "./review-case.schema";
+import { ReviewController } from "./review.controller";
+import { ReviewService } from "./review.service";
+
+@Module({
+  imports: [
+    KycModule,
+    MongooseModule.forFeature([
+      { name: AccessApplication.name, schema: AccessApplicationSchema },
+      { name: CustomerMaterial.name, schema: CustomerMaterialSchema },
+      { name: ReviewCase.name, schema: ReviewCaseSchema },
+      { name: Customer.name, schema: CustomerSchema },
+    ]),
+  ],
+  controllers: [AccessController, ReviewController],
+  providers: [AccessService, ReviewService],
+})
+export class AccessModule {}

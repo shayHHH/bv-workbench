@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+.vite/
+# 准入材料本地存储目录（开发环境）
+apps/api/uploads/

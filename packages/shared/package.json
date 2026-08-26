@@ -1,0 +1,23 @@
+{
+  "name": "@bv/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "前后端共享的枚举、常量与 DTO 类型（双格式产出：ESM 供前端构建，CJS 供 NestJS）",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node scripts/write-dist-manifests.mjs",
+    "watch": "tsc -p tsconfig.cjs.json --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

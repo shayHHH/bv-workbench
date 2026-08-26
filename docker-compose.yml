@@ -1,0 +1,18 @@
+# 本地开发：只起 MongoDB，api/web 用 npm 跑（热更新）
+# 用法：docker compose up -d
+services:
+  mongo:
+    image: mongo:7
+    container_name: bv-workbench-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:
