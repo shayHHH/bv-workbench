@@ -1413,6 +1413,9 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* 约 12-13 行开始滚动，与渠道汇率列表的视觉节奏一致 */
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 .bench-row {
@@ -1431,6 +1434,11 @@ h1 {
   font-size: 12px;
   border-bottom: 1px solid #f0f2f5;
   padding-bottom: 4px;
+  /* 列表滚动时表头保持可见 */
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
 }
 
 .bench-value {
