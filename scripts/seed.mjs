@@ -504,8 +504,8 @@ const tl = (hoursAgo, title, detail, actor) => ({ at: at(hoursAgo), title, detai
 const mosaicQuoteId = new ObjectId();
 await db.collection("quote_records").insertOne({
   _id: mosaicQuoteId, customer_id: mosaicId, trade_type: "转账换U", prefix: "USDT",
-  suffix: "", formula_text: "手工核价", formula_calc: "1.0020",
-  variables: [{ label: "手工核价", value: "1.0020" }], result: D("1.0020"),
+  suffix: "", formula_text: "U-HKD - 6.8260", formula_calc: "7.8280 - 6.8260",
+  variables: [{ label: "U-HKD", value: "7.8280" }], result: D("1.0020"),
   broker_point: null, bv_point: null, digits: 4, round_mode: "HALF_UP",
   quoted_at: at(11), operator_name: "sinclair", ...base(11),
 });
