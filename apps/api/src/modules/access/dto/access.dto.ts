@@ -198,6 +198,11 @@ export class QueryReviewDto {
   @IsIn(["APPROVED", "UNRESOLVED", "TERMINATED"])
   final_result?: "APPROVED" | "UNRESOLVED" | "TERMINATED";
 
+  /** 已处理页签的「我的结论」筛选（demo 处理过工具栏） */
+  @IsOptional()
+  @IsIn(Object.values(ReviewDecisionAction))
+  decision_action?: ReviewDecisionAction;
+
   @IsOptional()
   @IsNumber()
   submitted_from?: number;

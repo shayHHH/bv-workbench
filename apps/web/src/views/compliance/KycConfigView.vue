@@ -10,6 +10,8 @@ import {
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import {
   createScenario,
   deleteScenario,
@@ -27,6 +29,7 @@ interface EditableScenario {
   channels: KycChannel[];
 }
 
+const { t } = useI18n();
 const scenarios = ref<KycScenarioVO[]>([]);
 const loading = ref(false);
 const saving = ref(false);
@@ -114,7 +117,7 @@ function openScenarioDialog(mode: "new" | "edit") {
 
 async function confirmScenarioDialog() {
   if (!scenarioDialog.code.trim() || !scenarioDialog.name.trim()) {
-    ElMessage.warning("请填写序号和业务类型名称");
+    ElMessage.warning(t("compliance.kycConfig.codeNameRequired"));
     return;
   }
   if (scenarioDialog.mode === "new") {
@@ -129,7 +132,7 @@ async function confirmScenarioDialog() {
       await load();
       const fresh = scenarios.value.find(s => s.id === created.id);
       if (fresh) select(fresh);
-      ElMessage.success(`已新建业务模式 #${created.scenario_code}`);
+      ElMessage.success(t("compliance.kycConfig.created", { code: created.scenario_code }));
     } catch {
       /* 提示由拦截器处理 */
     }
@@ -147,12 +150,16 @@ async function removeScenario() {
   if (!draft.value?.id) return;
   try {
     await ElMessageBox.confirm(
-      `删除业务模式 #${draft.value.scenario_code} · ${draft.value.scenario_name}？删除后材料上传页不再展示该业务类型。`,
-      "删除模式",
-      { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" },
+      t("compliance.kycConfig.deleteConfirm", { code: draft.value.scenario_code, name: draft.value.scenario_name }),
+      t("compliance.kycConfig.deleteTitle"),
+      {
+        type: "warning",
+        confirmButtonText: t("compliance.kycConfig.confirmDelete"),
+        cancelButtonText: t("compliance.kycConfig.cancel"),
+      },
     );
     await deleteScenario(draft.value.id);
-    ElMessage.success("业务模式已删除");
+    ElMessage.success(t("compliance.kycConfig.deleted"));
     selectedId.value = null;
     await load();
   } catch {
@@ -190,7 +197,7 @@ function confirmChannelDialog() {
   if (!draft.value) return;
   const name = channelDialog.name.trim();
   if (!name) {
-    ElMessage.warning("请输入渠道名称");
+    ElMessage.warning(t("compliance.kycConfig.channelNameRequired"));
     return;
   }
   const restrictions = channelDialog.restrictions
@@ -203,7 +210,7 @@ function confirmChannelDialog() {
   } else {
     const duplicated = draft.value.channels.some(c => c.channel_name === name);
     if (duplicated) {
-      ElMessage.warning("同一业务模式下渠道名称不能重复");
+      ElMessage.warning(t("compliance.kycConfig.channelNameDup"));
       return;
     }
     draft.value.channels.push({
@@ -213,7 +220,7 @@ function confirmChannelDialog() {
       restrictions,
       sections: [
         {
-          section_name: channelDialog.firstSection.trim() || `${name} 基础收集材料`,
+          section_name: channelDialog.firstSection.trim() || t("compliance.kycConfig.defaultSection", { name }),
           items: [],
         },
       ],
@@ -226,11 +233,15 @@ function confirmChannelDialog() {
 async function removeChannel() {
   if (!draft.value || !currentChannel.value) return;
   try {
-    await ElMessageBox.confirm(`删除渠道「${currentChannel.value.channel_name}」及其材料清单？`, "删除渠道", {
-      type: "warning",
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-    });
+    await ElMessageBox.confirm(
+      t("compliance.kycConfig.channelDeleteConfirm", { name: currentChannel.value.channel_name }),
+      t("compliance.kycConfig.channelDeleteTitle"),
+      {
+        type: "warning",
+        confirmButtonText: t("compliance.kycConfig.confirmDelete"),
+        cancelButtonText: t("compliance.kycConfig.cancel"),
+      },
+    );
     draft.value.channels.splice(channelIndex.value, 1);
     channelIndex.value = Math.max(0, channelIndex.value - 1);
   } catch {
@@ -241,7 +252,7 @@ async function removeChannel() {
 /* ---------------- 材料模块 / 材料项 ---------------- */
 
 function addSection() {
-  currentChannel.value?.sections.push({ section_name: "新材料模块", items: [] });
+  currentChannel.value?.sections.push({ section_name: t("compliance.kycConfig.newSection"), items: [] });
 }
 
 function removeSection(index: number) {
@@ -271,7 +282,7 @@ async function saveAndPublish() {
   for (const channel of current.channels) {
     for (const section of channel.sections) {
       if (section.items.some(item => !item.item_name.trim())) {
-        ElMessage.warning(`「${channel.channel_name} / ${section.section_name}」存在未命名材料项`);
+        ElMessage.warning(t("compliance.kycConfig.unnamedItem", { channel: channel.channel_name, section: section.section_name }));
         return;
       }
     }
@@ -289,7 +300,7 @@ async function saveAndPublish() {
       : await createScenario(payload);
     await publishScenario(saved.id);
     lastSavedAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
-    ElMessage.success(`合规规则配置已保存并发布：#${saved.scenario_code} ${saved.scenario_name}`);
+    ElMessage.success(t("compliance.kycConfig.saved", { code: saved.scenario_code, name: saved.scenario_name }));
     selectedId.value = saved.id;
     await load(true);
   } catch {
@@ -313,32 +324,32 @@ onMounted(() => load());
   <div>
     <header class="page-header">
       <div>
-        <p class="eyebrow">COMPLIANCE ROUTING ENGINE</p>
-        <h1>合规材料与渠道路由配置中心</h1>
-        <p class="subtitle">以业务场景为入口，维护渠道路由、限制规则、材料模块和前台提交要求。</p>
+        <p class="eyebrow">{{ t("compliance.kycConfig.eyebrow") }}</p>
+        <h1>{{ t("compliance.kycConfig.title") }}</h1>
+        <p class="subtitle">{{ t("compliance.kycConfig.subtitle") }}</p>
       </div>
       <div class="head-actions">
-        <span class="muted">上一次保存时间：{{ lastSavedAt || "--" }}</span>
+        <span class="muted">{{ t("compliance.kycConfig.lastSaved", { time: lastSavedAt || "--" }) }}</span>
         <el-button type="primary" :loading="saving" :disabled="!draft" @click="saveAndPublish">
-          保存并发布新版本
+          {{ t("compliance.kycConfig.saveBtn") }}
         </el-button>
       </div>
     </header>
 
     <div class="metrics">
-      <div class="metric"><strong>{{ metrics.scenarios }}</strong><span>业务模式</span></div>
-      <div class="metric"><strong>{{ metrics.channels }}</strong><span>绑定渠道</span></div>
-      <div class="metric"><strong>{{ metrics.items }}</strong><span>材料/字段项</span></div>
+      <div class="metric"><strong>{{ metrics.scenarios }}</strong><span>{{ t("compliance.kycConfig.mScenarios") }}</span></div>
+      <div class="metric"><strong>{{ metrics.channels }}</strong><span>{{ t("compliance.kycConfig.mChannels") }}</span></div>
+      <div class="metric"><strong>{{ metrics.items }}</strong><span>{{ t("compliance.kycConfig.mItems") }}</span></div>
     </div>
 
     <div class="shell">
       <!-- 左：业务类型配置库 -->
       <aside class="library" v-loading="loading">
         <div class="library-head">
-          <strong>业务类型配置库</strong>
-          <el-button size="small" type="primary" plain @click="openScenarioDialog('new')">＋ 新建模式</el-button>
+          <strong>{{ t("compliance.kycConfig.libraryTitle") }}</strong>
+          <el-button size="small" type="primary" plain @click="openScenarioDialog('new')">{{ t("compliance.kycConfig.newScenario") }}</el-button>
         </div>
-        <el-input v-model="searchQuery" placeholder="搜索业务类型或序号" clearable size="small" class="library-search" />
+        <el-input v-model="searchQuery" :placeholder="t('compliance.kycConfig.searchPh')" clearable size="small" class="library-search" />
         <div class="scenario-list">
           <button
             v-for="scenario in filtered"
@@ -350,15 +361,15 @@ onMounted(() => load());
           >
             <span class="card-top">
               <em>#{{ scenario.scenario_code }}</em>
-              <small>渠道 {{ scenario.channels.length }}</small>
+              <small>{{ t("compliance.kycConfig.cardChannels", { n: scenario.channels.length }) }}</small>
             </span>
             <strong>{{ scenario.scenario_name }}</strong>
             <small class="card-meta">
-              {{ itemCountOf(scenario) }} 项材料 ·
-              {{ scenario.channels.length ? scenario.channels.map(c => c.channel_name).join(" / ") : "未绑定渠道" }}
+              {{ t("compliance.kycConfig.cardItems", { n: itemCountOf(scenario) }) }}
+              {{ scenario.channels.length ? scenario.channels.map(c => c.channel_name).join(" / ") : t("compliance.kycConfig.noChannels") }}
             </small>
           </button>
-          <el-empty v-if="!loading && !filtered.length" description="未找到匹配业务类型" :image-size="60" />
+          <el-empty v-if="!loading && !filtered.length" :description="t('compliance.kycConfig.libraryEmpty')" :image-size="60" />
         </div>
       </aside>
 
@@ -366,30 +377,30 @@ onMounted(() => load());
       <main v-if="draft" class="editor">
         <div class="scenario-head">
           <span class="code-pill">#{{ draft.scenario_code }}</span>
-          <el-input v-model="draft.scenario_name" class="name-input" placeholder="业务类型名称" />
+          <el-input v-model="draft.scenario_name" class="name-input" :placeholder="t('compliance.kycConfig.namePh')" />
           <div class="scenario-actions">
-            <el-button size="small" @click="openScenarioDialog('edit')">编辑信息</el-button>
+            <el-button size="small" @click="openScenarioDialog('edit')">{{ t("compliance.kycConfig.editInfo") }}</el-button>
             <el-button size="small" type="danger" plain :disabled="!draft.id" @click="removeScenario">
-              删除模式
+              {{ t("compliance.kycConfig.deleteScenario") }}
             </el-button>
           </div>
         </div>
-        <p class="scenario-sub">请定义该业务交易模式下的整体流转逻辑与各渠道收集规则</p>
+        <p class="scenario-sub">{{ t("compliance.kycConfig.scenarioSub") }}</p>
 
         <div class="field-block">
-          <label>业务流程、时效与约束说明（面向业务人员与合规预检，材料上传页"业务审核要点"引用）</label>
+          <label>{{ t("compliance.kycConfig.processLabel") }}</label>
           <el-input v-model="draft.process_description" type="textarea" :rows="6" maxlength="2000" />
         </div>
 
         <div class="matrix-head">
           <div>
-            <strong>通道渠道与材料收集规则 Matrix</strong>
-            <small>同一业务模式可绑定多个渠道，每个渠道维护独立限制和材料模块。</small>
+            <strong>{{ t("compliance.kycConfig.matrixTitle") }}</strong>
+            <small>{{ t("compliance.kycConfig.matrixSub") }}</small>
           </div>
           <div class="matrix-actions">
-            <el-button size="small" :disabled="!currentChannel" @click="openChannelDialog('edit')">编辑当前渠道</el-button>
-            <el-button size="small" :disabled="!currentChannel" @click="removeChannel">删除当前渠道</el-button>
-            <el-button size="small" type="primary" plain @click="openChannelDialog('new')">＋ 新增绑定渠道</el-button>
+            <el-button size="small" :disabled="!currentChannel" @click="openChannelDialog('edit')">{{ t("compliance.kycConfig.editChannel") }}</el-button>
+            <el-button size="small" :disabled="!currentChannel" @click="removeChannel">{{ t("compliance.kycConfig.deleteChannel") }}</el-button>
+            <el-button size="small" type="primary" plain @click="openChannelDialog('new')">{{ t("compliance.kycConfig.addChannel") }}</el-button>
           </div>
         </div>
 
@@ -403,15 +414,15 @@ onMounted(() => load());
             @click="channelIndex = index"
           >
             <i :style="{ background: themeDot[channel.theme] }" />
-            {{ channel.channel_name }} 渠道材料库
-            <small>{{ channel.sections.reduce((n, s) => n + s.items.length, 0) }} 项材料</small>
+            {{ t("compliance.kycConfig.channelTab", { name: channel.channel_name }) }}
+            <small>{{ t("compliance.kycConfig.channelTabItems", { n: channel.sections.reduce((n, s) => n + s.items.length, 0) }) }}</small>
           </button>
         </div>
-        <el-empty v-else description="该业务模式暂未绑定渠道，点击「＋ 新增绑定渠道」开始配置" :image-size="70" />
+        <el-empty v-else :description="t('compliance.kycConfig.channelsEmpty')" :image-size="70" />
 
         <template v-if="currentChannel">
           <div v-if="currentChannel.restrictions.length" class="restriction-strip">
-            <strong>渠道限制</strong>
+            <strong>{{ t("compliance.kycConfig.restrictionsTitle") }}</strong>
             <span v-for="restriction in currentChannel.restrictions" :key="restriction.content">
               {{ restriction.content }}
             </span>
@@ -419,69 +430,69 @@ onMounted(() => load());
 
           <section v-for="(section, sIndex) in currentChannel.sections" :key="sIndex" class="material-section">
             <header>
-              <span class="section-no">模块 {{ sIndex + 1 }}</span>
-              <el-input v-model="section.section_name" class="section-name" size="small" placeholder="模块名称" />
+              <span class="section-no">{{ t("compliance.kycConfig.sectionNo", { n: sIndex + 1 }) }}</span>
+              <el-input v-model="section.section_name" class="section-name" size="small" :placeholder="t('compliance.kycConfig.sectionNamePh')" />
               <el-button size="small" type="primary" plain @click="addItem(sIndex)">
-                ＋ 添加需要收集的材料/字段
+                {{ t("compliance.kycConfig.addItem") }}
               </el-button>
-              <el-button size="small" text type="danger" @click="removeSection(sIndex)">⌫ 删除模块</el-button>
+              <el-button size="small" text type="danger" @click="removeSection(sIndex)">{{ t("compliance.kycConfig.removeSection") }}</el-button>
             </header>
             <div v-for="(item, iIndex) in section.items" :key="item.item_id" class="item-row">
               <span class="drag">⋮⋮</span>
-              <el-input v-model="item.item_name" size="small" class="item-name" placeholder="材料名称" />
+              <el-input v-model="item.item_name" size="small" class="item-name" :placeholder="t('compliance.kycConfig.itemNamePh')" />
               <el-input
                 :model-value="item.item_description ?? ''"
                 size="small"
                 class="item-desc"
-                placeholder="补充要求"
+                :placeholder="t('compliance.kycConfig.itemDescPh')"
                 @update:model-value="(value: string) => (item.item_description = value || null)"
               />
               <el-select v-model="item.item_type" size="small" class="item-type">
-                <el-option :value="KycItemType.FILE" label="文件上传（PDF/图片）" />
-                <el-option :value="KycItemType.TEXT" label="文本输入框" />
-                <el-option :value="KycItemType.BANK_ACCOUNT" label="银行账户多字段" />
+                <el-option :value="KycItemType.FILE" :label="t('compliance.kycConfig.typeFile')" />
+                <el-option :value="KycItemType.TEXT" :label="t('compliance.kycConfig.typeText')" />
+                <el-option :value="KycItemType.BANK_ACCOUNT" :label="t('compliance.kycConfig.typeBankAccount')" />
               </el-select>
-              <el-checkbox v-model="item.required" size="small">{{ item.required ? "必填" : "选填" }}</el-checkbox>
+              <el-checkbox v-model="item.required" size="small">{{ item.required ? t("compliance.kycConfig.required") : t("compliance.kycConfig.optional") }}</el-checkbox>
               <el-select v-model="item.validity" size="small" class="item-validity">
-                <el-option :value="KycItemValidity.NONE" label="无有效期限制" />
-                <el-option :value="KycItemValidity.ONE_MONTH" label="需 1 个月内有效" />
-                <el-option :value="KycItemValidity.THREE_MONTHS" label="需 3 个月内有效" />
+                <el-option :value="KycItemValidity.NONE" :label="t('compliance.kycConfig.validityNone')" />
+                <el-option :value="KycItemValidity.ONE_MONTH" :label="t('compliance.kycConfig.validityOneMonth')" />
+                <el-option :value="KycItemValidity.THREE_MONTHS" :label="t('compliance.kycConfig.validityThreeMonths')" />
               </el-select>
               <el-button size="small" text type="danger" @click="removeItem(sIndex, iIndex)">⌫</el-button>
             </div>
-            <p v-if="!section.items.length" class="item-empty">该模块暂无材料项</p>
+            <p v-if="!section.items.length" class="item-empty">{{ t("compliance.kycConfig.sectionEmpty") }}</p>
           </section>
-          <el-button class="add-section" plain @click="addSection">＋ 新增材料模块</el-button>
+          <el-button class="add-section" plain @click="addSection">{{ t("compliance.kycConfig.addSection") }}</el-button>
         </template>
       </main>
       <main v-else class="editor">
-        <el-empty description="左侧选择或新建一个业务模式开始配置" />
+        <el-empty :description="t('compliance.kycConfig.editorEmpty')" />
       </main>
     </div>
 
     <!-- 场景弹窗 -->
     <el-dialog
       v-model="scenarioDialog.visible"
-      :title="scenarioDialog.mode === 'new' ? '新建业务模式' : '编辑业务模式'"
+      :title="scenarioDialog.mode === 'new' ? t('compliance.kycConfig.dialogNewTitle') : t('compliance.kycConfig.dialogEditTitle')"
       width="520px"
       :close-on-click-modal="false"
     >
       <el-form label-position="top">
-        <el-form-item label="序号" required>
-          <el-input v-model="scenarioDialog.code" placeholder="如 22 或 16B" maxlength="30" />
-          <div class="hint">显示为 #序号，不能与现有业务模式重复。</div>
+        <el-form-item :label="t('compliance.kycConfig.codeLabel')" required>
+          <el-input v-model="scenarioDialog.code" :placeholder="t('compliance.kycConfig.codePh')" maxlength="30" />
+          <div class="hint">{{ t("compliance.kycConfig.codeHint") }}</div>
         </el-form-item>
-        <el-form-item label="业务类型名称" required>
+        <el-form-item :label="t('compliance.kycConfig.nameLabel')" required>
           <el-input v-model="scenarioDialog.name" maxlength="50" />
         </el-form-item>
-        <el-form-item label="业务流程、时效与约束说明">
+        <el-form-item :label="t('compliance.kycConfig.processDialogLabel')">
           <el-input v-model="scenarioDialog.process" type="textarea" :rows="4" maxlength="2000" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="scenarioDialog.visible = false">取消</el-button>
+        <el-button @click="scenarioDialog.visible = false">{{ t("compliance.kycConfig.cancel") }}</el-button>
         <el-button type="primary" @click="confirmScenarioDialog">
-          {{ scenarioDialog.mode === "new" ? "创建" : "保存" }}
+          {{ scenarioDialog.mode === "new" ? t("compliance.kycConfig.create") : t("compliance.kycConfig.save") }}
         </el-button>
       </template>
     </el-dialog>
@@ -489,37 +500,37 @@ onMounted(() => load());
     <!-- 渠道弹窗 -->
     <el-dialog
       v-model="channelDialog.visible"
-      :title="channelDialog.mode === 'new' ? '新增绑定渠道' : '编辑渠道信息'"
+      :title="channelDialog.mode === 'new' ? t('compliance.kycConfig.channelNewTitle') : t('compliance.kycConfig.channelEditTitle')"
       width="560px"
       :close-on-click-modal="false"
     >
       <el-form label-position="top">
         <div class="dialog-grid">
-          <el-form-item label="渠道名称" required>
+          <el-form-item :label="t('compliance.kycConfig.channelNameLabel')" required>
             <el-input v-model="channelDialog.name" maxlength="50" />
-            <div class="hint">同一业务模式下渠道名称不能重复。</div>
+            <div class="hint">{{ t("compliance.kycConfig.channelNameHint") }}</div>
           </el-form-item>
-          <el-form-item label="标识颜色">
+          <el-form-item :label="t('compliance.kycConfig.themeLabel')">
             <el-select v-model="channelDialog.theme" style="width: 100%">
               <el-option
                 v-for="(label, value) in KycChannelThemeLabel"
                 :key="value"
                 :value="value"
-                :label="label"
+                :label="localizeText(label)"
               />
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item v-if="channelDialog.mode === 'new'" label="首个材料模块名称">
-          <el-input v-model="channelDialog.firstSection" placeholder="留空默认「{渠道名} 基础收集材料」" maxlength="50" />
+        <el-form-item v-if="channelDialog.mode === 'new'" :label="t('compliance.kycConfig.firstSectionLabel')">
+          <el-input v-model="channelDialog.firstSection" :placeholder="t('compliance.kycConfig.firstSectionPh')" maxlength="50" />
         </el-form-item>
-        <el-form-item label="渠道限制条目">
+        <el-form-item :label="t('compliance.kycConfig.restrictionLabel')">
           <div v-for="(restriction, index) in channelDialog.restrictions" :key="index" class="restriction-row">
             <el-select v-model="restriction.type" class="restriction-type" size="small">
-              <el-option :value="KycRestrictionType.BANK_BAN" label="银行禁令" />
-              <el-option :value="KycRestrictionType.SPECIAL_PROOF" label="特殊证明" />
+              <el-option :value="KycRestrictionType.BANK_BAN" :label="t('compliance.kycConfig.restrictionBankBan')" />
+              <el-option :value="KycRestrictionType.SPECIAL_PROOF" :label="t('compliance.kycConfig.restrictionSpecialProof')" />
             </el-select>
-            <el-input v-model="restriction.content" size="small" placeholder="限制说明" maxlength="500" />
+            <el-input v-model="restriction.content" size="small" :placeholder="t('compliance.kycConfig.restrictionContentPh')" maxlength="500" />
             <el-button size="small" text type="danger" @click="channelDialog.restrictions.splice(index, 1)">⌫</el-button>
           </div>
           <el-button
@@ -527,14 +538,14 @@ onMounted(() => load());
             plain
             @click="channelDialog.restrictions.push({ type: KycRestrictionType.SPECIAL_PROOF, content: '' })"
           >
-            ＋ 添加限制条目
+            {{ t("compliance.kycConfig.addRestriction") }}
           </el-button>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="channelDialog.visible = false">取消</el-button>
+        <el-button @click="channelDialog.visible = false">{{ t("compliance.kycConfig.cancel") }}</el-button>
         <el-button type="primary" @click="confirmChannelDialog">
-          {{ channelDialog.mode === "new" ? "新增渠道" : "保存" }}
+          {{ channelDialog.mode === "new" ? t("compliance.kycConfig.addChannelConfirm") : t("compliance.kycConfig.save") }}
         </el-button>
       </template>
     </el-dialog>

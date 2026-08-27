@@ -9,7 +9,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { UPLOAD_MAX_SIZE } from "@bv/shared";
+import { COMPLIANCE_DUTY_ROLES, UPLOAD_MAX_SIZE } from "@bv/shared";
 import type { Response } from "express";
 import { Roles } from "../../auth/decorators";
 import { StorageService } from "./storage.service";
@@ -20,7 +20,7 @@ export class FileController {
 
   /** 上传单个材料文件，返回 FileRef；随草稿保存挂到申请上 */
   @Post()
-  @Roles("AGENT", "OPS", "COMPLIANCE", "ADMIN")
+  @Roles("AGENT", "OPS", ...COMPLIANCE_DUTY_ROLES, "ADMIN")
   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: UPLOAD_MAX_SIZE } }))
   async upload(@UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException("未收到文件");
@@ -29,9 +29,8 @@ export class FileController {
     return this.storageService.save(file.buffer, originalName);
   }
 
-  /** 鉴权预览/下载：GET /api/files?key=...&name=...&download=1 */
+  /** 鉴权预览/下载：GET /api/files?key=...&name=...&download=1（登录即可，客户抽屉材料预览全员可看） */
   @Get()
-  @Roles("AGENT", "OPS", "COMPLIANCE", "ADMIN", "MANAGER")
   async serve(
     @Res() res: Response,
     @Query("key") key?: string,

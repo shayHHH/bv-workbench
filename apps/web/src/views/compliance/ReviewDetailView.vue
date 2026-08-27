@@ -12,11 +12,18 @@ import {
   type ReviewMaterialVerdict,
   type RiskLevel,
 } from "@bv/shared";
+import type { CustomerEventVO } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowLeft } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { decideReviewCase, fetchReviewCase, openFilePreview } from "@/api/access";
+import { fetchCustomerEvents } from "@/api/customer";
+import { localizeText } from "@/i18n";
+import { formatRelative } from "@/utils/format";
+
+const { t } = useI18n();
 
 const route = useRoute();
 const router = useRouter();
@@ -39,6 +46,9 @@ const decisionDialog = reactive({
   returnKeys: [] as string[],
 });
 
+/** 客户档案最近动态（demo 审核详情侧栏「活动」） */
+const activities = ref<CustomerEventVO[]>([]);
+
 async function load() {
   loading.value = true;
   try {
@@ -50,8 +60,17 @@ async function load() {
         reason: verdict.reason ?? "",
       });
     }
+    loadActivities(reviewCase.value.customer_id);
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadActivities(customerId: string) {
+  try {
+    activities.value = (await fetchCustomerEvents(customerId)).slice(0, 6);
+  } catch {
+    activities.value = [];
   }
 }
 
@@ -87,9 +106,13 @@ function collectVerdicts(returnKeys: string[], reason: string | null): ReviewMat
 
 async function approve() {
   await ElMessageBox.confirm(
-    `确认通过 ${reviewCase.value?.customer_name} 的准入审核？全部材料将标记为已通过。`,
-    "审核通过",
-    { type: "success", confirmButtonText: "通过", cancelButtonText: "取消" },
+    t("compliance.detail.approveConfirm", { name: reviewCase.value?.customer_name ?? "" }),
+    t("compliance.detail.approve"),
+    {
+      type: "success",
+      confirmButtonText: t("compliance.detail.confirmPass"),
+      cancelButtonText: t("compliance.detail.cancel"),
+    },
   );
   await decide(ReviewDecisionAction.APPROVE, null);
 }
@@ -103,7 +126,7 @@ function openDecision(action: ReviewDecisionAction) {
 
 async function confirmDecision() {
   if (!decisionDialog.reason.trim()) {
-    ElMessage.warning("请填写审核说明");
+    ElMessage.warning(t("compliance.detail.reasonRequired"));
     return;
   }
   await decide(decisionDialog.action, decisionDialog.reason.trim(), decisionDialog.returnKeys);
@@ -119,21 +142,21 @@ async function decide(action: ReviewDecisionAction, reason: string | null, retur
       material_verdicts:
         action === ReviewDecisionAction.APPROVE ? [] : collectVerdicts(returnKeys, reason),
     });
-    ElMessage.success("结论已出具");
+    ElMessage.success(t("compliance.detail.decided"));
   } finally {
     submitting.value = false;
   }
 }
 
-const DIALOG_TITLE: Record<string, string> = {
-  REJECT: "驳回",
-  TERMINATE: "终止审核",
-};
+const DIALOG_TITLE = computed<Record<string, string>>(() => ({
+  REJECT: t("compliance.detail.reject"),
+  TERMINATE: t("compliance.detail.terminateTitle"),
+}));
 
-const DIALOG_HINT: Record<string, string> = {
-  REJECT: "退回交易员，补充材料后重新提交。提交后案件转「待补件」，交易员在「审核跟踪」处理补件，工单以「驳回重审」再次进入队列。",
-  TERMINATE: "明确拒绝本次业务准入。提交后申请转「审核拒绝」，交易员需重新发起新申请。",
-};
+const DIALOG_HINT = computed<Record<string, string>>(() => ({
+  REJECT: t("compliance.detail.rejectHint"),
+  TERMINATE: t("compliance.detail.terminateHint"),
+}));
 
 const MATERIAL_TAG: Record<string, string> = {
   PENDING: "info",
@@ -149,7 +172,7 @@ const FINAL_TAG: Record<string, string> = {
 
 const riskLabel = computed(() => {
   const risk = reviewCase.value?.risk_level;
-  return risk ? (RiskLevelLabel[risk as RiskLevel] ?? risk) : "未评估";
+  return risk ? localizeText(RiskLevelLabel[risk as RiskLevel] ?? risk) : t("compliance.detail.riskUnknown");
 });
 
 onMounted(load);
@@ -160,89 +183,89 @@ onMounted(load);
     <template v-if="reviewCase">
       <header class="page-header">
         <div>
-          <p class="eyebrow">COMPLIANCE REVIEW</p>
+          <p class="eyebrow">{{ t("compliance.detail.eyebrow") }}</p>
           <h1>
             {{ reviewCase.customer_name }}
             <el-tag :type="reviewCase.audit_type === 'RESUBMIT' ? 'warning' : 'info'" size="small">
-              {{ ReviewAuditTypeLabel[reviewCase.audit_type] }}
+              {{ localizeText(ReviewAuditTypeLabel[reviewCase.audit_type]) }}
             </el-tag>
             <el-tag v-if="reviewCase.final_result" :type="FINAL_TAG[reviewCase.final_result]" size="small">
-              {{ ReviewFinalResultLabel[reviewCase.final_result] }}
+              {{ localizeText(ReviewFinalResultLabel[reviewCase.final_result]) }}
             </el-tag>
           </h1>
           <p class="subtitle">
-            工单 {{ reviewCase.case_no }} · 申请 {{ reviewCase.application_no }}
-            <span v-if="reviewCase.customer_code"> · 客户编号 {{ reviewCase.customer_code }}</span>
+            {{ t("compliance.detail.subtitle", { caseNo: reviewCase.case_no, appNo: reviewCase.application_no }) }}
+            <span v-if="reviewCase.customer_code">{{ t("compliance.detail.subtitleCode", { code: reviewCase.customer_code }) }}</span>
           </p>
         </div>
-        <el-button :icon="ArrowLeft" @click="router.push('/compliance/review')">返回审核队列</el-button>
+        <el-button :icon="ArrowLeft" @click="router.push('/compliance/review')">{{ t("compliance.detail.back") }}</el-button>
       </header>
 
       <div class="detail-layout">
         <div class="detail-main">
           <el-card shadow="never" class="block">
             <el-descriptions :column="4" border>
-              <el-descriptions-item label="客户编号">{{ reviewCase.customer_code || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="审核类型">{{ ReviewAuditTypeLabel[reviewCase.audit_type] }}</el-descriptions-item>
-              <el-descriptions-item label="风险等级">{{ riskLabel }}</el-descriptions-item>
-              <el-descriptions-item label="材料完整度">
+              <el-descriptions-item :label="t('compliance.detail.customerCode')">{{ reviewCase.customer_code || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.auditType')">{{ localizeText(ReviewAuditTypeLabel[reviewCase.audit_type]) }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.risk')">{{ riskLabel }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.completeness')">
                 {{ reviewCase.completeness.done }} / {{ reviewCase.completeness.total }}
               </el-descriptions-item>
-              <el-descriptions-item label="业务类型">{{ reviewCase.scenario_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="渠道">{{ reviewCase.channel_name || reviewCase.channel_code || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="提交人">{{ reviewCase.submitted_by_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="提交时间">{{ new Date(reviewCase.submitted_at).toLocaleString() }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.scenario')">{{ reviewCase.scenario_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.channel')">{{ reviewCase.channel_name || reviewCase.channel_code || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.submittedBy')">{{ reviewCase.submitted_by_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.submittedAt')">{{ new Date(reviewCase.submitted_at).toLocaleString() }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
 
           <el-card shadow="never" class="block">
-            <h4 class="block-title">提交信息</h4>
+            <h4 class="block-title">{{ t("compliance.detail.formTitle") }}</h4>
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="客户中文姓名">{{ reviewCase.form_snapshot.customer_cn_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="客户英文姓名">{{ reviewCase.form_snapshot.customer_en_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="业务说明 / 风险备注" :span="2">
+              <el-descriptions-item :label="t('compliance.detail.cnName')">{{ reviewCase.form_snapshot.customer_cn_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.enName')">{{ reviewCase.form_snapshot.customer_en_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.businessNote')" :span="2">
                 {{ reviewCase.form_snapshot.business_note || "—" }}
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
 
           <el-card shadow="never" class="block">
-            <h4 class="block-title">材料列表（提交时快照）</h4>
+            <h4 class="block-title">{{ t("compliance.detail.materialsTitle") }}</h4>
             <el-table :data="reviewCase.materials_snapshot">
-              <el-table-column label="材料" min-width="200">
+              <el-table-column :label="t('compliance.detail.colMaterial')" min-width="200">
                 <template #default="{ row }">
                   <strong>{{ row.name }}</strong>
                   <div class="muted small">
-                    {{ MaterialSourceLabel[row.source as MaterialSource] }}
+                    {{ localizeText(MaterialSourceLabel[row.source as MaterialSource]) }}
                     <template v-if="row.file"> · {{ row.file.mime_type }}</template>
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="状态" width="100">
+              <el-table-column :label="t('compliance.detail.colStatus')" width="100">
                 <template #default="{ row }">
                   <el-tag :type="MATERIAL_TAG[row.status]" size="small">
-                    {{ ApplicationMaterialStatusLabel[row.status as ApplicationMaterialStatus] }}
+                    {{ localizeText(ApplicationMaterialStatusLabel[row.status as ApplicationMaterialStatus]) }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column v-if="pending" label="本次判定" width="110">
+              <el-table-column v-if="pending" :label="t('compliance.detail.colVerdict')" width="110">
                 <template #default="{ row }">
                   <el-button
                     size="small"
                     :type="verdictOf(row.material_key)?.verdict === 'ACCEPTED' ? 'success' : 'default'"
                     @click="toggleAccept(row.material_key)"
                   >
-                    {{ verdictOf(row.material_key)?.verdict === "ACCEPTED" ? "已通过" : "通过" }}
+                    {{ verdictOf(row.material_key)?.verdict === "ACCEPTED" ? t("compliance.detail.accepted") : t("compliance.detail.accept") }}
                   </el-button>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="130" fixed="right">
+              <el-table-column :label="t('compliance.detail.colActions')" width="130" fixed="right">
                 <template #default="{ row }">
                   <template v-if="row.file">
-                    <el-button size="small" link type="primary" @click="openFilePreview(row.file)">预览</el-button>
-                    <el-button size="small" link @click="openFilePreview(row.file, true)">下载</el-button>
+                    <el-button size="small" link type="primary" @click="openFilePreview(row.file)">{{ t("compliance.detail.preview") }}</el-button>
+                    <el-button size="small" link @click="openFilePreview(row.file, true)">{{ t("compliance.detail.download") }}</el-button>
                   </template>
-                  <span v-else class="muted small">无文件</span>
+                  <span v-else class="muted small">{{ t("compliance.detail.noFile") }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -250,16 +273,16 @@ onMounted(load);
 
           <el-card v-if="pending" shadow="never" class="block actions-card">
             <div class="actions-row">
-              <el-button type="success" :loading="submitting" @click="approve">审核通过</el-button>
-              <el-button type="danger" :loading="submitting" @click="openDecision(ReviewDecisionAction.REJECT)">驳回</el-button>
-              <el-button :loading="submitting" @click="openDecision(ReviewDecisionAction.TERMINATE)">终止</el-button>
+              <el-button type="success" :loading="submitting" @click="approve">{{ t("compliance.detail.approve") }}</el-button>
+              <el-button type="danger" :loading="submitting" @click="openDecision(ReviewDecisionAction.REJECT)">{{ t("compliance.detail.reject") }}</el-button>
+              <el-button :loading="submitting" @click="openDecision(ReviewDecisionAction.TERMINATE)">{{ t("compliance.detail.terminate") }}</el-button>
             </div>
           </el-card>
 
           <el-card v-else-if="reviewCase.decision" shadow="never" class="block">
-            <h4 class="block-title">审核结论</h4>
+            <h4 class="block-title">{{ t("compliance.detail.conclusionTitle") }}</h4>
             <p>
-              <strong>{{ reviewCase.final_result ? ReviewFinalResultLabel[reviewCase.final_result] : "—" }}</strong>
+              <strong>{{ reviewCase.final_result ? localizeText(ReviewFinalResultLabel[reviewCase.final_result]) : "—" }}</strong>
               <span class="muted"> · {{ reviewCase.reviewer_name }} · {{ reviewCase.reviewed_at ? new Date(reviewCase.reviewed_at).toLocaleString() : "" }}</span>
             </p>
             <p v-if="reviewCase.decision.reason" class="decision-reason">{{ reviewCase.decision.reason }}</p>
@@ -268,12 +291,27 @@ onMounted(load);
 
         <aside class="detail-side">
           <el-card shadow="never">
-            <h4 class="block-title">人工审核要求</h4>
-            <p class="requirement">{{ reviewCase.review_requirement || "该业务类型未配置审核要求说明。" }}</p>
+            <h4 class="block-title">{{ t("compliance.detail.requirementTitle") }}</h4>
+            <p class="requirement">{{ reviewCase.review_requirement || t("compliance.detail.requirementEmpty") }}</p>
           </el-card>
           <el-card v-if="reviewCase.note" shadow="never">
-            <h4 class="block-title">交易员说明</h4>
+            <h4 class="block-title">{{ t("compliance.detail.traderNoteTitle") }}</h4>
             <p class="requirement">{{ reviewCase.note }}</p>
+          </el-card>
+          <el-card shadow="never">
+            <h4 class="block-title">{{ t("compliance.detail.activityTitle") }}</h4>
+            <p class="activity-sub">{{ t("compliance.detail.activitySub") }}</p>
+            <div v-if="activities.length" class="activity-list">
+              <div v-for="event in activities" :key="event.id" class="activity-item">
+                <i></i>
+                <div>
+                  <strong>{{ event.title }}</strong>
+                  <p>{{ event.detail }}</p>
+                  <time>{{ event.operator_name || t("compliance.detail.system") }} · {{ formatRelative(event.created_at) }}</time>
+                </div>
+              </div>
+            </div>
+            <p v-else class="muted small">{{ t("compliance.detail.activityEmpty") }}</p>
           </el-card>
         </aside>
       </div>
@@ -281,11 +319,11 @@ onMounted(load);
       <el-dialog v-model="decisionDialog.visible" :title="DIALOG_TITLE[decisionDialog.action]" width="500px">
         <p class="dialog-hint">{{ DIALOG_HINT[decisionDialog.action] }}</p>
         <template v-if="decisionDialog.action === 'REJECT' && reviewCase.materials_snapshot.length">
-          <p class="dialog-label">选择需要退回的材料项</p>
+          <p class="dialog-label">{{ t("compliance.detail.returnLabel") }}</p>
           <el-select
             v-model="decisionDialog.returnKeys"
             multiple
-            placeholder="可多选；勾选的材料会标记为「被退回」，交易员补充后重新提交"
+            :placeholder="t('compliance.detail.returnPh')"
             style="width: 100%; margin-bottom: 12px"
           >
             <el-option
@@ -302,10 +340,10 @@ onMounted(load);
           :rows="4"
           maxlength="1000"
           show-word-limit
-          :placeholder="decisionDialog.action === 'REJECT' ? '必填：驳回原因与整改要求，将展示给交易员' : '必填：终止原因，将展示给交易员'"
+          :placeholder="decisionDialog.action === 'REJECT' ? t('compliance.detail.reasonPhReject') : t('compliance.detail.reasonPhTerminate')"
         />
         <template #footer>
-          <el-button @click="decisionDialog.visible = false">取消</el-button>
+          <el-button @click="decisionDialog.visible = false">{{ t("compliance.detail.cancel") }}</el-button>
           <el-button
             :type="decisionDialog.action === 'REJECT' ? 'danger' : 'primary'"
             :loading="submitting"
@@ -406,6 +444,48 @@ h1 {
   color: #909399;
   font-size: 13px;
   margin: 0 0 10px;
+}
+
+.activity-sub {
+  color: #909399;
+  font-size: 12px;
+  margin: -6px 0 10px;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activity-item {
+  display: flex;
+  gap: 10px;
+}
+
+.activity-item i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff7a00;
+  margin-top: 5px;
+}
+
+.activity-item strong {
+  font-size: 13px;
+}
+
+.activity-item p {
+  margin: 2px 0;
+  font-size: 12px;
+  color: #606266;
+  word-break: break-all;
+}
+
+.activity-item time {
+  font-size: 12px;
+  color: #909399;
 }
 
 @media (max-width: 1100px) {

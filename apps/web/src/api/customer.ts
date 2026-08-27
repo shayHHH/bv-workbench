@@ -1,4 +1,6 @@
 import type {
+  AuditEventQuery,
+  AuditEventVO,
   CreateCustomerInput,
   CustomerEventVO,
   CustomerKind,
@@ -41,6 +43,12 @@ export async function fetchCustomer(id: string): Promise<CustomerVO> {
 
 export async function fetchCustomerEvents(id: string): Promise<CustomerEventVO[]> {
   const { data } = await http.get<CustomerEventVO[]>(`/customers/${id}/events`);
+  return data;
+}
+
+/** 审计日志（合规官/管理员）：跨客户的档案事件流水 */
+export async function fetchAuditEvents(query: AuditEventQuery): Promise<PageResult<AuditEventVO>> {
+  const { data } = await http.get<PageResult<AuditEventVO>>("/audit/events", { params: query });
   return data;
 }
 

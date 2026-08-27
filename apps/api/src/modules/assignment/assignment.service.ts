@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import {
   AssignmentUserVO,
+  COMPLIANCE_DUTY_ROLES,
   ReviewAssignmentBoardVO,
   ReviewAssignmentVO,
   ReviewType,
@@ -126,10 +127,13 @@ export class AssignmentService {
   }
 
   private async listComplianceUsers(): Promise<AssignmentUserVO[]> {
-    const role = await this.roleModel.findOne({ role_code: "COMPLIANCE", is_deleted: false }).lean();
-    if (!role) return [];
+    // 合规官职责角色（含自定义风控专员）都进入可选负责人池
+    const roles = await this.roleModel
+      .find({ role_code: { $in: [...COMPLIANCE_DUTY_ROLES] }, is_deleted: false })
+      .lean();
+    if (!roles.length) return [];
     const users = await this.userModel
-      .find({ role_id: role._id, is_deleted: false })
+      .find({ role_id: { $in: roles.map(role => role._id) }, is_deleted: false })
       .sort({ created_at: 1 })
       .lean();
     return users.map(user => ({

@@ -18,8 +18,12 @@ const TW_OVERRIDES: Record<string, string> = {
 };
 
 const openccConvert = OpenCC.Converter({ from: "cn", to: "tw" });
-/* OpenCC 的 tw 标准偏好「臺」，本业务的繁体习惯（对齐原型）用「台」 */
-const toTraditional = (text: string) => openccConvert(text).replace(/臺/g, "台");
+/* OpenCC 的 tw 标准偏好「臺」，本业务的繁体习惯（对齐原型）用「台」；
+   「并发布/并发起」类短语中的「并发」会被词典误判为 concurrent → 併發，统一回修为连词「並發」 */
+const toTraditional = (text: string) =>
+  openccConvert(text)
+    .replace(/臺/g, "台")
+    .replace(/併發(?=[布起])/g, "並發");
 
 function convertMessages(node: unknown, path: string): unknown {
   if (typeof node === "string") return TW_OVERRIDES[path] ?? toTraditional(node);

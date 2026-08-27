@@ -6,6 +6,7 @@ import type {
   PageResult,
   ReviewCaseVO,
   ReviewDecisionInput,
+  ReviewStatsVO,
   ReviewType,
   SaveApplicationDraftInput,
 } from "@bv/shared";
@@ -135,10 +136,18 @@ export interface ReviewListQuery {
   audit_type?: "NEW" | "RESUBMIT";
   review_type?: ReviewType;
   final_result?: "APPROVED" | "UNRESOLVED" | "TERMINATED";
+  /** 已处理页签「我的结论」筛选 */
+  decision_action?: "APPROVE" | "REJECT" | "TERMINATE";
   submitted_from?: number;
   submitted_to?: number;
   page?: number;
   page_size?: number;
+}
+
+/** 合规官工作台指标 */
+export async function fetchReviewStats(): Promise<ReviewStatsVO> {
+  const { data } = await http.get<ReviewStatsVO>("/review/cases/stats");
+  return data;
 }
 
 export async function fetchReviewCases(

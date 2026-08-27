@@ -426,6 +426,20 @@ export interface ReviewCaseVO {
   reviewed_at: string | null;
 }
 
+/** 合规官工作台指标（demo 合规 dashboard 指标条的真实数据口径） */
+export interface ReviewStatsVO {
+  /** 待合规审核工单数 */
+  pending_total: number;
+  /** 待处理中审核类型为「驳回重审」的工单数 */
+  pending_resubmit: number;
+  /** 今日出具「审核通过」结论数 */
+  approved_today: number;
+  /** 今日出具「驳回」结论数 */
+  rejected_today: number;
+  /** 等待最久的待处理工单提交时间（ISO；无待处理时为 null） */
+  oldest_pending_submitted_at: string | null;
+}
+
 export interface ReviewDecisionInput {
   action: ReviewDecisionAction;
   /** REQUEST_SUPPLEMENT / REJECT / TERMINATE 必填 */

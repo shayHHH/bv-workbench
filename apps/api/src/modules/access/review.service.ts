@@ -15,6 +15,7 @@ import {
   ReviewCaseVO,
   ReviewDecisionAction,
   ReviewFinalResult,
+  ReviewStatsVO,
 } from "@bv/shared";
 import { Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
@@ -68,6 +69,7 @@ export class ReviewService {
     if (query.audit_type) filter.audit_type = query.audit_type;
     if (query.review_type) filter.review_type = query.review_type;
     if (query.final_result) filter.final_result = query.final_result;
+    if (query.decision_action) filter["decision.action"] = query.decision_action;
     if (query.keyword) {
       const pattern = new RegExp(escapeRegExp(query.keyword.trim()), "i");
       filter.$or = [
@@ -93,6 +95,42 @@ export class ReviewService {
       this.caseModel.countDocuments(filter),
     ]);
     return { items: items.map(toVO), total, page, page_size: pageSize };
+  }
+
+  /** 合规官工作台指标（demo 合规 dashboard 指标条），「今日」按服务器本地日界 */
+  async stats(): Promise<ReviewStatsVO> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const pendingFilter = { is_deleted: false, status: ReviewCaseStatus.PENDING };
+    const [pendingTotal, pendingResubmit, approvedToday, rejectedToday, oldestPending] =
+      await Promise.all([
+        this.caseModel.countDocuments(pendingFilter),
+        this.caseModel.countDocuments({ ...pendingFilter, audit_type: "RESUBMIT" }),
+        this.caseModel.countDocuments({
+          is_deleted: false,
+          "decision.action": ReviewDecisionAction.APPROVE,
+          reviewed_at: { $gte: todayStart },
+        }),
+        this.caseModel.countDocuments({
+          is_deleted: false,
+          "decision.action": ReviewDecisionAction.REJECT,
+          reviewed_at: { $gte: todayStart },
+        }),
+        this.caseModel
+          .findOne(pendingFilter)
+          .sort({ submitted_at: 1 })
+          .select("submitted_at")
+          .lean(),
+      ]);
+    return {
+      pending_total: pendingTotal,
+      pending_resubmit: pendingResubmit,
+      approved_today: approvedToday,
+      rejected_today: rejectedToday,
+      oldest_pending_submitted_at: oldestPending?.submitted_at
+        ? oldestPending.submitted_at.toISOString()
+        : null,
+    };
   }
 
   async getById(id: string): Promise<ReviewCaseVO> {

@@ -1,18 +1,28 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useAuthStore } from "@/stores/auth";
+import ComplianceDashboard from "@/views/dashboard/ComplianceDashboard.vue";
 
+const { t } = useI18n();
 const auth = useAuthStore();
+/* 风控专员（RISK_OFFICER）＝合规官，同样使用合规官工作台 */
+const isCompliance = computed(() =>
+  ["COMPLIANCE", "RISK_OFFICER"].includes(auth.roleCode),
+);
 </script>
 
 <template>
-  <div>
+  <ComplianceDashboard v-if="isCompliance" />
+  <div v-else>
     <header class="page-header">
       <p class="eyebrow">{{ auth.user?.role?.code || "WORKBENCH" }}</p>
-      <h1>{{ auth.user?.role?.name || "" }}工作台</h1>
-      <p class="subtitle">欢迎，{{ auth.user?.display_name }}。工作台指标看板将随交易订单模块迁移后上线。</p>
+      <h1>{{ t("dashboard.title", { role: localizeText(auth.user?.role?.name || "") }) }}</h1>
+      <p class="subtitle">{{ t("dashboard.welcome", { name: auth.user?.display_name || "" }) }}</p>
     </header>
     <el-card shadow="never">
-      <el-empty description="指标看板依赖交易订单数据，将在订单模块迁移后开放" />
+      <el-empty :description="t('dashboard.empty')" />
     </el-card>
   </div>
 </template>

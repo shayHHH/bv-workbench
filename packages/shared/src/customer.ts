@@ -53,16 +53,51 @@ export const RiskLevelLabel: Record<RiskLevel, string> = {
 /** 地区 */
 export const Region = {
   HK: "HK",
+  MO: "MO",
+  TW: "TW",
   CN_MAINLAND: "CN_MAINLAND",
   SG: "SG",
+  MY: "MY",
+  TH: "TH",
+  VN: "VN",
+  PH: "PH",
+  ID: "ID",
+  KH: "KH",
+  JP: "JP",
+  KR: "KR",
+  IN: "IN",
+  AE: "AE",
+  GB: "GB",
+  US: "US",
+  CA: "CA",
+  AU: "AU",
+  EU_OTHER: "EU_OTHER",
   OTHER: "OTHER",
 } as const;
 export type Region = (typeof Region)[keyof typeof Region];
 
+/** 下拉选项按此定义顺序展示；「其他」保持最后 */
 export const RegionLabel: Record<Region, string> = {
   HK: "中国香港",
+  MO: "中国澳门",
+  TW: "中国台湾",
   CN_MAINLAND: "中国大陆",
   SG: "新加坡",
+  MY: "马来西亚",
+  TH: "泰国",
+  VN: "越南",
+  PH: "菲律宾",
+  ID: "印度尼西亚",
+  KH: "柬埔寨",
+  JP: "日本",
+  KR: "韩国",
+  IN: "印度",
+  AE: "阿联酋",
+  GB: "英国",
+  US: "美国",
+  CA: "加拿大",
+  AU: "澳大利亚",
+  EU_OTHER: "欧洲其他",
   OTHER: "其他",
 };
 
@@ -130,6 +165,31 @@ export interface CustomerEventVO {
   detail: string;
   operator_name: string | null;
   created_at: string;
+}
+
+export const CustomerEventTypeLabel: Record<CustomerEventType, string> = {
+  CREATED: "客户建档",
+  PROFILE_UPDATED: "资料更新",
+  STATUS_CHANGED: "状态变更",
+  RISK_CHANGED: "风险变更",
+  KIND_CHANGED: "类型变更",
+  DELETED: "客户删除",
+  ACCESS: "业务准入",
+};
+
+/** 审计日志（demo 合规官/管理员「审计日志」页）：跨客户的档案事件流水 */
+export interface AuditEventVO extends CustomerEventVO {
+  customer_id: string;
+  customer_name: string;
+  customer_code: string | null;
+}
+
+export interface AuditEventQuery {
+  /** 搜索客户名称/编号、动作、详情或操作人 */
+  keyword?: string;
+  event_type?: CustomerEventType;
+  page?: number;
+  page_size?: number;
 }
 
 /** 编辑客户请求体（含类型变更：直客⇄中介⇄中介下级） */

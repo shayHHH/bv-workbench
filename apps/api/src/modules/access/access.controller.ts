@@ -16,14 +16,13 @@ import {
 export class AccessController {
   constructor(private readonly accessService: AccessService) {}
 
+  /* 只读查看不设角色门槛（用户 2026-08-27：客户管理页与客户详情抽屉全员可看）；写操作仍限交易员 */
   @Get("applications")
-  @Roles("AGENT", "OPS", "COMPLIANCE", "ADMIN", "MANAGER")
   list(@Query() query: QueryApplicationDto) {
     return this.accessService.list(query);
   }
 
   @Get("applications/:id")
-  @Roles("AGENT", "OPS", "COMPLIANCE", "ADMIN", "MANAGER")
   getById(@Param("id") id: string) {
     return this.accessService.getById(id);
   }
@@ -73,8 +72,8 @@ export class AccessController {
 
   /* ---- 客户材料库 ---- */
 
+  /* 只读查看与准入申请接口同口径：全员可看（客户抽屉-材料页签） */
   @Get("customers/:customerId/materials")
-  @Roles("AGENT", "OPS", "COMPLIANCE", "ADMIN")
   listMaterials(@Param("customerId") customerId: string) {
     return this.accessService.listCustomerMaterials(customerId);
   }

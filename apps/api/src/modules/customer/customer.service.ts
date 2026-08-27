@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import {
+  AuditEventVO,
   CUSTOMER_CODE_MAX,
   CUSTOMER_CODE_MIN,
   CustomerEventType,
@@ -18,11 +19,12 @@ import {
   PageResult,
   RiskLevelLabel,
 } from "@bv/shared";
-import { FilterQuery, Model, Types } from "mongoose";
+import { FilterQuery, Model, PipelineStage, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
 import { CustomerEvent, CustomerEventDocument } from "./customer-event.schema";
-import { Customer, CustomerDocument } from "./customer.schema";
+import { Customer, CustomerDocument, CUSTOMER_COLLECTION } from "./customer.schema";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
+import { QueryAuditDto } from "./dto/query-audit.dto";
 import { QueryCustomerDto } from "./dto/query-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
 
@@ -100,6 +102,74 @@ export class CustomerService {
       });
     }
     return items;
+  }
+
+  /**
+   * 审计日志（demo 合规官/管理员「审计日志」页）：跨客户的档案事件流水，倒序分页。
+   * 事件为追加型日志，客户被软删后历史事件仍保留展示（审计不可抹除）。
+   */
+  async auditEvents(query: QueryAuditDto): Promise<PageResult<AuditEventVO>> {
+    const page = query.page ?? 1;
+    const pageSize = Math.min(query.page_size ?? 20, 100);
+    const pipeline: PipelineStage[] = [
+      ...(query.event_type ? [{ $match: { event_type: query.event_type } }] : []),
+      {
+        $lookup: {
+          from: CUSTOMER_COLLECTION,
+          localField: "customer_id",
+          foreignField: "_id",
+          as: "customer",
+          pipeline: [{ $project: { name: 1, customer_code: 1 } }],
+        },
+      },
+      { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
+    ];
+    if (query.keyword) {
+      const pattern = new RegExp(escapeRegExp(query.keyword.trim()), "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { "customer.name": pattern },
+            { "customer.customer_code": pattern },
+            { title: pattern },
+            { detail: pattern },
+            { operator_name: pattern },
+          ],
+        },
+      });
+    }
+    pipeline.push({
+      $facet: {
+        items: [
+          { $sort: { created_at: -1, _id: -1 } },
+          { $skip: (page - 1) * pageSize },
+          { $limit: pageSize },
+        ],
+        total: [{ $count: "count" }],
+      },
+    });
+    const [result] = await this.eventModel.aggregate<{
+      items: Array<
+        CustomerEvent & {
+          _id: Types.ObjectId;
+          created_at: Date;
+          customer?: { name?: string; customer_code?: string | null };
+        }
+      >;
+      total: Array<{ count: number }>;
+    }>(pipeline);
+    const items: AuditEventVO[] = (result?.items ?? []).map(row => ({
+      id: row._id.toString(),
+      customer_id: row.customer_id.toString(),
+      customer_name: row.customer?.name ?? "已删除客户",
+      customer_code: row.customer?.customer_code ?? null,
+      event_type: row.event_type,
+      title: row.title,
+      detail: row.detail,
+      operator_name: row.operator_name ?? null,
+      created_at: row.created_at?.toISOString?.() ?? String(row.created_at),
+    }));
+    return { items, total: result?.total?.[0]?.count ?? 0, page, page_size: pageSize };
   }
 
   /**

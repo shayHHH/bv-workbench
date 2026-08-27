@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Put } from "@nestjs/common";
 import { BadRequestException } from "@nestjs/common";
-import { ReviewType } from "@bv/shared";
+import { COMPLIANCE_DUTY_ROLES, ReviewType } from "@bv/shared";
 import { IsArray, IsMongoId } from "class-validator";
 import { JwtPayload } from "../../auth/auth.types";
 import { CurrentUser, Roles } from "../../auth/decorators";
@@ -18,7 +18,7 @@ export class AssignmentController {
   constructor(private readonly assignmentService: AssignmentService) {}
 
   @Get()
-  @Roles("ADMIN", "COMPLIANCE")
+  @Roles("ADMIN", ...COMPLIANCE_DUTY_ROLES)
   board() {
     return this.assignmentService.board();
   }

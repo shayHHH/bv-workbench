@@ -27,6 +27,13 @@ export const BUILTIN_ROLES: ReadonlyArray<{ code: string; name: string; descript
   { code: "WALLET", name: "钱包运营", description: "收 U 地址、KYA、链上出入款登记" },
 ];
 
+/**
+ * 承担合规官职责的角色（2026-08-27 用户确认：风控专员＝合规官）。
+ * COMPLIANCE 为内置角色；RISK_OFFICER 为 admin 在「用户管理」创建的自定义角色（真实名单在用）。
+ * 审核队列/KYC 配置/审计日志等合规官功能面统一以此判定，勿在各处散写角色字符串。
+ */
+export const COMPLIANCE_DUTY_ROLES = ["COMPLIANCE", "RISK_OFFICER"] as const;
+
 export interface RoleVO {
   id: string;
   role_code: string;
