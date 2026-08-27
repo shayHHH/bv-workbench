@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import {
   CustomerKind,
+  CustomerStatus,
   CustomerStatusLabel,
   KycItemTypeLabel,
   KycItemValidity,
   MaterialSource,
   ReviewType,
+  RiskLevelLabel,
   type CustomerMaterialVO,
-  type CustomerStatus,
   type CustomerVO,
   type FileRef,
   type KycItem,
   type KycScenarioVO,
 } from "@bv/shared";
+import { Delete, OfficeBuilding, UploadFilled } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -35,7 +37,7 @@ const router = useRouter();
 
 const scenarios = ref<KycScenarioVO[]>([]);
 
-/** 本地文件行（demo：本地上传与材料库复用混排，仅保留来源标记） */
+/** 文件行（本地上传与材料库复用混排，仅保留来源标记） */
 interface UploadRow {
   key: string;
   name: string;
@@ -52,20 +54,17 @@ interface UploadRow {
 }
 
 const state = reactive({
-  customerQuery: "",
   customer: null as CustomerVO | null,
   candidates: [] as CustomerVO[],
   searching: false,
   scenarioId: "",
   channelIndex: 0,
-  cnName: "",
-  enName: "",
   note: "",
   files: [] as UploadRow[],
   libraryOpen: false,
   libraryItems: [] as CustomerMaterialVO[],
   libraryLoading: false,
-  destination: "library" as "library" | "complianceFx" | "complianceU",
+  destination: "complianceFx" as "library" | "complianceFx" | "complianceU",
   submitting: false,
 });
 
@@ -73,14 +72,12 @@ const createCustomerVisible = ref(false);
 const fileInput = ref<HTMLInputElement>();
 const dragActive = ref(false);
 
-/* ---------------- 客户选择（STEP 1） ---------------- */
+/* ---------------- 客户 / 业务类型 / 渠道（第 1 区） ---------------- */
 
 async function searchCustomers(query: string) {
-  state.customerQuery = query;
   state.searching = true;
   try {
     const result = await fetchCustomers({ keyword: query || undefined, page: 1, page_size: 8 });
-    // 中介的下级客户拍平进候选（demo uploadCustomerEntries 行为）
     const flat: CustomerVO[] = [];
     for (const item of result.items) {
       flat.push(item);
@@ -92,11 +89,14 @@ async function searchCustomers(query: string) {
   }
 }
 
+function customerLabel(candidate: CustomerVO): string {
+  return `${candidate.customer_code || "无编号"} - ${candidate.name}`;
+}
+
 function selectCustomer(id: string) {
   const found = state.candidates.find(item => item.id === id) ?? null;
   state.customer = found;
   state.libraryItems = [];
-  // 切换客户清空已复用的材料库文件（demo clearQuickLibrarySelections）
   state.files = state.files.filter(row => row.source !== "library");
   if (state.libraryOpen && found) loadLibrary();
 }
@@ -108,11 +108,16 @@ function onCustomerCreated(customer: CustomerVO) {
   ElMessage.success(`已选入新客户：${customer.name}`);
 }
 
-const customerStatusText = computed(() =>
-  state.customer ? CustomerStatusLabel[state.customer.customer_status as CustomerStatus] : "",
-);
+const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | "info"> = {
+  NEW: "primary",
+  ACTIVE: "success",
+  DORMANT: "warning",
+  SUSPENDED: "info",
+};
 
-/* ---------------- 业务类型 / 渠道（STEP 2/3） ---------------- */
+function customerInitials(name: string): string {
+  return /^[a-zA-Z]/.test(name) ? name.slice(0, 2).toUpperCase() : name.slice(0, 1);
+}
 
 const selectedScenario = computed(
   () => scenarios.value.find(item => item.id === state.scenarioId) ?? null,
@@ -121,29 +126,40 @@ const selectedChannel = computed(
   () => selectedScenario.value?.channels[state.channelIndex] ?? null,
 );
 
-function onScenarioChange() {
-  state.channelIndex = 0;
-  // 渠道清单变化后，清理失效的材料项关联
+function relinkAll() {
   const valid = new Set(flatItems.value.map(item => item.item_id));
   for (const row of state.files) {
     if (row.mappedItemId && !valid.has(row.mappedItemId)) row.mappedItemId = "";
   }
+  for (const row of state.files) {
+    if (!row.mappedItemId) row.mappedItemId = autoLinkItem(row);
+  }
+}
+
+function onScenarioChange() {
+  state.channelIndex = 0;
+  relinkAll();
 }
 
 function pickChannel(index: number) {
   state.channelIndex = index;
-  const valid = new Set(flatItems.value.map(item => item.item_id));
-  for (const row of state.files) {
-    if (row.mappedItemId && !valid.has(row.mappedItemId)) row.mappedItemId = "";
-  }
+  relinkAll();
 }
 
-/** 当前渠道全部材料项拍平（文件行"关联材料类型"下拉与 KYC 助手共用） */
+function channelLabel(name: string): string {
+  return /渠道|供应商|专列/.test(name) ? name : `${name} 渠道`;
+}
+
+const restrictionText = computed(() =>
+  (selectedChannel.value?.restrictions ?? []).map(item => item.content).join("；"),
+);
+
+/** 当前渠道全部材料项拍平（文件行"关联"下拉与核验清单共用） */
 const flatItems = computed<KycItem[]>(
   () => selectedChannel.value?.sections.flatMap(section => section.items) ?? [],
 );
 
-/* ---------------- 文件（STEP 5） ---------------- */
+/* ---------------- 文件（第 2 区） ---------------- */
 
 const ACCEPT = ".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx";
 const ACCEPT_RE = /\.(pdf|jpe?g|png|webp|docx?)$/i;
@@ -154,9 +170,22 @@ function detectType(name: string): string {
   if (/水单|receipt|slip/.test(text)) return "水单";
   if (/流水|statement|bank/.test(text)) return "银行流水";
   if (/地址|address|utility|账单/.test(text)) return "地址证明";
-  if (/身份|id|passport|护照|证件/.test(text)) return "身份证明";
+  if (/身份|id|passport|护照|证件|onboard|表格|form/.test(text)) return "身份证明";
   if (/凭证|voucher|proof/.test(text)) return "凭证";
   return "未分类";
+}
+
+/** 自动关联规则：识别类型或文件名 与 材料项名称/补充要求 匹配，取第一个未被占用的材料项 */
+function autoLinkItem(row: UploadRow): string {
+  const used = new Set(state.files.filter(f => f !== row && f.mappedItemId).map(f => f.mappedItemId));
+  const lowerName = row.name.toLowerCase();
+  const hit = flatItems.value.find(item => {
+    if (used.has(item.item_id)) return false;
+    const haystack = `${item.item_name}${item.item_description ?? ""}`;
+    if (row.detected !== "未分类" && haystack.includes(row.detected)) return true;
+    return haystack.toLowerCase().includes(lowerName.replace(/\.[a-z0-9]+$/i, ""));
+  });
+  return hit?.item_id ?? "";
 }
 
 function sizeText(size: number): string {
@@ -165,17 +194,16 @@ function sizeText(size: number): string {
   return `${size} B`;
 }
 
-function extIcon(row: UploadRow): string {
-  if (row.source === "library") return "LIB";
+function extText(row: UploadRow): string {
   const match = row.name.match(/\.([a-zA-Z0-9]+)$/);
-  return (match?.[1] ?? "FILE").toUpperCase().slice(0, 4);
+  return (match?.[1] ?? "档").toUpperCase().slice(0, 4);
 }
 
 async function addFiles(list: FileList | File[]) {
   const files = [...list];
   const accepted = files.filter(file => ACCEPT_RE.test(file.name));
   if (accepted.length < files.length) {
-    ElMessage.warning("部分文件未加入：仅支持图片、PDF 和 Word 文件");
+    ElMessage.warning("部分文件未加入：仅支持 JPG、PNG、PDF 和 Word 格式");
   }
   for (const file of accepted) {
     if (file.size > 20 * 1024 * 1024) {
@@ -195,6 +223,7 @@ async function addFiles(list: FileList | File[]) {
       mappedItemId: "",
       uploading: true,
     };
+    row.mappedItemId = autoLinkItem(row);
     state.files.push(row);
     try {
       row.file = await uploadFile(file);
@@ -204,7 +233,6 @@ async function addFiles(list: FileList | File[]) {
       row.uploading = false;
     }
   }
-  if (accepted.length) ElMessage.success(`本批次新增 ${accepted.length} 个文件`);
 }
 
 function onFileChange(event: Event) {
@@ -255,7 +283,7 @@ function libraryAdded(item: CustomerMaterialVO): boolean {
 
 function addLibraryItem(item: CustomerMaterialVO) {
   if (libraryAdded(item)) return;
-  state.files.push({
+  const row: UploadRow = {
     key: `lib-${item.id}`,
     name: item.name,
     source: "library",
@@ -267,38 +295,28 @@ function addLibraryItem(item: CustomerMaterialVO) {
     detected: detectType(item.name),
     mappedItemId: "",
     uploading: false,
-  });
+  };
+  row.mappedItemId = autoLinkItem(row);
+  state.files.push(row);
   ElMessage.success("已添加材料库材料");
 }
 
-const libraryHint = computed(() => {
-  if (!state.customer) return "先选择客户后可查看材料库。";
-  const used = state.files.filter(row => row.source === "library").length;
-  if (used) return `已复用 ${used} 份，可在下方调整关联材料项。`;
-  return `从 ${state.customer.name} 的历史材料中复用，加入后可预览、删除并关联当前 KYC 材料项。`;
-});
-
-/* ---------------- KYC 助手 ---------------- */
+/* ---------------- KYC 核验（第 3 区） ---------------- */
 
 const processLines = computed(() => {
   const text = selectedScenario.value?.process_description ?? "";
   return text
     .split(/\n+/)
     .map(line => line.replace(/^\s*\d+[.、]\s*/, "").trim())
-    .filter(Boolean)
-    .slice(0, 6);
+    .filter(Boolean);
 });
 
-/** demo itemReady：已关联该项，或识别类型被材料项名称/补充要求包含 */
+function linkedFiles(item: KycItem): UploadRow[] {
+  return state.files.filter(row => row.mappedItemId === item.item_id);
+}
+
 function itemReady(item: KycItem): boolean {
-  return state.files.some(row => {
-    if (row.mappedItemId === item.item_id) return true;
-    if (row.detected === "未分类") return false;
-    return (
-      item.item_name.includes(row.detected) ||
-      (item.item_description ?? "").includes(row.detected)
-    );
-  });
+  return linkedFiles(item).length > 0;
 }
 
 const readyCount = computed(() => flatItems.value.filter(itemReady).length);
@@ -309,40 +327,30 @@ function validityText(item: KycItem): string {
   return "";
 }
 
-/* ---------------- 提交坞 ---------------- */
+/* ---------------- 提交 ---------------- */
 
 const hasDraft = computed(
-  () =>
-    !!state.files.length ||
-    !!state.customer ||
-    !!state.note ||
-    !!state.cnName ||
-    !!state.enName ||
-    state.libraryOpen,
+  () => !!state.files.length || !!state.customer || !!state.note || state.libraryOpen,
 );
 
 const canSubmit = computed(() => !!state.customer && state.files.length > 0 && !state.submitting);
 
 function clearAll() {
   Object.assign(state, {
-    customerQuery: "",
     customer: null,
     scenarioId: scenarios.value[0]?.id ?? "",
     channelIndex: 0,
-    cnName: "",
-    enName: "",
     note: "",
     files: [],
     libraryOpen: false,
     libraryItems: [],
-    destination: "library",
+    destination: "complianceFx",
   });
 }
 
 async function submitAll() {
   if (!state.customer || !state.files.length) return;
-  const uploading = state.files.some(row => row.uploading);
-  if (uploading) {
+  if (state.files.some(row => row.uploading)) {
     ElMessage.warning("仍有文件在上传中，请稍候");
     return;
   }
@@ -350,7 +358,7 @@ async function submitAll() {
   state.submitting = true;
   try {
     const localRows = state.files.filter(row => row.source === "upload" && row.file);
-    // demo：本地上传的文件一律归档进客户材料库（材料库复用的不重复归档）
+    // 本地上传的文件一律归档进客户材料库（材料库复用的不重复归档）
     if (localRows.length) {
       await archiveCustomerMaterials(state.customer.id, {
         items: localRows.map(row => ({
@@ -379,8 +387,8 @@ async function submitAll() {
       scenario_id: selectedScenario.value.id,
       channel_code: selectedChannel.value.channel_code,
       form: {
-        customer_cn_name: state.cnName || null,
-        customer_en_name: state.enName || null,
+        customer_cn_name: state.customer.name,
+        customer_en_name: null,
         business_note: state.note || null,
       },
       materials: state.files.map(row => ({
@@ -394,11 +402,11 @@ async function submitAll() {
     });
     const submitted = await submitApplication(application.id, reviewType);
     ElMessage.success(
-      `已提交到合规（${reviewType === ReviewType.USDT ? "U相关" : "找换"}）：${submitted.application_no} · ${state.customer.name}，可在「材料与补件」跟进`,
+      `已提交合规审核（${reviewType === ReviewType.USDT ? "U相关专线" : "常规"}）：${submitted.application_no} · ${state.customer.name}，可在「审核跟踪」跟进`,
     );
     clearAll();
   } catch {
-    /* 错误提示由拦截器处理；已建的草稿会出现在工单列表可继续处理 */
+    /* 错误提示由拦截器处理；已建草稿会出现在审核跟踪可继续处理 */
   } finally {
     state.submitting = false;
   }
@@ -422,33 +430,21 @@ onMounted(async () => {
       <div>
         <p class="eyebrow">BUSINESS ACCESS</p>
         <h1>准入材料与合规单据上传</h1>
-        <p class="subtitle">按五步完成：选择客户 → 业务类型 → 渠道 → 客户信息 → 上传材料，右侧同步校验 KYC 清单。</p>
+        <p class="subtitle">选择交易与客户信息、上传合规材料，系统按规则自动关联 KYC 材料项并动态核验完整度。</p>
       </div>
       <el-tag type="success" effect="light">合规通道状态：双向通畅</el-tag>
     </header>
 
-    <div class="workspace">
-      <main class="steps">
-        <!-- STEP 1 选择客户 -->
-        <section class="step">
-          <header>
-            <div>
-              <h3><i>1</i>选择客户</h3>
-              <small>输入客户编号或名称，从下拉列表中选择</small>
-            </div>
-            <div class="step-aside">
-              <template v-if="state.customer">
-                <el-tag size="small" effect="light">{{ customerStatusText }}</el-tag>
-                <el-button link type="primary" @click="viewCustomer">查看客户 →</el-button>
-              </template>
-              <el-tag v-else-if="state.customerQuery && !state.candidates.length" type="danger" size="small">
-                未匹配到记录
-              </el-tag>
-              <el-button v-else link type="primary" @click="createCustomerVisible = true">
-                ＋ 新建客户
-              </el-button>
-            </div>
-          </header>
+    <!-- 1. 交易与客户信息 -->
+    <section class="card">
+      <header class="card-head">
+        <h2><i />1. 交易与客户信息</h2>
+        <el-button type="primary" plain @click="createCustomerVisible = true">＋ 新建客户</el-button>
+      </header>
+
+      <div class="pair-grid">
+        <div class="field">
+          <label>选择客户 <em>*</em></label>
           <el-select
             :model-value="state.customer?.id ?? ''"
             filterable
@@ -456,8 +452,7 @@ onMounted(async () => {
             clearable
             :remote-method="searchCustomers"
             :loading="state.searching"
-            placeholder="输入客户编号如 20001 或公司名"
-            style="width: 100%"
+            placeholder="输入客户编号或名称搜索"
             @change="selectCustomer"
             @clear="state.customer = null"
           >
@@ -465,165 +460,150 @@ onMounted(async () => {
               v-for="candidate in state.candidates"
               :key="candidate.id"
               :value="candidate.id"
-              :label="`${candidate.name} (${candidate.customer_code || '无编号'})`"
+              :label="customerLabel(candidate)"
             >
-              <span>{{ candidate.name }}</span>
+              <span>{{ customerLabel(candidate) }}</span>
               <span class="option-meta">
-                {{ candidate.customer_code || "无编号" }}
-                {{ candidate.customer_kind === CustomerKind.SUB_CUSTOMER ? ` · 中介下级${candidate.parent_name ? `（${candidate.parent_name}）` : ""}` : "" }}
+                {{ candidate.customer_kind === CustomerKind.SUB_CUSTOMER ? `中介下级${candidate.parent_name ? `（${candidate.parent_name}）` : ""}` : "" }}
               </span>
             </el-option>
           </el-select>
-        </section>
-
-        <!-- STEP 2 业务类型 -->
-        <section class="step">
-          <header>
-            <div>
-              <h3><i>2</i>选择业务类型</h3>
-              <small>决定适用的 KYC 规则与材料清单</small>
-            </div>
-          </header>
-          <el-select v-model="state.scenarioId" style="width: 100%" @change="onScenarioChange">
+        </div>
+        <div class="field">
+          <label>业务类型 <em>*</em></label>
+          <el-select v-model="state.scenarioId" placeholder="选择业务类型" @change="onScenarioChange">
             <el-option
               v-for="scenario in scenarios"
               :key="scenario.id"
               :value="scenario.id"
-              :label="`#${scenario.scenario_code} · ${scenario.scenario_name}`"
+              :label="`#${scenario.scenario_code} - ${scenario.scenario_name}`"
             />
           </el-select>
-        </section>
+        </div>
+      </div>
 
-        <!-- STEP 3 渠道 -->
-        <section class="step">
-          <header>
-            <div>
-              <h3><i>3</i>选择渠道</h3>
-              <small>该业务类型绑定 {{ selectedScenario?.channels.length ?? 0 }} 个渠道</small>
-            </div>
-          </header>
-          <div v-if="selectedScenario?.channels.length" class="channel-chips">
-            <button
-              v-for="(channel, index) in selectedScenario.channels"
-              :key="channel.channel_code"
-              type="button"
-              class="chip"
-              :class="[{ active: index === state.channelIndex }, `theme-${channel.theme}`]"
-              @click="pickChannel(index)"
-            >
-              {{ channel.channel_name }}
-            </button>
+      <!-- 客户信息摘要条 -->
+      <div v-if="state.customer" class="customer-strip">
+        <span class="avatar">{{ customerInitials(state.customer.name) }}</span>
+        <div class="strip-main">
+          <div class="strip-title">
+            <strong>{{ state.customer.name }}</strong>
+            <span class="muted">{{ state.customer.customer_code || "无编号" }}</span>
+            <el-tag :type="statusTagType[state.customer.customer_status]" size="small" effect="light">
+              {{ CustomerStatusLabel[state.customer.customer_status] }}
+            </el-tag>
           </div>
-          <p v-else class="channel-empty">该业务类型暂无绑定渠道</p>
-        </section>
+          <small class="muted">
+            {{ state.customer.agent_name ? `交易员 ${state.customer.agent_name}` : "交易员待分配" }}
+            {{ state.customer.phone ? ` · ${state.customer.phone}` : "" }}
+            {{ state.customer.parent_name ? ` · 上级中介 ${state.customer.parent_name}` : "" }}
+          </small>
+        </div>
+        <div class="strip-side">
+          <el-tag size="small" effect="plain">{{ RiskLevelLabel[state.customer.risk_level] }}</el-tag>
+          <el-button link type="primary" size="small" @click="viewCustomer">查看客户 →</el-button>
+        </div>
+      </div>
 
-        <!-- STEP 4 客户信息 -->
-        <section class="step">
-          <header>
-            <div>
-              <h3><i>4</i>客户信息与业务说明</h3>
-              <small>选填，用于合规审核参考</small>
-            </div>
-          </header>
-          <div class="field-grid">
-            <div class="field">
-              <label>客户中文姓名</label>
-              <el-input v-model="state.cnName" placeholder="例如 郑凯文" maxlength="100" />
-            </div>
-            <div class="field">
-              <label>客户英文姓名</label>
-              <el-input v-model="state.enName" placeholder="例如 KAIVEN CHENG" maxlength="100" />
-            </div>
-            <div class="field">
-              <label>业务说明 / 风险备注</label>
-              <el-input v-model="state.note" placeholder="填写本次材料说明或合规关注事项" maxlength="1000" />
-            </div>
-          </div>
-        </section>
-
-        <!-- STEP 5 上传材料 -->
-        <section class="step">
-          <header>
-            <div>
-              <h3><i>5</i>上传材料</h3>
-              <small>支持图片、PDF 和 Word，可拖拽</small>
-            </div>
-            <div class="step-aside muted">
-              {{ state.files.length ? `${state.files.length} 个文件已就绪` : "等待选择文件" }}
-            </div>
-          </header>
-
-          <div
-            class="dropzone"
-            :class="{ active: dragActive }"
-            @click="fileInput?.click()"
-            @dragover.prevent="dragActive = true"
-            @dragleave.prevent="dragActive = false"
-            @drop.prevent="onDrop"
+      <div class="field">
+        <label>选择绑定渠道 <em>*</em></label>
+        <div v-if="selectedScenario?.channels.length" class="channel-chips">
+          <button
+            v-for="(channel, index) in selectedScenario.channels"
+            :key="channel.channel_code"
+            type="button"
+            class="channel-chip"
+            :class="{ active: index === state.channelIndex }"
+            @click="pickChannel(index)"
           >
-            <span class="dz-icon">⇧</span>
-            <strong>把文件拖拽到这里，或点击选择文件</strong>
-            <small>文件上传后可预览，并可关联 KYC 材料项</small>
-          </div>
-          <input ref="fileInput" type="file" multiple :accept="ACCEPT" hidden @change="onFileChange" />
+            <el-icon><OfficeBuilding /></el-icon>
+            {{ channelLabel(channel.channel_name) }}
+            <i v-if="index === state.channelIndex" class="dot" />
+          </button>
+        </div>
+        <p v-else class="muted">该业务类型暂无绑定渠道</p>
+      </div>
 
-          <!-- 客户材料库 -->
-          <div class="library">
-            <button class="library-toggle" type="button" :disabled="!state.customer" @click="toggleLibrary">
-              <span class="lib-icon">▦</span>
-              <span class="lib-main">
-                <strong>客户材料库</strong>
-                <small>{{ libraryHint }}</small>
-              </span>
-              <span class="lib-meta">
-                {{
-                  state.customer
-                    ? `已选 ${state.files.filter(row => row.source === "library").length} · ${state.libraryItems.length} 份可选`
-                    : "未选择客户"
-                }}
-              </span>
-              <span class="lib-action">{{ state.libraryOpen ? "收起材料库" : "从材料库添加" }}</span>
-            </button>
-            <div v-if="state.libraryOpen" v-loading="state.libraryLoading" class="library-list">
-              <div v-for="item in state.libraryItems" :key="item.id" class="library-row">
-                <span class="doc-icon">{{ (item.file.original_name.split(".").pop() || "LIB").toUpperCase().slice(0, 4) }}</span>
-                <span class="lib-row-main">
-                  <strong>{{ item.name }}</strong>
-                  <small>{{ item.category ?? "未分类" }} · v{{ item.version }} · {{ sizeText(item.file.size) }}</small>
-                </span>
-                <el-button size="small" :disabled="libraryAdded(item)" @click="addLibraryItem(item)">
-                  {{ libraryAdded(item) ? "已添加" : "添加" }}
-                </el-button>
-              </div>
-              <el-empty
-                v-if="!state.libraryLoading && !state.libraryItems.length"
-                description="该客户暂无归档材料"
-                :image-size="60"
-              />
-            </div>
-          </div>
+      <div v-if="restrictionText" class="restriction-alert">
+        <span class="warn-icon">⚠</span>
+        <p>
+          <strong>{{ channelLabel(selectedChannel!.channel_name) }}限额与限制提醒：</strong>
+          {{ restrictionText }}
+        </p>
+      </div>
 
-          <!-- 文件列表 -->
-          <div v-for="row in state.files" :key="row.key" class="file-row">
-            <span class="doc-icon">{{ extIcon(row) }}</span>
-            <span class="file-main">
-              <strong>{{ row.name }}</strong>
-              <small>
-                <el-tag size="small" :type="row.source === 'library' ? 'warning' : 'info'" effect="plain">
-                  {{ row.source === "library" ? "材料库" : "本地上传" }}
-                </el-tag>
-                {{ row.source === "library" ? row.libraryMeta : `${sizeText(row.size)} · ${row.mime}` }}
-                · {{ row.detected }}
-              </small>
-            </span>
-            <el-button size="small" :loading="row.uploading" @click="previewRow(row)">预览</el-button>
-            <el-select
-              v-model="row.mappedItemId"
-              class="map-select"
-              placeholder="关联材料类型"
-              clearable
-              size="small"
-            >
+      <div class="field">
+        <label>业务说明 / 风险备注 <span class="optional">(选填)</span></label>
+        <el-input
+          v-model="state.note"
+          type="textarea"
+          :rows="2"
+          maxlength="1000"
+          placeholder="填写本次材料说明或合规关注事项..."
+        />
+      </div>
+    </section>
+
+    <!-- 2. 上传合规材料文件 -->
+    <section class="card">
+      <header class="card-head">
+        <h2><i />2. 上传合规材料文件</h2>
+        <span class="muted">支持 JPG, PNG, PDF, Word 格式 (单文件 ≤ 20MB)</span>
+      </header>
+
+      <div
+        class="dropzone"
+        :class="{ active: dragActive }"
+        @click="fileInput?.click()"
+        @dragover.prevent="dragActive = true"
+        @dragleave.prevent="dragActive = false"
+        @drop.prevent="onDrop"
+      >
+        <span class="dz-icon"><el-icon :size="26"><UploadFilled /></el-icon></span>
+        <strong>点击上传或将文件拖拽到此处</strong>
+        <small>系统将根据规则自动关联至下方对应 KYC 材料项</small>
+      </div>
+      <input ref="fileInput" type="file" multiple :accept="ACCEPT" hidden @change="onFileChange" />
+
+      <!-- 客户材料库复用 -->
+      <div class="library-line">
+        <el-button link type="primary" :disabled="!state.customer" @click="toggleLibrary">
+          {{ state.libraryOpen ? "收起客户材料库" : "▦ 从客户材料库添加历史材料" }}
+        </el-button>
+        <span class="muted">
+          {{ state.customer ? `已选 ${state.files.filter(row => row.source === "library").length} · ${state.libraryItems.length} 份可选` : "先选择客户后可复用材料库" }}
+        </span>
+      </div>
+      <div v-if="state.libraryOpen" v-loading="state.libraryLoading" class="library-list">
+        <div v-for="item in state.libraryItems" :key="item.id" class="library-row">
+          <span class="doc-icon small">{{ (item.file.original_name.split(".").pop() || "档").toUpperCase().slice(0, 4) }}</span>
+          <span class="lib-main">
+            <strong>{{ item.name }}</strong>
+            <small class="muted">{{ item.category ?? "未分类" }} · v{{ item.version }} · {{ sizeText(item.file.size) }}</small>
+          </span>
+          <el-button size="small" :disabled="libraryAdded(item)" @click="addLibraryItem(item)">
+            {{ libraryAdded(item) ? "已添加" : "添加" }}
+          </el-button>
+        </div>
+        <el-empty v-if="!state.libraryLoading && !state.libraryItems.length" description="该客户暂无归档材料" :image-size="50" />
+      </div>
+
+      <template v-if="state.files.length">
+        <h3 class="received-title">已接收文件 ({{ state.files.length }})</h3>
+        <div v-for="row in state.files" :key="row.key" class="file-row">
+          <span class="doc-icon" :class="{ pdf: /pdf/i.test(row.mime) || /\.pdf$/i.test(row.name) }">
+            {{ extText(row) }}
+          </span>
+          <span class="file-main" @click="previewRow(row)">
+            <strong>{{ row.name }}</strong>
+            <small class="muted">
+              {{ sizeText(row.size) }}
+              <el-tag v-if="row.source === 'library'" size="small" type="warning" effect="plain">材料库</el-tag>
+            </small>
+          </span>
+          <div class="link-select">
+            <span class="link-label">关联:</span>
+            <el-select v-model="row.mappedItemId" placeholder="选择材料项" clearable>
               <el-option
                 v-for="(item, index) in flatItems"
                 :key="item.item_id"
@@ -631,93 +611,68 @@ onMounted(async () => {
                 :label="`${index + 1}. ${item.item_name}`"
               />
             </el-select>
-            <button class="remove" type="button" @click="removeFile(row.key)">×</button>
           </div>
-        </section>
-      </main>
+          <el-button
+            class="trash"
+            :icon="Delete"
+            text
+            :loading="row.uploading"
+            @click="removeFile(row.key)"
+          />
+        </div>
+      </template>
+    </section>
 
-      <!-- 右侧 KYC 助手 -->
-      <aside class="assistant">
-        <section class="panel">
-          <header class="panel-head">
-            <strong>KYC 规则与清单</strong>
-            <span>{{ selectedScenario?.scenario_name ?? "暂无可用业务类型配置" }}</span>
-            <small v-if="selectedScenario">
-              #{{ selectedScenario.scenario_code }} ·
-              {{ selectedChannel ? `${selectedChannel.channel_name} 渠道` : "未绑定" }}
-            </small>
-          </header>
+    <!-- 3. KYC 材料清单核验 -->
+    <section class="card">
+      <header class="card-head">
+        <h2><i />3. KYC 材料清单核验</h2>
+        <span class="muted">{{ readyCount }}/{{ flatItems.length }} 项已关联</span>
+      </header>
 
-          <div v-if="processLines.length" class="rule-card flow">
-            <header><strong>业务审核要点</strong><em>规范</em></header>
-            <ol>
-              <li v-for="line in processLines.slice(0, 3)" :key="line">{{ line }}</li>
-            </ol>
-            <details v-if="processLines.length > 3">
-              <summary>展开完整流程（共 {{ processLines.length }} 步）</summary>
-              <ol start="4">
-                <li v-for="line in processLines.slice(3)" :key="line">{{ line }}</li>
-              </ol>
-            </details>
-          </div>
+      <el-progress
+        :percentage="flatItems.length ? Math.round((readyCount / flatItems.length) * 100) : 0"
+        :show-text="false"
+        class="check-progress"
+      />
 
-          <div v-if="selectedChannel?.restrictions.length" class="rule-card danger">
-            <header>
-              <strong>{{ selectedChannel.channel_name }} 渠道限制提醒</strong>
-              <em>严格拦截</em>
-            </header>
-            <ul>
-              <li v-for="restriction in selectedChannel.restrictions" :key="restriction.content">
-                {{ restriction.content }}
-              </li>
-            </ul>
-          </div>
+      <details v-if="processLines.length" class="process-details">
+        <summary>业务审核要点（{{ processLines.length }} 条）</summary>
+        <ol>
+          <li v-for="line in processLines" :key="line">{{ line }}</li>
+        </ol>
+      </details>
 
-          <div class="rule-card checklist">
-            <header>
-              <strong>材料完整度动态核验</strong>
-              <em>{{ readyCount }}/{{ flatItems.length }}</em>
-            </header>
-            <el-progress
-              :percentage="flatItems.length ? Math.round((readyCount / flatItems.length) * 100) : 0"
-              :show-text="false"
-            />
-            <div v-for="(item, index) in flatItems" :key="item.item_id" class="check-item">
-              <div class="check-head">
-                <strong>{{ index + 1 }}. {{ item.item_name }}</strong>
-                <el-tag
-                  size="small"
-                  effect="light"
-                  :type="itemReady(item) ? 'success' : item.required ? 'warning' : 'info'"
-                >
-                  {{ itemReady(item) ? "已就绪" : item.required ? "必须" : "选填" }}
-                </el-tag>
-              </div>
-              <small>{{ item.item_description || "按渠道要求提交清晰完整资料。" }}</small>
-              <small class="check-type">
-                {{ KycItemTypeLabel[item.item_type] }}{{ validityText(item) ? ` · ${validityText(item)}` : "" }}
-              </small>
-            </div>
-            <p v-if="!flatItems.length" class="check-empty">当前渠道暂无材料要求</p>
-          </div>
-        </section>
-      </aside>
-    </div>
+      <div v-for="(item, index) in flatItems" :key="item.item_id" class="check-item">
+        <div class="check-head">
+          <strong>{{ index + 1 }}. {{ item.item_name }}</strong>
+          <el-tag
+            size="small"
+            effect="light"
+            :type="itemReady(item) ? 'success' : item.required ? 'warning' : 'info'"
+          >
+            {{ itemReady(item) ? "已关联" : item.required ? "必须" : "选填" }}
+          </el-tag>
+        </div>
+        <small class="muted">{{ item.item_description || "按渠道要求提交清晰完整资料。" }}</small>
+        <small class="check-type">
+          {{ KycItemTypeLabel[item.item_type] }}{{ validityText(item) ? ` · ${validityText(item)}` : "" }}
+          <template v-if="linkedFiles(item).length">
+            · 已关联：{{ linkedFiles(item).map(row => row.name).join("、") }}
+          </template>
+        </small>
+      </div>
+      <p v-if="!flatItems.length" class="muted">当前渠道暂无材料要求</p>
+    </section>
 
-    <!-- 底部提交坞 -->
+    <!-- 底部提交条 -->
     <footer class="submit-dock">
       <div class="modes">
-        <span class="mode-label">选择提交模式：</span>
+        <span class="mode-label">提交模式：</span>
         <el-radio-group v-model="state.destination">
-          <el-radio value="library">
-            <strong>保存客户材料库</strong><small>仅归档文件</small>
-          </el-radio>
-          <el-radio value="complianceFx">
-            <strong>提交到合规（找换）</strong><small>生成合规审核记录</small>
-          </el-radio>
-          <el-radio value="complianceU">
-            <strong>提交到合规（U相关）</strong><small>生成 U 相关审核记录</small>
-          </el-radio>
+          <el-radio value="library">仅保存到客户材料库</el-radio>
+          <el-radio value="complianceFx">提交合规审核 (常规)</el-radio>
+          <el-radio value="complianceU">提交合规 (U相关专线)</el-radio>
         </el-radio-group>
       </div>
       <div class="dock-actions">
@@ -734,16 +689,16 @@ onMounted(async () => {
 
 <style scoped>
 .mu-page {
+  max-width: 1080px;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  gap: 16px;
 }
 
 .titlebar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 16px;
 }
 
 .eyebrow {
@@ -763,110 +718,48 @@ h1 {
   margin: 0;
 }
 
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  align-items: start;
-}
-
-.steps {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.step {
+.card {
   background: #fff;
-  border-radius: 10px;
-  padding: 16px 18px;
   border: 1px solid #ebeef5;
+  border-radius: 12px;
+  padding: 20px 24px;
 }
 
-.step > header {
+.card-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
-.step h3 {
-  margin: 0 0 2px;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.step h3 i {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #fff3e6;
-  color: #ff7a00;
-  font-style: normal;
-  font-size: 13px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.step small {
-  color: #909399;
-}
-
-.step-aside {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
-
-.step-aside.muted {
-  color: #909399;
-  font-size: 13px;
-}
-
-.option-meta {
-  float: right;
-  color: #909399;
-  font-size: 12px;
-}
-
-.channel-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  border: 1px solid #dcdfe6;
-  background: #fff;
-  border-radius: 999px;
-  padding: 6px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #606266;
-}
-
-.chip.active {
-  border-color: #ff7a00;
-  color: #c2660a;
-  background: #fff3e6;
-  font-weight: 600;
-}
-
-.channel-empty {
-  color: #909399;
+.card-head h2 {
   margin: 0;
-  font-size: 13px;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.field-grid {
+.card-head h2 i {
+  width: 5px;
+  height: 18px;
+  border-radius: 3px;
+  background: #ff7a00;
+}
+
+.pair-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.pair-grid .field {
+  margin-bottom: 0;
 }
 
 .field label {
@@ -876,16 +769,144 @@ h1 {
   margin-bottom: 6px;
 }
 
+.field label em {
+  color: #c45656;
+  font-style: normal;
+}
+
+.optional {
+  color: #909399;
+}
+
+.field :deep(.el-select) {
+  width: 100%;
+}
+
+.option-meta {
+  float: right;
+  color: #909399;
+  font-size: 12px;
+}
+
+/* 客户信息摘要条 */
+.customer-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f7f8fa;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  background: #eef1f6;
+  color: #4a5261;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.strip-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.strip-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.strip-side {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.muted {
+  color: #909399;
+  font-size: 13px;
+}
+
+/* 渠道卡片 */
+.channel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.channel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dcdfe6;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #606266;
+}
+
+.channel-chip.active {
+  border-color: #ff7a00;
+  color: #c2660a;
+  background: #fff8f1;
+  font-weight: 600;
+}
+
+.channel-chip .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff7a00;
+}
+
+/* 渠道限制警示条 */
+.restriction-alert {
+  display: flex;
+  gap: 10px;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.warn-icon {
+  color: #c2660a;
+  flex: none;
+}
+
+.restriction-alert p {
+  margin: 0;
+  color: #8a5a00;
+  line-height: 1.7;
+  font-size: 13px;
+}
+
+.restriction-alert strong {
+  color: #c2660a;
+}
+
+/* 上传区 */
 .dropzone {
   border: 1.5px dashed #dcdfe6;
-  border-radius: 10px;
-  padding: 26px;
+  border-radius: 12px;
+  padding: 44px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
-  margin-bottom: 12px;
   transition: border-color 0.15s, background 0.15s;
 }
 
@@ -896,70 +917,41 @@ h1 {
 }
 
 .dz-icon {
-  font-size: 22px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #fff3e6;
   color: #ff7a00;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.dropzone strong {
+  font-size: 16px;
 }
 
 .dropzone small {
   color: #909399;
 }
 
-.library {
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  margin-bottom: 12px;
-  overflow: hidden;
-}
-
-.library-toggle {
-  width: 100%;
+.library-line {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  background: #fafbfc;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-}
-
-.library-toggle:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.lib-icon {
-  color: #ff7a00;
-  font-size: 16px;
-}
-
-.lib-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.lib-main small {
-  color: #909399;
-}
-
-.lib-meta {
-  color: #909399;
-  font-size: 12px;
-}
-
-.lib-action {
-  color: #ff7a00;
-  font-size: 13px;
-  font-weight: 600;
+  margin: 10px 0 0;
 }
 
 .library-list {
-  padding: 8px 14px 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 60px;
+  min-height: 56px;
 }
 
 .library-row {
@@ -968,24 +960,37 @@ h1 {
   gap: 10px;
 }
 
-.lib-row-main {
+.lib-main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
-.lib-row-main small {
-  color: #909399;
+.received-title {
+  font-size: 14px;
+  margin: 18px 0 10px;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fafbfc;
+  border: 1px solid #f0f2f5;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
 }
 
 .doc-icon {
   flex: none;
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  background: #fff3e6;
-  color: #ff7a00;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  color: #909399;
   font-size: 11px;
   font-weight: 700;
   display: flex;
@@ -993,14 +998,14 @@ h1 {
   justify-content: center;
 }
 
-.file-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #ebeef5;
+.doc-icon.pdf {
+  color: #e0492f;
+}
+
+.doc-icon.small {
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
-  margin-bottom: 8px;
 }
 
 .file-main {
@@ -1008,6 +1013,7 @@ h1 {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  cursor: pointer;
 }
 
 .file-main strong {
@@ -1017,116 +1023,78 @@ h1 {
 }
 
 .file-main small {
-  color: #909399;
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
-.map-select {
-  width: 190px;
+.link-select {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.link-select .link-label {
+  padding: 0 10px;
+  color: #606266;
+  font-size: 13px;
   flex: none;
 }
 
-.remove {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: #909399;
-  cursor: pointer;
-  padding: 2px 6px;
+.link-select :deep(.el-select) {
+  width: 200px;
 }
 
-.remove:hover {
+.link-select :deep(.el-select__wrapper) {
+  box-shadow: none !important;
+  border-radius: 0;
+}
+
+.trash {
+  color: #909399;
+}
+
+.trash:hover {
   color: #c45656;
 }
 
-/* 右侧助手 */
-.assistant {
-  position: sticky;
-  top: 0;
-}
-
-.panel {
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-
-.panel-head {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* KYC 核验 */
+.check-progress {
   margin-bottom: 12px;
 }
 
-.panel-head span {
-  font-size: 13px;
-  color: #303133;
-}
-
-.panel-head small {
-  color: #909399;
-}
-
-.rule-card {
+.process-details {
   border: 1px solid #ebeef5;
   border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
   font-size: 13px;
 }
 
-.rule-card header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
+.process-details summary {
+  color: #ff7a00;
+  cursor: pointer;
 }
 
-.rule-card em {
-  font-style: normal;
-  font-size: 11px;
-  color: #909399;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-
-.rule-card.danger {
-  border-color: #fde2e2;
-  background: #fef6f6;
-}
-
-.rule-card.danger em {
-  color: #c45656;
-  border-color: #fbc4c4;
-}
-
-.rule-card ol,
-.rule-card ul {
-  margin: 0;
+.process-details ol {
+  margin: 8px 0 0;
   padding-left: 18px;
   color: #606266;
 }
 
-.rule-card li {
+.process-details li {
   margin-bottom: 4px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-.rule-card details summary {
-  color: #ff7a00;
-  cursor: pointer;
-  font-size: 12px;
-  margin: 4px 0;
-}
-
-.checklist .check-item {
+.check-item {
   border-top: 1px dashed #ebeef5;
-  padding: 8px 0;
+  padding: 10px 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1139,29 +1107,19 @@ h1 {
   gap: 8px;
 }
 
-.check-item small {
-  color: #909399;
-  line-height: 1.5;
-}
-
 .check-type {
-  color: #c2660a !important;
+  color: #c2660a;
+  font-size: 12px;
 }
 
-.check-empty {
-  color: #909399;
-  margin: 8px 0 0;
-}
-
-/* 提交坞 */
+/* 提交条 */
 .submit-dock {
   position: sticky;
   bottom: 0;
-  margin-top: 16px;
   background: #fff;
   border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 12px 18px;
+  border-radius: 12px;
+  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1172,29 +1130,14 @@ h1 {
 .modes {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .mode-label {
-  color: #606266;
-  font-size: 13px;
-}
-
-.modes :deep(.el-radio) {
-  margin-right: 18px;
-  height: auto;
-}
-
-.modes :deep(.el-radio__label) {
-  display: inline-flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-.modes small {
-  color: #909399;
-  font-weight: normal;
+  color: #303133;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .dock-actions {

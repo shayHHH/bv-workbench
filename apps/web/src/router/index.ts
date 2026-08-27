@@ -104,13 +104,8 @@ export const router = createRouter({
         {
           path: "orders",
           name: "orders",
-          component: () => import("@/views/PlaceholderView.vue"),
-          meta: {
-            title: "交易订单",
-            eyebrow: "TRADE ORDERS",
-            desc: "以订单为主线跟进入款、出款与凭证归档。",
-            roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET"],
-          },
+          component: () => import("@/views/orders/TradeOrdersView.vue"),
+          meta: { title: "交易订单", roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"] },
         },
         {
           path: "admin/users",

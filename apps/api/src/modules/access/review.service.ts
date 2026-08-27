@@ -20,6 +20,7 @@ import { Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
 import { AssignmentService } from "../assignment/assignment.service";
 import { CustomerService } from "../customer/customer.service";
+import { OrderService } from "../order/order.service";
 import { AccessApplication, AccessApplicationDocument } from "./access-application.schema";
 import { ReviewCase, ReviewCaseDocument } from "./review-case.schema";
 import { QueryReviewDto, ReviewDecisionDto } from "./dto/access.dto";
@@ -56,6 +57,7 @@ export class ReviewService {
     private readonly applicationModel: Model<AccessApplicationDocument>,
     private readonly customerService: CustomerService,
     private readonly assignmentService: AssignmentService,
+    private readonly orderService: OrderService,
   ) {}
 
   async list(query: QueryReviewDto): Promise<PageResult<ReviewCaseVO>> {
@@ -215,6 +217,11 @@ export class ReviewService {
       `${application.scenario_name ?? "-"} · ${application.channel_name ?? "-"} · 申请 ${application.application_no}${caseDoc.decision?.reason ? `：${caseDoc.decision.reason}` : ""}`,
       operator,
     );
+
+    // 准入通过后自动推进该客户就绪的待KYC交易订单（demo advanceOrdersAfterKyc）
+    if (dto.action === ReviewDecisionAction.APPROVE) {
+      await this.orderService.advanceAfterKyc(application.customer_id, "客户准入审核通过");
+    }
 
     return toVO(caseDoc.toObject());
   }

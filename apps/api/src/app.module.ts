@@ -10,6 +10,7 @@ import { AssignmentModule } from "./modules/assignment/assignment.module";
 import { CustomerModule } from "./modules/customer/customer.module";
 import { FileModule } from "./modules/file/file.module";
 import { KycModule } from "./modules/kyc/kyc.module";
+import { OrderModule } from "./modules/order/order.module";
 import { QuoteModule } from "./modules/quote/quote.module";
 import { UserModule } from "./modules/user/user.module";
 
@@ -38,6 +39,7 @@ import { UserModule } from "./modules/user/user.module";
     KycModule,
     AccessModule,
     AssignmentModule,
+    OrderModule,
     FileModule,
   ],
 })

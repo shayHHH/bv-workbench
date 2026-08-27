@@ -336,7 +336,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? CustomerSubTypeLabel[c.sub_
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="申请" name="applications">
+        <el-tab-pane label="准入记录" name="applications">
           <div v-loading="applicationsLoading" class="tab-pane-body">
             <template v-if="applications.length">
               <div v-for="app in applications" :key="app.id" class="app-card">
