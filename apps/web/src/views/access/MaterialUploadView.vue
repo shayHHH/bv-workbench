@@ -435,6 +435,8 @@ onMounted(async () => {
       <el-tag type="success" effect="light">合规通道状态：双向通畅</el-tag>
     </header>
 
+    <div class="mu-layout">
+    <main class="mu-main">
     <!-- 1. 交易与客户信息 -->
     <section class="card">
       <header class="card-head">
@@ -623,47 +625,79 @@ onMounted(async () => {
       </template>
     </section>
 
-    <!-- 3. KYC 材料清单核验 -->
-    <section class="card">
-      <header class="card-head">
-        <h2><i />3. KYC 材料清单核验</h2>
-        <span class="muted">{{ readyCount }}/{{ flatItems.length }} 项已关联</span>
-      </header>
+    </main>
 
-      <el-progress
-        :percentage="flatItems.length ? Math.round((readyCount / flatItems.length) * 100) : 0"
-        :show-text="false"
-        class="check-progress"
-      />
+    <!-- 右侧 KYC 规则与清单面板（demo 布局） -->
+    <aside class="assistant">
+      <section class="panel">
+        <header class="panel-head">
+          <strong>KYC 规则与清单</strong>
+          <span>{{ selectedScenario?.scenario_name ?? "暂无可用业务类型配置" }}</span>
+          <small v-if="selectedScenario">
+            #{{ selectedScenario.scenario_code }} ·
+            {{ selectedChannel ? `${selectedChannel.channel_name} 渠道` : "未绑定" }}
+          </small>
+        </header>
 
-      <details v-if="processLines.length" class="process-details">
-        <summary>业务审核要点（{{ processLines.length }} 条）</summary>
-        <ol>
-          <li v-for="line in processLines" :key="line">{{ line }}</li>
-        </ol>
-      </details>
-
-      <div v-for="(item, index) in flatItems" :key="item.item_id" class="check-item">
-        <div class="check-head">
-          <strong>{{ index + 1 }}. {{ item.item_name }}</strong>
-          <el-tag
-            size="small"
-            effect="light"
-            :type="itemReady(item) ? 'success' : item.required ? 'warning' : 'info'"
-          >
-            {{ itemReady(item) ? "已关联" : item.required ? "必须" : "选填" }}
-          </el-tag>
+        <div v-if="processLines.length" class="rule-card flow">
+          <header><strong>业务审核要点</strong><em>规范</em></header>
+          <ol>
+            <li v-for="line in processLines.slice(0, 3)" :key="line">{{ line }}</li>
+          </ol>
+          <details v-if="processLines.length > 3">
+            <summary>展开完整流程（共 {{ processLines.length }} 步）</summary>
+            <ol start="4">
+              <li v-for="line in processLines.slice(3)" :key="line">{{ line }}</li>
+            </ol>
+          </details>
         </div>
-        <small class="muted">{{ item.item_description || "按渠道要求提交清晰完整资料。" }}</small>
-        <small class="check-type">
-          {{ KycItemTypeLabel[item.item_type] }}{{ validityText(item) ? ` · ${validityText(item)}` : "" }}
-          <template v-if="linkedFiles(item).length">
-            · 已关联：{{ linkedFiles(item).map(row => row.name).join("、") }}
-          </template>
-        </small>
-      </div>
-      <p v-if="!flatItems.length" class="muted">当前渠道暂无材料要求</p>
-    </section>
+
+        <div v-if="selectedChannel?.restrictions.length" class="rule-card danger">
+          <header>
+            <strong>{{ selectedChannel.channel_name }} 渠道限制提醒</strong>
+            <em>严格拦截</em>
+          </header>
+          <ul>
+            <li v-for="restriction in selectedChannel.restrictions" :key="restriction.content">
+              {{ restriction.content }}
+            </li>
+          </ul>
+        </div>
+
+        <div class="rule-card checklist">
+          <header>
+            <strong>材料完整度动态核验</strong>
+            <em>{{ readyCount }}/{{ flatItems.length }}</em>
+          </header>
+          <el-progress
+            :percentage="flatItems.length ? Math.round((readyCount / flatItems.length) * 100) : 0"
+            :show-text="false"
+            class="check-progress"
+          />
+          <div v-for="(item, index) in flatItems" :key="item.item_id" class="check-item">
+            <div class="check-head">
+              <strong>{{ index + 1 }}. {{ item.item_name }}</strong>
+              <el-tag
+                size="small"
+                effect="light"
+                :type="itemReady(item) ? 'success' : item.required ? 'warning' : 'info'"
+              >
+                {{ itemReady(item) ? "已关联" : item.required ? "必须" : "选填" }}
+              </el-tag>
+            </div>
+            <small class="muted">{{ item.item_description || "按渠道要求提交清晰完整资料。" }}</small>
+            <small class="check-type">
+              {{ KycItemTypeLabel[item.item_type] }}{{ validityText(item) ? ` · ${validityText(item)}` : "" }}
+              <template v-if="linkedFiles(item).length">
+                · 已关联：{{ linkedFiles(item).map(row => row.name).join("、") }}
+              </template>
+            </small>
+          </div>
+          <p v-if="!flatItems.length" class="check-empty">当前渠道暂无材料要求</p>
+        </div>
+      </section>
+    </aside>
+    </div>
 
     <!-- 底部提交条 -->
     <footer class="submit-dock">
@@ -689,10 +723,129 @@ onMounted(async () => {
 
 <style scoped>
 .mu-page {
-  max-width: 1080px;
+  max-width: 1380px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* 双栏：主流程 + 右侧 KYC 规则与清单（demo 布局） */
+.mu-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.mu-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.assistant {
+  position: sticky;
+  top: 0;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.panel-head span {
+  font-size: 13px;
+  color: #303133;
+}
+
+.panel-head small {
+  color: #909399;
+}
+
+.rule-card {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.rule-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.rule-card em {
+  font-style: normal;
+  font-size: 11px;
+  color: #909399;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.rule-card.danger {
+  border-color: #fde2e2;
+  background: #fef6f6;
+}
+
+.rule-card.danger em {
+  color: #c45656;
+  border-color: #fbc4c4;
+}
+
+.rule-card ol,
+.rule-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #606266;
+}
+
+.rule-card li {
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.rule-card details summary {
+  color: #ff7a00;
+  cursor: pointer;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+.checklist .check-item {
+  border-top: 1px dashed #ebeef5;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.check-empty {
+  color: #909399;
+  margin: 8px 0 0;
+}
+
+@media (max-width: 1100px) {
+  .mu-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant {
+    position: static;
+  }
 }
 
 .titlebar {
