@@ -17,6 +17,8 @@ import {
 import { Delete, OfficeBuilding, UploadFilled } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
 import {
   archiveCustomerMaterials,
@@ -32,6 +34,7 @@ import { fetchActiveScenarios } from "@/api/kyc";
 import CustomerCreateDialog from "@/views/customer/CustomerCreateDialog.vue";
 
 const router = useRouter();
+const { t } = useI18n();
 
 /* ---------------- 数据 ---------------- */
 
@@ -90,7 +93,7 @@ async function searchCustomers(query: string) {
 }
 
 function customerLabel(candidate: CustomerVO): string {
-  return `${candidate.customer_code || "无编号"} - ${candidate.name}`;
+  return `${candidate.customer_code || t("access.common.noCode")} - ${candidate.name}`;
 }
 
 function selectCustomer(id: string) {
@@ -105,7 +108,7 @@ function onCustomerCreated(customer: CustomerVO) {
   createCustomerVisible.value = false;
   state.candidates = [customer, ...state.candidates];
   state.customer = customer;
-  ElMessage.success(`已选入新客户：${customer.name}`);
+  ElMessage.success(t("access.upload.customerSelected", { name: customer.name }));
 }
 
 const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | "info"> = {
@@ -147,7 +150,7 @@ function pickChannel(index: number) {
 }
 
 function channelLabel(name: string): string {
-  return /渠道|供应商|专列/.test(name) ? name : `${name} 渠道`;
+  return /渠道|供应商|专列/.test(name) ? name : t("access.upload.channelSuffix", { name });
 }
 
 const restrictionText = computed(() =>
@@ -196,18 +199,18 @@ function sizeText(size: number): string {
 
 function extText(row: UploadRow): string {
   const match = row.name.match(/\.([a-zA-Z0-9]+)$/);
-  return (match?.[1] ?? "档").toUpperCase().slice(0, 4);
+  return (match?.[1] ?? t("access.common.extFallback")).toUpperCase().slice(0, 4);
 }
 
 async function addFiles(list: FileList | File[]) {
   const files = [...list];
   const accepted = files.filter(file => ACCEPT_RE.test(file.name));
   if (accepted.length < files.length) {
-    ElMessage.warning("部分文件未加入：仅支持 JPG、PNG、PDF 和 Word 格式");
+    ElMessage.warning(t("access.upload.fileTypeRejected"));
   }
   for (const file of accepted) {
     if (file.size > 20 * 1024 * 1024) {
-      ElMessage.warning(`${file.name} 超过 20MB，未加入`);
+      ElMessage.warning(t("access.upload.fileTooLarge", { name: file.name }));
       continue;
     }
     const row: UploadRow = {
@@ -289,7 +292,7 @@ function addLibraryItem(item: CustomerMaterialVO) {
     source: "library",
     file: item.file,
     libraryMaterialId: item.id,
-    libraryMeta: `${item.category ?? "未分类"} · v${item.version}`,
+    libraryMeta: `${item.category ?? t("access.upload.uncategorized")} · v${item.version}`,
     size: item.file.size,
     mime: item.file.mime_type,
     detected: detectType(item.name),
@@ -298,7 +301,7 @@ function addLibraryItem(item: CustomerMaterialVO) {
   };
   row.mappedItemId = autoLinkItem(row);
   state.files.push(row);
-  ElMessage.success("已添加材料库材料");
+  ElMessage.success(t("access.upload.libraryItemAdded"));
 }
 
 /* ---------------- KYC 核验（第 3 区） ---------------- */
@@ -322,8 +325,8 @@ function itemReady(item: KycItem): boolean {
 const readyCount = computed(() => flatItems.value.filter(itemReady).length);
 
 function validityText(item: KycItem): string {
-  if (item.validity === KycItemValidity.ONE_MONTH) return "1个月内有效";
-  if (item.validity === KycItemValidity.THREE_MONTHS) return "3个月内有效";
+  if (item.validity === KycItemValidity.ONE_MONTH) return t("access.upload.validOneMonth");
+  if (item.validity === KycItemValidity.THREE_MONTHS) return t("access.upload.validThreeMonths");
   return "";
 }
 
@@ -351,7 +354,7 @@ function clearAll() {
 async function submitAll() {
   if (!state.customer || !state.files.length) return;
   if (state.files.some(row => row.uploading)) {
-    ElMessage.warning("仍有文件在上传中，请稍候");
+    ElMessage.warning(t("access.upload.stillUploading"));
     return;
   }
   const itemNameById = new Map(flatItems.value.map(item => [item.item_id, item.item_name]));
@@ -371,14 +374,14 @@ async function submitAll() {
 
     if (state.destination === "library") {
       ElMessage.success(
-        `已保存到客户材料库：${state.customer.name} · ${localRows.length} 个文件，可在客户管理查看归档`,
+        t("access.upload.savedToLibrary", { name: state.customer.name, count: localRows.length }),
       );
       clearAll();
       return;
     }
 
     if (!selectedScenario.value || !selectedChannel.value) {
-      ElMessage.warning("提交合规前请选择业务类型和渠道");
+      ElMessage.warning(t("access.upload.needScenarioChannel"));
       return;
     }
     const reviewType = state.destination === "complianceU" ? ReviewType.USDT : ReviewType.FX;
@@ -402,7 +405,11 @@ async function submitAll() {
     });
     const submitted = await submitApplication(application.id, reviewType);
     ElMessage.success(
-      `已提交合规审核（${reviewType === ReviewType.USDT ? "U相关专线" : "常规"}）：${submitted.application_no} · ${state.customer.name}，可在「审核跟踪」跟进`,
+      t("access.upload.submitted", {
+        lane: reviewType === ReviewType.USDT ? t("access.upload.laneU") : t("access.upload.laneFx"),
+        no: submitted.application_no,
+        name: state.customer.name,
+      }),
     );
     clearAll();
   } catch {
@@ -429,10 +436,10 @@ onMounted(async () => {
     <header class="titlebar">
       <div>
         <p class="eyebrow">BUSINESS ACCESS</p>
-        <h1>准入材料与合规单据上传</h1>
-        <p class="subtitle">选择交易与客户信息、上传合规材料，系统按规则自动关联 KYC 材料项并动态核验完整度。</p>
+        <h1>{{ t("access.upload.title") }}</h1>
+        <p class="subtitle">{{ t("access.upload.subtitle") }}</p>
       </div>
-      <el-tag type="success" effect="light">合规通道状态：双向通畅</el-tag>
+      <el-tag type="success" effect="light">{{ t("access.upload.channelStatus") }}</el-tag>
     </header>
 
     <div class="mu-layout">
@@ -440,13 +447,13 @@ onMounted(async () => {
     <!-- 1. 交易与客户信息 -->
     <section class="card">
       <header class="card-head">
-        <h2><i />1. 交易与客户信息</h2>
-        <el-button type="primary" plain @click="createCustomerVisible = true">＋ 新建客户</el-button>
+        <h2><i />{{ t("access.upload.step1Title") }}</h2>
+        <el-button type="primary" plain @click="createCustomerVisible = true">{{ t("access.upload.createCustomer") }}</el-button>
       </header>
 
       <div class="pair-grid">
         <div class="field">
-          <label>选择客户 <em>*</em></label>
+          <label>{{ t("access.upload.customerField") }} <em>*</em></label>
           <el-select
             :model-value="state.customer?.id ?? ''"
             filterable
@@ -454,7 +461,7 @@ onMounted(async () => {
             clearable
             :remote-method="searchCustomers"
             :loading="state.searching"
-            placeholder="输入客户编号或名称搜索"
+            :placeholder="t('access.upload.customerSearchPh')"
             @change="selectCustomer"
             @clear="state.customer = null"
           >
@@ -466,14 +473,14 @@ onMounted(async () => {
             >
               <span>{{ customerLabel(candidate) }}</span>
               <span class="option-meta">
-                {{ candidate.customer_kind === CustomerKind.SUB_CUSTOMER ? `中介下级${candidate.parent_name ? `（${candidate.parent_name}）` : ""}` : "" }}
+                {{ candidate.customer_kind === CustomerKind.SUB_CUSTOMER ? `${t("access.upload.subCustomer")}${candidate.parent_name ? `（${candidate.parent_name}）` : ""}` : "" }}
               </span>
             </el-option>
           </el-select>
         </div>
         <div class="field">
-          <label>业务类型 <em>*</em></label>
-          <el-select v-model="state.scenarioId" placeholder="选择业务类型" @change="onScenarioChange">
+          <label>{{ t("access.upload.scenarioField") }} <em>*</em></label>
+          <el-select v-model="state.scenarioId" :placeholder="t('access.upload.scenarioPh')" @change="onScenarioChange">
             <el-option
               v-for="scenario in scenarios"
               :key="scenario.id"
@@ -490,25 +497,25 @@ onMounted(async () => {
         <div class="strip-main">
           <div class="strip-title">
             <strong>{{ state.customer.name }}</strong>
-            <span class="muted">{{ state.customer.customer_code || "无编号" }}</span>
+            <span class="muted">{{ state.customer.customer_code || t("access.common.noCode") }}</span>
             <el-tag :type="statusTagType[state.customer.customer_status]" size="small" effect="light">
-              {{ CustomerStatusLabel[state.customer.customer_status] }}
+              {{ localizeText(CustomerStatusLabel[state.customer.customer_status]) }}
             </el-tag>
           </div>
           <small class="muted">
-            {{ state.customer.agent_name ? `交易员 ${state.customer.agent_name}` : "交易员待分配" }}
+            {{ state.customer.agent_name ? t("access.upload.traderName", { name: state.customer.agent_name }) : t("access.upload.traderUnassigned") }}
             {{ state.customer.phone ? ` · ${state.customer.phone}` : "" }}
-            {{ state.customer.parent_name ? ` · 上级中介 ${state.customer.parent_name}` : "" }}
+            {{ state.customer.parent_name ? ` · ${t("access.upload.parentIntermediary", { name: state.customer.parent_name })}` : "" }}
           </small>
         </div>
         <div class="strip-side">
-          <el-tag size="small" effect="plain">{{ RiskLevelLabel[state.customer.risk_level] }}</el-tag>
-          <el-button link type="primary" size="small" @click="viewCustomer">查看客户 →</el-button>
+          <el-tag size="small" effect="plain">{{ localizeText(RiskLevelLabel[state.customer.risk_level]) }}</el-tag>
+          <el-button link type="primary" size="small" @click="viewCustomer">{{ t("access.upload.viewCustomer") }}</el-button>
         </div>
       </div>
 
       <div class="field">
-        <label>选择渠道 <em>*</em></label>
+        <label>{{ t("access.upload.channelField") }} <em>*</em></label>
         <div v-if="selectedScenario?.channels.length" class="channel-chips">
           <button
             v-for="(channel, index) in selectedScenario.channels"
@@ -523,25 +530,25 @@ onMounted(async () => {
             <i v-if="index === state.channelIndex" class="dot" />
           </button>
         </div>
-        <p v-else class="muted">该业务类型暂无绑定渠道</p>
+        <p v-else class="muted">{{ t("access.upload.noChannels") }}</p>
       </div>
 
       <div v-if="restrictionText" class="restriction-alert">
         <span class="warn-icon">⚠</span>
         <p>
-          <strong>{{ channelLabel(selectedChannel!.channel_name) }}限额与限制提醒：</strong>
+          <strong>{{ t("access.upload.restrictionTitle", { name: channelLabel(selectedChannel!.channel_name) }) }}</strong>
           {{ restrictionText }}
         </p>
       </div>
 
       <div class="field">
-        <label>业务说明 / 风险备注 <span class="optional">(选填)</span></label>
+        <label>{{ t("access.upload.noteField") }} <span class="optional">{{ t("access.upload.optional") }}</span></label>
         <el-input
           v-model="state.note"
           type="textarea"
           :rows="2"
           maxlength="1000"
-          placeholder="填写本次材料说明或合规关注事项..."
+          :placeholder="t('access.upload.notePh')"
         />
       </div>
     </section>
@@ -549,8 +556,8 @@ onMounted(async () => {
     <!-- 2. 上传合规材料文件 -->
     <section class="card">
       <header class="card-head">
-        <h2><i />2. 上传合规材料文件</h2>
-        <span class="muted">支持 JPG, PNG, PDF, Word 格式 (单文件 ≤ 20MB)</span>
+        <h2><i />{{ t("access.upload.step2Title") }}</h2>
+        <span class="muted">{{ t("access.upload.acceptHint") }}</span>
       </header>
 
       <div
@@ -562,36 +569,36 @@ onMounted(async () => {
         @drop.prevent="onDrop"
       >
         <span class="dz-icon"><el-icon :size="26"><UploadFilled /></el-icon></span>
-        <strong>点击上传或将文件拖拽到此处</strong>
-        <small>系统将根据规则自动关联至下方对应 KYC 材料项</small>
+        <strong>{{ t("access.upload.dropTitle") }}</strong>
+        <small>{{ t("access.upload.dropHint") }}</small>
       </div>
       <input ref="fileInput" type="file" multiple :accept="ACCEPT" hidden @change="onFileChange" />
 
       <!-- 客户材料库复用 -->
       <div class="library-line">
         <el-button link type="primary" :disabled="!state.customer" @click="toggleLibrary">
-          {{ state.libraryOpen ? "收起客户材料库" : "▦ 从客户材料库添加历史材料" }}
+          {{ state.libraryOpen ? t("access.upload.libraryCollapse") : t("access.upload.libraryExpand") }}
         </el-button>
         <span class="muted">
-          {{ state.customer ? `已选 ${state.files.filter(row => row.source === "library").length} · ${state.libraryItems.length} 份可选` : "先选择客户后可复用材料库" }}
+          {{ state.customer ? t("access.upload.librarySummary", { selected: state.files.filter(row => row.source === "library").length, total: state.libraryItems.length }) : t("access.upload.libraryNeedCustomer") }}
         </span>
       </div>
       <div v-if="state.libraryOpen" v-loading="state.libraryLoading" class="library-list">
         <div v-for="item in state.libraryItems" :key="item.id" class="library-row">
-          <span class="doc-icon small">{{ (item.file.original_name.split(".").pop() || "档").toUpperCase().slice(0, 4) }}</span>
+          <span class="doc-icon small">{{ (item.file.original_name.split(".").pop() || t("access.common.extFallback")).toUpperCase().slice(0, 4) }}</span>
           <span class="lib-main">
             <strong>{{ item.name }}</strong>
-            <small class="muted">{{ item.category ?? "未分类" }} · v{{ item.version }} · {{ sizeText(item.file.size) }}</small>
+            <small class="muted">{{ item.category ?? t("access.upload.uncategorized") }} · v{{ item.version }} · {{ sizeText(item.file.size) }}</small>
           </span>
           <el-button size="small" :disabled="libraryAdded(item)" @click="addLibraryItem(item)">
-            {{ libraryAdded(item) ? "已添加" : "添加" }}
+            {{ libraryAdded(item) ? t("access.upload.added") : t("access.upload.add") }}
           </el-button>
         </div>
-        <el-empty v-if="!state.libraryLoading && !state.libraryItems.length" description="该客户暂无归档材料" :image-size="50" />
+        <el-empty v-if="!state.libraryLoading && !state.libraryItems.length" :description="t('access.upload.libraryEmpty')" :image-size="50" />
       </div>
 
       <template v-if="state.files.length">
-        <h3 class="received-title">已接收文件 ({{ state.files.length }})</h3>
+        <h3 class="received-title">{{ t("access.upload.receivedTitle", { count: state.files.length }) }}</h3>
         <div v-for="row in state.files" :key="row.key" class="file-row">
           <span class="doc-icon" :class="{ pdf: /pdf/i.test(row.mime) || /\.pdf$/i.test(row.name) }">
             {{ extText(row) }}
@@ -600,12 +607,12 @@ onMounted(async () => {
             <strong>{{ row.name }}</strong>
             <small class="muted">
               {{ sizeText(row.size) }}
-              <el-tag v-if="row.source === 'library'" size="small" type="warning" effect="plain">材料库</el-tag>
+              <el-tag v-if="row.source === 'library'" size="small" type="warning" effect="plain">{{ t("access.upload.libraryTag") }}</el-tag>
             </small>
           </span>
           <div class="link-select">
-            <span class="link-label">关联:</span>
-            <el-select v-model="row.mappedItemId" placeholder="选择材料项" clearable>
+            <span class="link-label">{{ t("access.upload.linkLabel") }}</span>
+            <el-select v-model="row.mappedItemId" :placeholder="t('access.upload.selectItemPh')" clearable>
               <el-option
                 v-for="(item, index) in flatItems"
                 :key="item.item_id"
@@ -631,21 +638,21 @@ onMounted(async () => {
     <aside class="assistant">
       <section class="panel">
         <header class="panel-head">
-          <strong>KYC 规则与清单</strong>
-          <span>{{ selectedScenario?.scenario_name ?? "暂无可用业务类型配置" }}</span>
+          <strong>{{ t("access.upload.kycPanelTitle") }}</strong>
+          <span>{{ selectedScenario?.scenario_name ?? t("access.upload.noScenario") }}</span>
           <small v-if="selectedScenario">
             #{{ selectedScenario.scenario_code }} ·
-            {{ selectedChannel ? `${selectedChannel.channel_name} 渠道` : "未绑定" }}
+            {{ selectedChannel ? t("access.upload.channelSuffix", { name: selectedChannel.channel_name }) : t("access.upload.channelUnbound") }}
           </small>
         </header>
 
         <div v-if="processLines.length" class="rule-card flow">
-          <header><strong>业务审核要点</strong><em>规范</em></header>
+          <header><strong>{{ t("access.upload.processTitle") }}</strong><em>{{ t("access.upload.processTag") }}</em></header>
           <ol>
             <li v-for="line in processLines.slice(0, 3)" :key="line">{{ line }}</li>
           </ol>
           <details v-if="processLines.length > 3">
-            <summary>展开完整流程（共 {{ processLines.length }} 步）</summary>
+            <summary>{{ t("access.upload.processExpand", { count: processLines.length }) }}</summary>
             <ol start="4">
               <li v-for="line in processLines.slice(3)" :key="line">{{ line }}</li>
             </ol>
@@ -654,8 +661,8 @@ onMounted(async () => {
 
         <div v-if="selectedChannel?.restrictions.length" class="rule-card danger">
           <header>
-            <strong>{{ selectedChannel.channel_name }} 渠道限制提醒</strong>
-            <em>严格拦截</em>
+            <strong>{{ t("access.upload.restrictionCardTitle", { name: selectedChannel.channel_name }) }}</strong>
+            <em>{{ t("access.upload.restrictionTag") }}</em>
           </header>
           <ul>
             <li v-for="restriction in selectedChannel.restrictions" :key="restriction.content">
@@ -666,7 +673,7 @@ onMounted(async () => {
 
         <div class="rule-card checklist">
           <header>
-            <strong>材料完整度动态核验</strong>
+            <strong>{{ t("access.upload.checklistTitle") }}</strong>
             <em>{{ readyCount }}/{{ flatItems.length }}</em>
           </header>
           <el-progress
@@ -682,18 +689,18 @@ onMounted(async () => {
                 effect="light"
                 :type="itemReady(item) ? 'success' : item.required ? 'warning' : 'info'"
               >
-                {{ itemReady(item) ? "已关联" : item.required ? "必须" : "选填" }}
+                {{ itemReady(item) ? t("access.upload.tagLinked") : item.required ? t("access.upload.tagRequired") : t("access.upload.tagOptional") }}
               </el-tag>
             </div>
-            <small class="muted">{{ item.item_description || "按渠道要求提交清晰完整资料。" }}</small>
+            <small class="muted">{{ item.item_description || t("access.upload.itemDescFallback") }}</small>
             <small class="check-type">
-              {{ KycItemTypeLabel[item.item_type] }}{{ validityText(item) ? ` · ${validityText(item)}` : "" }}
+              {{ localizeText(KycItemTypeLabel[item.item_type]) }}{{ validityText(item) ? ` · ${validityText(item)}` : "" }}
               <template v-if="linkedFiles(item).length">
-                · 已关联：{{ linkedFiles(item).map(row => row.name).join("、") }}
+                · {{ t("access.upload.linkedFiles", { names: linkedFiles(item).map(row => row.name).join("、") }) }}
               </template>
             </small>
           </div>
-          <p v-if="!flatItems.length" class="check-empty">当前渠道暂无材料要求</p>
+          <p v-if="!flatItems.length" class="check-empty">{{ t("access.upload.noItems") }}</p>
         </div>
       </section>
     </aside>
@@ -702,17 +709,17 @@ onMounted(async () => {
     <!-- 底部提交条 -->
     <footer class="submit-dock">
       <div class="modes">
-        <span class="mode-label">提交模式：</span>
+        <span class="mode-label">{{ t("access.upload.modeLabel") }}</span>
         <el-radio-group v-model="state.destination">
-          <el-radio value="library">仅保存到客户材料库</el-radio>
-          <el-radio value="complianceFx">提交合规审核 (常规)</el-radio>
-          <el-radio value="complianceU">提交合规 (U相关专线)</el-radio>
+          <el-radio value="library">{{ t("access.upload.modeLibrary") }}</el-radio>
+          <el-radio value="complianceFx">{{ t("access.upload.modeFx") }}</el-radio>
+          <el-radio value="complianceU">{{ t("access.upload.modeU") }}</el-radio>
         </el-radio-group>
       </div>
       <div class="dock-actions">
-        <el-button :disabled="!hasDraft" @click="clearAll">取消</el-button>
+        <el-button :disabled="!hasDraft" @click="clearAll">{{ t("access.common.cancel") }}</el-button>
         <el-button type="primary" :disabled="!canSubmit" :loading="state.submitting" @click="submitAll">
-          确认并提交
+          {{ t("access.upload.submitConfirm") }}
         </el-button>
       </div>
     </footer>

@@ -3,6 +3,7 @@ export * from "./access.js";
 export * from "./assignment.js";
 export * from "./common.js";
 export * from "./customer.js";
+export * from "./department.js";
 export * from "./order.js";
 export * from "./quote.js";
 export * from "./user.js";

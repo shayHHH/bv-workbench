@@ -9,6 +9,8 @@ import {
 } from "@bv/shared";
 import { ElMessage } from "element-plus";
 import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
   fetchApplication,
@@ -21,6 +23,7 @@ import { formatDateTime, formatRelative } from "@/utils/format";
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const application = ref<AccessApplicationVO | null>(null);
 const loading = ref(false);
@@ -59,9 +62,9 @@ const allMatched = computed(
 );
 
 const footerHint = computed(() => {
-  if (!uploads.value.length) return "请先上传至少 1 份补件文件";
-  if (uploads.value.some(row => !row.targetKey)) return "还有文件未选择匹配材料项";
-  return "提交后工单返回合规复核";
+  if (!uploads.value.length) return t("access.supplement.hintNeedFile");
+  if (uploads.value.some(row => !row.targetKey)) return t("access.supplement.hintUnmatched");
+  return t("access.supplement.hintReady");
 });
 
 async function load() {
@@ -81,7 +84,7 @@ function sizeText(size: number): string {
 async function addFiles(list: FileList | File[]) {
   const accepted = [...list].filter(file => /\.(pdf|jpe?g|png)$/i.test(file.name));
   if (accepted.length < list.length) {
-    ElMessage.warning("部分文件未添加：仅支持 JPG、JPEG、PNG 和 PDF");
+    ElMessage.warning(t("access.supplement.fileTypeRejected"));
   }
   const usedTargets = new Set(uploads.value.map(row => row.targetKey).filter(Boolean));
   for (const file of accepted) {
@@ -142,7 +145,7 @@ async function submitSupplement() {
       }),
     });
     await submitApplication(app.id, (app.review_type as ReviewType) || ReviewType.FX);
-    ElMessage.success(`补件材料已提交：${app.application_no} 已返回合规复核`);
+    ElMessage.success(t("access.supplement.submitted", { no: app.application_no }));
     router.push("/access/documents");
   } catch {
     /* 提示由拦截器处理 */
@@ -160,28 +163,28 @@ onMounted(load);
       <header class="page-header">
         <div>
           <p class="eyebrow">SUPPLEMENT WORK</p>
-          <h1>{{ application.customer_snapshot.name }} · 补件处理</h1>
+          <h1>{{ application.customer_snapshot.name }} · {{ t("access.supplement.titleSuffix") }}</h1>
           <p class="subtitle">
             {{ application.application_no }} ·
-            {{ application.customer_snapshot.customer_code || "无编号" }}
-            {{ application.review_type ? ` · ${ReviewTypeLabel[application.review_type]}` : "" }}
+            {{ application.customer_snapshot.customer_code || t("access.common.noCode") }}
+            {{ application.review_type ? ` · ${localizeText(ReviewTypeLabel[application.review_type])}` : "" }}
           </p>
         </div>
-        <el-button @click="router.push('/access/documents')">← 返回工单列表</el-button>
+        <el-button @click="router.push('/access/documents')">{{ t("access.common.backToOrders") }}</el-button>
       </header>
 
       <div class="strip">
-        <div class="strip-item"><span>当前状态</span><strong>{{ AccessStatusLabel[application.status] }}</strong></div>
+        <div class="strip-item"><span>{{ t("access.common.currentStatus") }}</span><strong>{{ localizeText(AccessStatusLabel[application.status]) }}</strong></div>
         <div class="strip-item">
-          <span>业务类型 / 渠道</span>
+          <span>{{ t("access.common.scenarioChannel") }}</span>
           <strong>{{ application.scenario_name || "-" }} · {{ application.channel_name || "-" }}</strong>
         </div>
         <div class="strip-item">
-          <span>材料完整度</span>
+          <span>{{ t("access.common.completeness") }}</span>
           <strong>{{ application.completeness.done }} / {{ application.completeness.total }}</strong>
         </div>
         <div class="strip-item">
-          <span>退回时间</span>
+          <span>{{ t("access.supplement.returnedAt") }}</span>
           <strong>{{ application.latest_review ? formatRelative(application.latest_review.reviewed_at) : "-" }}</strong>
         </div>
       </div>
@@ -190,15 +193,15 @@ onMounted(load);
         <div class="main-col">
           <el-card shadow="never" class="reject-card">
             <div class="reject-head">
-              <el-tag type="danger" effect="light">{{ AccessStatusLabel[application.status] }}</el-tag>
-              <strong>本次驳回说明</strong>
+              <el-tag type="danger" effect="light">{{ localizeText(AccessStatusLabel[application.status]) }}</el-tag>
+              <strong>{{ t("access.supplement.rejectTitle") }}</strong>
               <span class="muted">
-                合规退回{{ application.latest_review ? ` · ${application.latest_review.reviewer_name ?? ""} ${formatDateTime(application.latest_review.reviewed_at)}` : "" }}
+                {{ t("access.supplement.complianceReturned") }}{{ application.latest_review ? ` · ${application.latest_review.reviewer_name ?? ""} ${formatDateTime(application.latest_review.reviewed_at)}` : "" }}
               </span>
             </div>
-            <p class="reject-note">{{ application.latest_review?.reason || "请根据退回意见补充材料。" }}</p>
+            <p class="reject-note">{{ application.latest_review?.reason || t("access.supplement.rejectFallback") }}</p>
             <div v-if="returnedMaterials.length" class="target-chips">
-              <span class="chips-label">需补交材料项：</span>
+              <span class="chips-label">{{ t("access.supplement.neededItems") }}</span>
               <el-tag v-for="material in returnedMaterials" :key="material.material_key" type="warning" effect="plain">
                 {{ material.name }}
               </el-tag>
@@ -207,8 +210,8 @@ onMounted(load);
 
           <el-card shadow="never">
             <template #header>
-              <strong>补交材料</strong>
-              <span class="head-sub">拖拽文件或点击选择，每份文件需匹配一个被退回材料项。支持 JPG、PNG、PDF。</span>
+              <strong>{{ t("access.supplement.uploadTitle") }}</strong>
+              <span class="head-sub">{{ t("access.supplement.uploadHint") }}</span>
             </template>
             <div
               class="dropzone"
@@ -219,8 +222,8 @@ onMounted(load);
               @drop.prevent="onDrop"
             >
               <span class="dz-icon">⇪</span>
-              <strong>拖拽文件到这里上传</strong>
-              <small>或点击选择文件 · 可一次选择多份</small>
+              <strong>{{ t("access.supplement.dropTitle") }}</strong>
+              <small>{{ t("access.supplement.dropHint") }}</small>
             </div>
             <input ref="fileInput" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" hidden @change="onFileChange" />
 
@@ -228,14 +231,14 @@ onMounted(load);
               <span class="doc-icon">{{ /pdf$/i.test(row.name) ? "PDF" : "IMG" }}</span>
               <span class="file-main">
                 <strong>{{ row.name }}</strong>
-                <small>{{ sizeText(row.size) }} · 待提交</small>
+                <small>{{ sizeText(row.size) }} · {{ t("access.supplement.pendingSubmit") }}</small>
               </span>
-              <el-select v-model="row.targetKey" class="map-select" placeholder="匹配材料项" size="small">
+              <el-select v-model="row.targetKey" class="map-select" :placeholder="t('access.supplement.matchPh')" size="small">
                 <el-option
                   v-for="material in returnedMaterials"
                   :key="material.material_key"
                   :value="material.material_key"
-                  :label="`${material.name}（需补件）`"
+                  :label="t('access.supplement.needSupplementSuffix', { name: material.name })"
                 />
               </el-select>
               <button class="remove" type="button" @click="removeRow(row.key)">×</button>
@@ -244,7 +247,7 @@ onMounted(load);
             <footer class="submit-footer">
               <span class="muted">{{ footerHint }}</span>
               <el-button type="primary" :disabled="!allMatched" :loading="submitting" @click="submitSupplement">
-                提交补件材料
+                {{ t("access.supplement.submitBtn") }}
               </el-button>
             </footer>
           </el-card>
@@ -253,8 +256,8 @@ onMounted(load);
         <div class="side-col">
           <el-card shadow="never">
             <template #header>
-              <strong>已有材料</strong>
-              <span class="head-sub">补件前快照，无需重复上传</span>
+              <strong>{{ t("access.supplement.keptTitle") }}</strong>
+              <span class="head-sub">{{ t("access.supplement.keptHint") }}</span>
             </template>
             <div v-for="material in keptMaterials" :key="material.material_key" class="kept-row">
               <strong>{{ material.name }}</strong>
@@ -265,14 +268,14 @@ onMounted(load);
                 type="primary"
                 @click="openFilePreview(material.file!)"
               >
-                预览
+                {{ t("access.common.preview") }}
               </el-button>
             </div>
-            <el-empty v-if="!keptMaterials.length" description="暂无其他材料" :image-size="60" />
+            <el-empty v-if="!keptMaterials.length" :description="t('access.supplement.noOtherMaterials')" :image-size="60" />
           </el-card>
 
           <el-card shadow="never">
-            <template #header><strong>工单记录</strong><span class="head-sub">最近处理动态</span></template>
+            <template #header><strong>{{ t("access.common.orderLog") }}</strong><span class="head-sub">{{ t("access.common.recentActivity") }}</span></template>
             <ol class="history">
               <li v-for="(entry, index) in [...application.timeline].reverse()" :key="index">
                 {{ formatDateTime(entry.at) }} · {{ entry.action }}

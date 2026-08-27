@@ -8,11 +8,14 @@ import {
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
 import { cancelApplication, fetchApplications, reopenApplication } from "@/api/access";
 import { formatDate, formatRelative } from "@/utils/format";
 
 const router = useRouter();
+const { t } = useI18n();
 
 const loading = ref(false);
 const items = ref<AccessApplicationVO[]>([]);
@@ -72,15 +75,15 @@ const statusTagType: Record<AccessStatus, "primary" | "success" | "warning" | "i
 function primaryAction(row: AccessApplicationVO): { label: string; run: () => void } {
   switch (row.status) {
     case AccessStatus.DRAFT:
-      return { label: "继续提交", run: () => router.push(`/access/materials/${row.id}`) };
+      return { label: t("access.track.continueSubmit"), run: () => router.push(`/access/materials/${row.id}`) };
     case AccessStatus.SUPPLEMENT_REQUIRED:
-      return { label: "处理补件", run: () => router.push(`/access/documents/${row.id}/supplement`) };
+      return { label: t("access.track.handleSupplement"), run: () => router.push(`/access/documents/${row.id}/supplement`) };
     case AccessStatus.REJECTED:
     case AccessStatus.EXPIRED:
     case AccessStatus.CANCELLED:
-      return { label: "⟳ 重新提交", run: () => reopen(row) };
+      return { label: t("access.track.resubmit"), run: () => reopen(row) };
     default:
-      return { label: "查看详情", run: () => router.push(`/access/documents/${row.id}`) };
+      return { label: t("access.track.viewDetail"), run: () => router.push(`/access/documents/${row.id}`) };
   }
 }
 
@@ -90,20 +93,20 @@ function initials(name: string): string {
 
 /* el-table 插槽 row 无类型，统一经带类型的辅助函数取展示内容 */
 const reviewTypeText = (row: AccessApplicationVO) =>
-  row.review_type ? ` · ${ReviewTypeLabel[row.review_type]}` : "";
+  row.review_type ? ` · ${localizeText(ReviewTypeLabel[row.review_type])}` : "";
 const statusType = (row: AccessApplicationVO) => statusTagType[row.status];
-const statusText = (row: AccessApplicationVO) => AccessStatusLabel[row.status];
-const statusDesc = (row: AccessApplicationVO) => AccessStatusDesc[row.status];
+const statusText = (row: AccessApplicationVO) => localizeText(AccessStatusLabel[row.status]);
+const statusDesc = (row: AccessApplicationVO) => localizeText(AccessStatusDesc[row.status]);
 
 async function reopen(row: AccessApplicationVO) {
   try {
     await ElMessageBox.confirm(
-      `重新发起 ${row.application_no}？工单将回到草稿，继续完善材料后重新提交合规。`,
-      "重新提交",
-      { confirmButtonText: "重新发起", cancelButtonText: "取消" },
+      t("access.track.reopenConfirm", { no: row.application_no }),
+      t("access.track.reopenTitle"),
+      { confirmButtonText: t("access.track.reopenOk"), cancelButtonText: t("access.common.cancel") },
     );
     const updated = await reopenApplication(row.id);
-    ElMessage.success(`${row.application_no} 已重新发起`);
+    ElMessage.success(t("access.track.reopened", { no: row.application_no }));
     router.push(`/access/materials/${updated.id}`);
   } catch {
     /* 取消或接口错误 */
@@ -113,16 +116,16 @@ async function reopen(row: AccessApplicationVO) {
 async function cancelRow(row: AccessApplicationVO) {
   try {
     const { value } = await ElMessageBox.prompt(
-      `取消工单 ${row.application_no}？长时间未补件或客户放弃时可取消申请；取消后进入已取消，可重新发起新申请。`,
-      "取消工单",
+      t("access.track.cancelConfirm", { no: row.application_no }),
+      t("access.track.cancelTitle"),
       {
-        inputPlaceholder: "取消原因（如：客户放弃本次申请）",
-        confirmButtonText: "确认取消",
-        cancelButtonText: "返回",
+        inputPlaceholder: t("access.track.cancelReasonPh"),
+        confirmButtonText: t("access.track.cancelOk"),
+        cancelButtonText: t("access.track.cancelBack"),
       },
     );
     await cancelApplication(row.id, value?.trim() || "交易员手动取消申请。");
-    ElMessage.success(`工单已取消：${row.application_no} 已作废，可重新发起申请`);
+    ElMessage.success(t("access.track.cancelled", { no: row.application_no }));
     load();
   } catch {
     /* 取消或接口错误 */
@@ -136,22 +139,22 @@ onMounted(load);
   <div>
     <header class="page-header">
       <p class="eyebrow">REVIEW WORK ORDERS</p>
-      <h1>审核跟踪</h1>
-      <p class="subtitle">查看已提交的客户审核工单、材料草稿与补件状态，按状态推进后续处理。</p>
+      <h1>{{ t("access.track.title") }}</h1>
+      <p class="subtitle">{{ t("access.track.subtitle") }}</p>
     </header>
 
     <div class="summary">
       <div class="summary-card">
-        <strong>{{ summary.all }}</strong><span>进行中与历史工单</span>
+        <strong>{{ summary.all }}</strong><span>{{ t("access.track.sumAll") }}</span>
       </div>
       <div class="summary-card">
-        <strong>{{ summary.draft }}</strong><span>草稿待提交</span>
+        <strong>{{ summary.draft }}</strong><span>{{ t("access.track.sumDraft") }}</span>
       </div>
       <div class="summary-card">
-        <strong>{{ summary.supplement }}</strong><span>待处理补件</span>
+        <strong>{{ summary.supplement }}</strong><span>{{ t("access.track.sumSupplement") }}</span>
       </div>
       <div class="summary-card">
-        <strong>{{ summary.pending }}</strong><span>待合规审核</span>
+        <strong>{{ summary.pending }}</strong><span>{{ t("access.track.sumPending") }}</span>
       </div>
     </div>
 
@@ -160,60 +163,60 @@ onMounted(load);
         <el-input
           v-model="query.keyword"
           class="keyword"
-          placeholder="搜索工单号、客户名称或编号"
+          :placeholder="t('access.track.searchPh')"
           clearable
           @keyup.enter="search"
           @clear="search"
         />
-        <el-select v-model="query.status" class="filter" placeholder="全部状态" clearable @change="search">
+        <el-select v-model="query.status" class="filter" :placeholder="t('access.track.allStatus')" clearable @change="search">
           <el-option
             v-for="(label, value) in AccessStatusLabel"
             :key="value"
-            :label="label"
+            :label="localizeText(label)"
             :value="value"
           />
         </el-select>
-        <span class="count">{{ total }} 个工单</span>
+        <span class="count">{{ t("access.track.countSummary", { total }) }}</span>
       </div>
 
       <el-table v-loading="loading" :data="items" row-key="id">
-        <el-table-column label="客户" min-width="210">
+        <el-table-column :label="t('access.track.colCustomer')" min-width="210">
           <template #default="{ row }">
             <div class="cell-primary">
               <span class="avatar">{{ initials(row.customer_snapshot.name) }}</span>
               <span class="name-block">
                 <strong>{{ row.customer_snapshot.name }}</strong>
                 <small>
-                  {{ row.customer_snapshot.customer_code || "无编号" }} · {{ formatDate(row.created_at) }}
+                  {{ row.customer_snapshot.customer_code || t("access.common.noCode") }} · {{ formatDate(row.created_at) }}
                 </small>
               </span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="业务类型 / 渠道" min-width="170">
+        <el-table-column :label="t('access.common.scenarioChannel')" min-width="170">
           <template #default="{ row }">
-            {{ row.scenario_name || "未选业务类型" }}
+            {{ row.scenario_name || t("access.track.noScenario") }}
             <div class="muted">{{ row.channel_name || "-" }}{{ reviewTypeText(row) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="当前状态" min-width="180">
+        <el-table-column :label="t('access.common.currentStatus')" min-width="180">
           <template #default="{ row }">
             <el-tag :type="statusType(row)" effect="light">{{ statusText(row) }}</el-tag>
             <div class="muted">{{ statusDesc(row) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="材料完整度" min-width="100">
+        <el-table-column :label="t('access.common.completeness')" min-width="100">
           <template #default="{ row }">
             {{ row.completeness.done }} / {{ row.completeness.total }}
-            <div class="muted">当前有效材料</div>
+            <div class="muted">{{ t("access.track.validMaterials") }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="最后更新" min-width="100">
+        <el-table-column :label="t('access.common.lastUpdated')" min-width="100">
           <template #default="{ row }">
             <span class="muted">{{ formatRelative(row.updated_at) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="170" align="right">
+        <el-table-column :label="t('access.common.colActions')" min-width="170" align="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" plain @click="primaryAction(row).run()">
               {{ primaryAction(row).label }}
@@ -223,19 +226,19 @@ onMounted(load);
               size="small"
               @click="cancelRow(row)"
             >
-              取消
+              {{ t("access.common.cancel") }}
             </el-button>
             <el-button
               v-else-if="[AccessStatus.REJECTED, AccessStatus.EXPIRED, AccessStatus.CANCELLED].includes(row.status)"
               size="small"
               @click="router.push(`/access/documents/${row.id}`)"
             >
-              记录
+              {{ t("access.track.record") }}
             </el-button>
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty description="暂无审核工单，在「材料上传」提交合规后会出现在这里" />
+          <el-empty :description="t('access.track.emptyText')" />
         </template>
       </el-table>
 

@@ -21,6 +21,8 @@ import {
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowLeft, FolderOpened, Upload } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
   archiveCustomerMaterials,
@@ -35,6 +37,7 @@ import { fetchActiveScenarios } from "@/api/kyc";
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const applicationId = route.params.id as string;
 
 const loading = ref(true);
@@ -152,7 +155,7 @@ async function persistDraft(silent = false) {
     });
     application.value = app;
     draft.materials = app.materials.map(m => ({ ...m }));
-    if (!silent) ElMessage.success("草稿已保存");
+    if (!silent) ElMessage.success(t("access.wizard.draftSaved"));
   } finally {
     saving.value = false;
   }
@@ -177,11 +180,11 @@ function onScenarioChange() {
 
 async function goStep(target: number) {
   if (target > 1 && !draft.scenario_id) {
-    ElMessage.warning("请先选择业务类型");
+    ElMessage.warning(t("access.wizard.needScenario"));
     return;
   }
   if (target > 2 && !draft.channel_code) {
-    ElMessage.warning("请先选择渠道");
+    ElMessage.warning(t("access.wizard.needChannel"));
     return;
   }
   if (editable.value) await persistDraft(true);
@@ -205,7 +208,7 @@ async function onFileChosen(event: Event) {
   input.value = "";
   if (!file) return;
   if (file.size > UPLOAD_MAX_SIZE) {
-    ElMessage.error("文件超过 20MB 限制");
+    ElMessage.error(t("access.wizard.fileTooLarge"));
     return;
   }
   uploadingItemId.value = pendingItemId ?? "__other__";
@@ -280,13 +283,16 @@ async function archiveToLibrary() {
     m => m.source === MaterialSource.LOCAL_UPLOAD && m.file,
   );
   if (!candidates.length) {
-    ElMessage.warning("没有本地上传的材料可归档（材料库复用的材料无需重复归档）");
+    ElMessage.warning(t("access.wizard.nothingToArchive"));
     return;
   }
   await ElMessageBox.confirm(
-    `将 ${candidates.length} 份本地上传材料归档到「${application.value?.customer_snapshot.name}」的材料库？仅归档，不进入审核队列。`,
-    "保存客户材料库",
-    { type: "info", confirmButtonText: "归档", cancelButtonText: "取消" },
+    t("access.wizard.archiveConfirm", {
+      count: candidates.length,
+      name: application.value?.customer_snapshot.name,
+    }),
+    t("access.wizard.archiveTitle"),
+    { type: "info", confirmButtonText: t("access.wizard.archiveOk"), cancelButtonText: t("access.common.cancel") },
   );
   await archiveCustomerMaterials(application.value!.customer_id, {
     items: candidates.map(m => ({
@@ -295,7 +301,7 @@ async function archiveToLibrary() {
       file: m.file!,
     })),
   });
-  ElMessage.success("已归档到客户材料库");
+  ElMessage.success(t("access.wizard.archived"));
 }
 
 /* ---------------- 提交 ---------------- */
@@ -303,25 +309,25 @@ async function archiveToLibrary() {
 async function submit() {
   await persistDraft(true);
   if (returnedMaterials.value.length) {
-    ElMessage.warning("仍有被退回的材料未替换");
+    ElMessage.warning(t("access.wizard.returnedRemain"));
     return;
   }
   if (!draft.materials.length) {
-    ElMessage.warning("请至少上传 1 份材料");
+    ElMessage.warning(t("access.wizard.needOneMaterial"));
     return;
   }
   const isResubmit = application.value?.status !== AccessStatus.DRAFT;
   await ElMessageBox.confirm(
-    `${isResubmit ? "补件后重新提交" : "提交"}合规审核后材料将进入审核队列，期间不可修改。确认提交？`,
-    "提交合规审核",
-    { type: "warning", confirmButtonText: "提交", cancelButtonText: "再检查一下" },
+    isResubmit ? t("access.wizard.submitConfirmResubmit") : t("access.wizard.submitConfirmFirst"),
+    t("access.wizard.submitTitle"),
+    { type: "warning", confirmButtonText: t("access.wizard.submitOk"), cancelButtonText: t("access.wizard.submitCancel") },
   );
   submitting.value = true;
   try {
     // 沿用上次提交模式；首次提交默认找换（提交模式的主入口在「材料上传」页）
     const reviewType = (application.value?.review_type as ReviewType) || ReviewType.FX;
     await submitApplication(applicationId, reviewType);
-    ElMessage.success("已提交合规审核");
+    ElMessage.success(t("access.wizard.submittedMsg"));
     router.push("/access/documents");
   } finally {
     submitting.value = false;
@@ -355,10 +361,10 @@ function formatSize(size: number) {
 const latestReviewActionLabel = computed(() => {
   const action = application.value?.latest_review?.action as string | undefined;
   if (!action) return "";
-  return (
+  return localizeText(
     ReviewDecisionActionLabel[action as ReviewDecisionAction] ??
-    LEGACY_DECISION_ACTION_LABEL[action] ??
-    action
+      LEGACY_DECISION_ACTION_LABEL[action] ??
+      action,
   );
 });
 
@@ -372,20 +378,20 @@ onMounted(load);
         <div>
           <p class="eyebrow">BUSINESS ACCESS</p>
           <h1>
-            {{ application.customer_snapshot.name }} · 材料申报
+            {{ application.customer_snapshot.name }} · {{ t("access.wizard.titleSuffix") }}
             <el-tag :type="STATUS_TAG[application.status] || 'info'" size="small" class="status-tag">
-              {{ AccessStatusLabel[application.status] }}
+              {{ localizeText(AccessStatusLabel[application.status]) }}
             </el-tag>
           </h1>
           <p class="subtitle">
             {{ application.application_no }}
             <span v-if="application.customer_snapshot.customer_code">
-              · 客户编号 {{ application.customer_snapshot.customer_code }}
+              · {{ t("access.wizard.customerCodeLine", { code: application.customer_snapshot.customer_code }) }}
             </span>
-            · 负责人 {{ application.owner_name }}
+            · {{ t("access.wizard.ownerLine", { name: application.owner_name }) }}
           </p>
         </div>
-        <el-button :icon="ArrowLeft" @click="router.push('/access/materials')">返回列表</el-button>
+        <el-button :icon="ArrowLeft" @click="router.push('/access/materials')">{{ t("access.wizard.backToList") }}</el-button>
       </header>
 
       <el-alert
@@ -400,24 +406,24 @@ onMounted(load);
         </template>
         <p class="alert-reason">{{ application.latest_review.reason }}</p>
         <p v-if="returnedMaterials.length" class="alert-returned">
-          被退回材料：{{ returnedMaterials.map(m => m.name).join("、") }}
+          {{ t("access.wizard.returnedList", { names: returnedMaterials.map(m => m.name).join("、") }) }}
         </p>
       </el-alert>
 
       <div class="wizard-layout">
         <el-card shadow="never" class="wizard-main">
           <el-steps :active="step - 1" align-center class="steps">
-            <el-step title="业务类型" />
-            <el-step title="渠道" />
-            <el-step title="客户信息" />
-            <el-step title="上传材料" />
-            <el-step title="确认提交" />
+            <el-step :title="t('access.wizard.stepScenario')" />
+            <el-step :title="t('access.wizard.stepChannel')" />
+            <el-step :title="t('access.wizard.stepCustomer')" />
+            <el-step :title="t('access.wizard.stepMaterials')" />
+            <el-step :title="t('access.wizard.stepConfirm')" />
           </el-steps>
 
           <!-- 步骤 1：业务类型 -->
           <section v-show="step === 1" class="step-body">
-            <h3>选择业务类型</h3>
-            <p class="step-hint">材料清单由 KYC list 配置按业务类型与渠道自动生成。</p>
+            <h3>{{ t("access.wizard.chooseScenario") }}</h3>
+            <p class="step-hint">{{ t("access.wizard.chooseScenarioHint") }}</p>
             <div class="option-grid">
               <button
                 v-for="scenario in scenarios"
@@ -433,13 +439,13 @@ onMounted(load);
                 <p>{{ scenario.process_description || "—" }}</p>
               </button>
             </div>
-            <el-empty v-if="!scenarios.length" description="暂无已发布的业务类型，请联系合规配置 KYC list" />
+            <el-empty v-if="!scenarios.length" :description="t('access.wizard.noScenarios')" />
           </section>
 
           <!-- 步骤 2：渠道 -->
           <section v-show="step === 2" class="step-body">
-            <h3>选择渠道</h3>
-            <p class="step-hint">不同渠道有独立的限制规则与材料要求。</p>
+            <h3>{{ t("access.wizard.chooseChannel") }}</h3>
+            <p class="step-hint">{{ t("access.wizard.chooseChannelHint") }}</p>
             <div class="option-grid">
               <button
                 v-for="channel in currentScenario?.channels ?? []"
@@ -452,24 +458,24 @@ onMounted(load);
               >
                 <strong>{{ channel.channel_name }}</strong>
                 <small>{{ channel.channel_code }}</small>
-                <p>{{ channel.restrictions.length ? channel.restrictions.map(r => r.content).join("；") : "无特殊限制" }}</p>
+                <p>{{ channel.restrictions.length ? channel.restrictions.map(r => r.content).join("；") : t("access.wizard.noRestrictions") }}</p>
               </button>
             </div>
           </section>
 
           <!-- 步骤 3：客户信息 -->
           <section v-show="step === 3" class="step-body">
-            <h3>客户信息与业务说明</h3>
+            <h3>{{ t("access.wizard.customerInfoTitle") }}</h3>
             <el-form label-position="top" class="info-form">
               <div class="form-grid">
-                <el-form-item label="客户中文姓名">
+                <el-form-item :label="t('access.wizard.cnName')">
                   <el-input v-model="draft.customer_cn_name" :disabled="!editable" maxlength="100" />
                 </el-form-item>
-                <el-form-item label="客户英文姓名">
+                <el-form-item :label="t('access.wizard.enName')">
                   <el-input v-model="draft.customer_en_name" :disabled="!editable" maxlength="100" />
                 </el-form-item>
               </div>
-              <el-form-item label="业务说明 / 风险备注">
+              <el-form-item :label="t('access.wizard.noteField')">
                 <el-input
                   v-model="draft.business_note"
                   type="textarea"
@@ -477,7 +483,7 @@ onMounted(load);
                   :disabled="!editable"
                   maxlength="1000"
                   show-word-limit
-                  placeholder="业务用途、预计业务量、风险备注等，将随申请提交给合规"
+                  :placeholder="t('access.wizard.notePh')"
                 />
               </el-form-item>
             </el-form>
@@ -487,11 +493,11 @@ onMounted(load);
           <section v-show="step === 4" class="step-body">
             <div class="materials-head">
               <div>
-                <h3>按材料项上传客户文件</h3>
-                <p class="step-hint">支持 JPG / PNG / PDF / DOC / DOCX，单个不超过 20MB。</p>
+                <h3>{{ t("access.wizard.uploadByItem") }}</h3>
+                <p class="step-hint">{{ t("access.wizard.uploadHint") }}</p>
               </div>
               <el-button :icon="FolderOpened" :disabled="!editable" @click="openLibrary">
-                从材料库添加
+                {{ t("access.wizard.addFromLibrary") }}
               </el-button>
             </div>
 
@@ -504,26 +510,26 @@ onMounted(load);
                   </strong>
                   <small>
                     {{ item.item_description || "—" }}
-                    <template v-if="item.validity !== 'NONE'"> · {{ KycItemValidityLabel[item.validity] }}</template>
+                    <template v-if="item.validity !== 'NONE'"> · {{ localizeText(KycItemValidityLabel[item.validity]) }}</template>
                   </small>
                   <ul v-if="materialsOf(item).length" class="file-list">
                     <li v-for="material in materialsOf(item)" :key="material.material_key">
                       <el-tag :type="MATERIAL_TAG[material.status]" size="small">
-                        {{ ApplicationMaterialStatusLabel[material.status] }}
+                        {{ localizeText(ApplicationMaterialStatusLabel[material.status]) }}
                       </el-tag>
                       <span class="file-name">{{ material.name }}</span>
-                      <span class="muted" v-if="material.file">{{ formatSize(material.file.size) }} · {{ MaterialSourceLabel[material.source] }}</span>
-                      <span v-if="material.return_reason" class="return-reason">退回原因：{{ material.return_reason }}</span>
+                      <span class="muted" v-if="material.file">{{ formatSize(material.file.size) }} · {{ localizeText(MaterialSourceLabel[material.source]) }}</span>
+                      <span v-if="material.return_reason" class="return-reason">{{ t("access.common.returnReason", { reason: material.return_reason }) }}</span>
                       <span class="file-actions">
-                        <el-button v-if="material.file" size="small" link type="primary" @click="openFilePreview(material.file)">预览</el-button>
+                        <el-button v-if="material.file" size="small" link type="primary" @click="openFilePreview(material.file)">{{ t("access.common.preview") }}</el-button>
                         <el-button
                           v-if="editable && material.status === 'RETURNED'"
                           size="small"
                           link
                           type="warning"
                           @click="replaceMaterial(material)"
-                        >重新上传</el-button>
-                        <el-button v-if="editable" size="small" link type="danger" @click="removeMaterial(material)">移除</el-button>
+                        >{{ t("access.wizard.reupload") }}</el-button>
+                        <el-button v-if="editable" size="small" link type="danger" @click="removeMaterial(material)">{{ t("access.wizard.remove") }}</el-button>
                       </span>
                     </li>
                   </ul>
@@ -537,24 +543,24 @@ onMounted(load);
                   :loading="uploadingItemId === item.item_id"
                   @click="triggerUpload(item.item_id)"
                 >
-                  {{ materialsOf(item).length ? "再传一份" : "上传" }}
+                  {{ materialsOf(item).length ? t("access.wizard.uploadMore") : t("access.wizard.upload") }}
                 </el-button>
               </article>
             </div>
 
             <div class="material-section">
-              <h4>其他材料</h4>
+              <h4>{{ t("access.wizard.otherMaterials") }}</h4>
               <article v-for="material in unlinkedMaterials" :key="material.material_key" class="material-item">
                 <div class="material-copy">
                   <strong>{{ material.name }}</strong>
-                  <small class="muted">{{ MaterialSourceLabel[material.source] }}<template v-if="material.file"> · {{ formatSize(material.file.size) }}</template></small>
+                  <small class="muted">{{ localizeText(MaterialSourceLabel[material.source]) }}<template v-if="material.file"> · {{ formatSize(material.file.size) }}</template></small>
                   <div class="link-row">
-                    <span class="muted">关联材料项：</span>
+                    <span class="muted">{{ t("access.wizard.linkItemLabel") }}</span>
                     <el-select
                       v-model="material.requirement_item_id"
                       size="small"
                       clearable
-                      placeholder="未关联"
+                      :placeholder="t('access.wizard.unlinked')"
                       class="link-select"
                       :disabled="!editable"
                     >
@@ -568,8 +574,8 @@ onMounted(load);
                   </div>
                 </div>
                 <span class="file-actions">
-                  <el-button v-if="material.file" size="small" link type="primary" @click="openFilePreview(material.file)">预览</el-button>
-                  <el-button v-if="editable" size="small" link type="danger" @click="removeMaterial(material)">移除</el-button>
+                  <el-button v-if="material.file" size="small" link type="primary" @click="openFilePreview(material.file)">{{ t("access.common.preview") }}</el-button>
+                  <el-button v-if="editable" size="small" link type="danger" @click="removeMaterial(material)">{{ t("access.wizard.remove") }}</el-button>
                 </span>
               </article>
               <div class="other-upload">
@@ -579,7 +585,7 @@ onMounted(load);
                   :loading="uploadingItemId === '__other__'"
                   @click="triggerUpload(null)"
                 >
-                  上传其他材料
+                  {{ t("access.wizard.uploadOther") }}
                 </el-button>
               </div>
             </div>
@@ -587,43 +593,43 @@ onMounted(load);
 
           <!-- 步骤 5：确认提交 -->
           <section v-show="step === 5" class="step-body">
-            <h3>确认并提交</h3>
+            <h3>{{ t("access.wizard.confirmTitle") }}</h3>
             <el-descriptions :column="2" border class="summary">
-              <el-descriptions-item label="客户">
+              <el-descriptions-item :label="t('access.wizard.customerLabel')">
                 {{ application.customer_snapshot.name }}
                 <span v-if="application.customer_snapshot.customer_code" class="muted">
                   · {{ application.customer_snapshot.customer_code }}
                 </span>
               </el-descriptions-item>
-              <el-descriptions-item label="业务类型 / 渠道">
-                {{ currentScenario?.scenario_name || "未选择" }}
+              <el-descriptions-item :label="t('access.common.scenarioChannel')">
+                {{ currentScenario?.scenario_name || t("access.wizard.notSelected") }}
                 <span v-if="currentChannel" class="muted"> · {{ currentChannel.channel_name }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="客户中文姓名">{{ draft.customer_cn_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="客户英文姓名">{{ draft.customer_en_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="业务说明" :span="2">{{ draft.business_note || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="材料完整度" :span="2">
+              <el-descriptions-item :label="t('access.wizard.cnName')">{{ draft.customer_cn_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('access.wizard.enName')">{{ draft.customer_en_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('access.wizard.noteShort')" :span="2">{{ draft.business_note || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('access.common.completeness')" :span="2">
                 <el-progress
                   :percentage="completeness.total ? Math.round((completeness.done / completeness.total) * 100) : 0"
                   :status="completeness.done >= completeness.total && completeness.total > 0 ? 'success' : undefined"
                   class="progress"
                 />
-                <span class="muted">必填 {{ completeness.done }} / {{ completeness.total }} · 共 {{ draft.materials.length }} 份材料</span>
+                <span class="muted">{{ t("access.wizard.completenessSummary", { done: completeness.done, total: completeness.total, count: draft.materials.length }) }}</span>
               </el-descriptions-item>
             </el-descriptions>
             <div v-if="editable" class="submit-actions">
-              <el-button :loading="saving" @click="archiveToLibrary">保存客户材料库</el-button>
+              <el-button :loading="saving" @click="archiveToLibrary">{{ t("access.wizard.archiveTitle") }}</el-button>
               <el-button type="primary" :loading="submitting" @click="submit">
-                {{ application.status === "DRAFT" ? "提交合规审核" : "重新提交合规审核" }}
+                {{ application.status === "DRAFT" ? t("access.wizard.submitTitle") : t("access.wizard.resubmitReview") }}
               </el-button>
             </div>
           </section>
 
           <footer class="wizard-footer">
-            <el-button :disabled="step === 1" @click="goStep(step - 1)">← 上一步</el-button>
+            <el-button :disabled="step === 1" @click="goStep(step - 1)">{{ t("access.wizard.prevStep") }}</el-button>
             <div class="footer-right">
-              <el-button v-if="editable" :loading="saving" @click="persistDraft()">保存草稿</el-button>
-              <el-button v-if="step < 5" type="primary" @click="goStep(step + 1)">下一步 →</el-button>
+              <el-button v-if="editable" :loading="saving" @click="persistDraft()">{{ t("access.wizard.saveDraft") }}</el-button>
+              <el-button v-if="step < 5" type="primary" @click="goStep(step + 1)">{{ t("access.wizard.nextStep") }}</el-button>
             </div>
           </footer>
         </el-card>
@@ -631,19 +637,19 @@ onMounted(load);
         <!-- KYC 规则助手 -->
         <aside class="assistant">
           <el-card shadow="never">
-            <h4 class="assistant-title">KYC 规则助手</h4>
+            <h4 class="assistant-title">{{ t("access.wizard.assistantTitle") }}</h4>
             <template v-if="currentScenario">
               <p class="assistant-block">
                 <strong>{{ currentScenario.scenario_name }}</strong><br />
-                <span class="muted">{{ currentScenario.process_description || "无流程说明" }}</span>
+                <span class="muted">{{ currentScenario.process_description || t("access.wizard.noProcessDesc") }}</span>
               </p>
               <p v-if="currentChannel" class="assistant-block restriction">
-                <strong>渠道限制 · {{ currentChannel.channel_name }}</strong><br />
-                <span>{{ currentChannel.restrictions.length ? currentChannel.restrictions.map(r => r.content).join("；") : "无特殊限制" }}</span>
+                <strong>{{ t("access.wizard.channelRestriction", { name: currentChannel.channel_name }) }}</strong><br />
+                <span>{{ currentChannel.restrictions.length ? currentChannel.restrictions.map(r => r.content).join("；") : t("access.wizard.noRestrictions") }}</span>
               </p>
               <template v-if="draft.channel_code">
                 <div class="assistant-block">
-                  <strong>材料完整度 {{ completeness.done }} / {{ completeness.total }}</strong>
+                  <strong>{{ t("access.wizard.completenessLine", { done: completeness.done, total: completeness.total }) }}</strong>
                   <ul class="check-list">
                     <li
                       v-for="item in applicableItems.filter(i => i.required)"
@@ -655,13 +661,13 @@ onMounted(load);
                   </ul>
                 </div>
               </template>
-              <p v-else class="muted">选择渠道后显示材料清单。</p>
+              <p v-else class="muted">{{ t("access.wizard.pickChannelHint") }}</p>
             </template>
-            <p v-else class="muted">选择业务类型后显示规则说明。</p>
+            <p v-else class="muted">{{ t("access.wizard.pickScenarioHint") }}</p>
           </el-card>
 
           <el-card v-if="application.timeline.length" shadow="never" class="timeline-card">
-            <h4 class="assistant-title">处理时间线</h4>
+            <h4 class="assistant-title">{{ t("access.wizard.timelineTitle") }}</h4>
             <el-timeline>
               <el-timeline-item
                 v-for="(entry, index) in [...application.timeline].reverse()"
@@ -679,34 +685,34 @@ onMounted(load);
       <input ref="fileInput" type="file" class="hidden-input" :accept="acceptAttr" @change="onFileChosen" />
 
       <!-- 材料库选择 -->
-      <el-dialog v-model="libraryVisible" title="从客户材料库添加" width="640px">
+      <el-dialog v-model="libraryVisible" :title="t('access.wizard.libraryDialogTitle')" width="640px">
         <el-table
           v-loading="libraryLoading"
           :data="libraryList"
           @selection-change="(rows: CustomerMaterialVO[]) => (librarySelection = rows)"
         >
           <el-table-column type="selection" width="46" />
-          <el-table-column prop="name" label="材料" min-width="180" />
-          <el-table-column prop="category" label="关联材料项" width="140">
+          <el-table-column prop="name" :label="t('access.wizard.colMaterial')" min-width="180" />
+          <el-table-column prop="category" :label="t('access.wizard.colLinkedItem')" width="140">
             <template #default="{ row }">{{ row.category || "—" }}</template>
           </el-table-column>
-          <el-table-column label="版本" width="70">
+          <el-table-column :label="t('access.wizard.colVersion')" width="70">
             <template #default="{ row }">v{{ row.version }}</template>
           </el-table-column>
-          <el-table-column label="归档时间" width="120">
+          <el-table-column :label="t('access.wizard.colArchivedAt')" width="120">
             <template #default="{ row }">{{ new Date(row.created_at).toLocaleDateString() }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="80">
+          <el-table-column :label="t('access.common.colActions')" width="80">
             <template #default="{ row }">
-              <el-button size="small" link type="primary" @click="openFilePreview(row.file)">预览</el-button>
+              <el-button size="small" link type="primary" @click="openFilePreview(row.file)">{{ t("access.common.preview") }}</el-button>
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="!libraryLoading && !libraryList.length" description="该客户材料库为空" />
+        <el-empty v-if="!libraryLoading && !libraryList.length" :description="t('access.wizard.libraryEmpty')" />
         <template #footer>
-          <el-button @click="libraryVisible = false">取消</el-button>
+          <el-button @click="libraryVisible = false">{{ t("access.common.cancel") }}</el-button>
           <el-button type="primary" :disabled="!librarySelection.length" @click="addFromLibrary">
-            加入 {{ librarySelection.length ? `（${librarySelection.length}）` : "" }}
+            {{ t("access.wizard.addSelected") }} {{ librarySelection.length ? `（${librarySelection.length}）` : "" }}
           </el-button>
         </template>
       </el-dialog>

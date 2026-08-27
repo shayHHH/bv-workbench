@@ -8,6 +8,7 @@ import { HealthModule } from "./health/health.module";
 import { AccessModule } from "./modules/access/access.module";
 import { AssignmentModule } from "./modules/assignment/assignment.module";
 import { CustomerModule } from "./modules/customer/customer.module";
+import { DepartmentModule } from "./modules/department/department.module";
 import { FileModule } from "./modules/file/file.module";
 import { KycModule } from "./modules/kyc/kyc.module";
 import { OrderModule } from "./modules/order/order.module";
@@ -40,6 +41,7 @@ import { UserModule } from "./modules/user/user.module";
     AccessModule,
     AssignmentModule,
     OrderModule,
+    DepartmentModule,
     FileModule,
   ],
 })

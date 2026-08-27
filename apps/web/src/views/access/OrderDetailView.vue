@@ -8,12 +8,15 @@ import {
   type ApplicationMaterialVO,
 } from "@bv/shared";
 import { onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRoute, useRouter } from "vue-router";
 import { fetchApplication, openFilePreview } from "@/api/access";
 import { formatDateTime, formatRelative } from "@/utils/format";
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const application = ref<AccessApplicationVO | null>(null);
 const loading = ref(false);
@@ -51,63 +54,63 @@ onMounted(load);
       <header class="page-header">
         <div>
           <p class="eyebrow">WORK ORDER DETAIL</p>
-          <h1>{{ application.customer_snapshot.name }} · 审核工单</h1>
+          <h1>{{ application.customer_snapshot.name }} · {{ t("access.detail.titleSuffix") }}</h1>
           <p class="subtitle">
             {{ application.application_no }} ·
-            {{ application.customer_snapshot.customer_code || "无编号" }}
-            {{ application.review_type ? ` · ${ReviewTypeLabel[application.review_type]}` : "" }}
+            {{ application.customer_snapshot.customer_code || t("access.common.noCode") }}
+            {{ application.review_type ? ` · ${localizeText(ReviewTypeLabel[application.review_type])}` : "" }}
           </p>
         </div>
-        <el-button @click="router.push('/access/documents')">← 返回工单列表</el-button>
+        <el-button @click="router.push('/access/documents')">{{ t("access.common.backToOrders") }}</el-button>
       </header>
 
       <div class="strip">
         <div class="strip-item">
-          <span>当前状态</span><strong>{{ AccessStatusLabel[application.status] }}</strong>
+          <span>{{ t("access.common.currentStatus") }}</span><strong>{{ localizeText(AccessStatusLabel[application.status]) }}</strong>
         </div>
         <div class="strip-item">
-          <span>业务类型 / 渠道</span>
+          <span>{{ t("access.common.scenarioChannel") }}</span>
           <strong>{{ application.scenario_name || "-" }} · {{ application.channel_name || "-" }}</strong>
         </div>
         <div class="strip-item">
-          <span>材料完整度</span>
+          <span>{{ t("access.common.completeness") }}</span>
           <strong>{{ application.completeness.done }} / {{ application.completeness.total }}</strong>
         </div>
         <div class="strip-item">
-          <span>最后更新</span><strong>{{ formatRelative(application.updated_at) }}</strong>
+          <span>{{ t("access.common.lastUpdated") }}</span><strong>{{ formatRelative(application.updated_at) }}</strong>
         </div>
       </div>
 
       <div class="layout">
         <el-card shadow="never" class="main-card">
           <template #header>
-            <strong>材料目录</strong>
-            <span class="head-sub">只读工单快照</span>
+            <strong>{{ t("access.detail.materialsTitle") }}</strong>
+            <span class="head-sub">{{ t("access.detail.readonlySnapshot") }}</span>
           </template>
           <div v-for="material in application.materials" :key="material.material_key" class="doc-row">
             <span class="doc-icon">
-              {{ (material.file?.original_name.split(".").pop() || "档").toUpperCase().slice(0, 4) }}
+              {{ (material.file?.original_name.split(".").pop() || t("access.common.extFallback")).toUpperCase().slice(0, 4) }}
             </span>
             <span class="doc-main">
               <strong>{{ material.name }}</strong>
               <small>
-                {{ MaterialSourceLabel[material.source] }}
-                {{ material.return_reason ? ` · 退回原因：${material.return_reason}` : "" }}
+                {{ localizeText(MaterialSourceLabel[material.source]) }}
+                {{ material.return_reason ? ` · ${t("access.common.returnReason", { reason: material.return_reason })}` : "" }}
               </small>
             </span>
             <el-tag :type="materialTagType[material.status]" effect="light" size="small">
-              {{ ApplicationMaterialStatusLabel[material.status] }}
+              {{ localizeText(ApplicationMaterialStatusLabel[material.status]) }}
             </el-tag>
-            <el-button size="small" :disabled="!material.file" @click="preview(material)">预览</el-button>
-            <el-button size="small" :disabled="!material.file" @click="preview(material, true)">下载</el-button>
+            <el-button size="small" :disabled="!material.file" @click="preview(material)">{{ t("access.common.preview") }}</el-button>
+            <el-button size="small" :disabled="!material.file" @click="preview(material, true)">{{ t("access.detail.download") }}</el-button>
           </div>
-          <el-empty v-if="!application.materials.length" description="暂无材料" />
+          <el-empty v-if="!application.materials.length" :description="t('access.detail.noMaterials')" />
         </el-card>
 
         <el-card shadow="never" class="side-card">
           <template #header>
-            <strong>工单记录</strong>
-            <span class="head-sub">{{ application.latest_review?.reason || "最近处理动态" }}</span>
+            <strong>{{ t("access.common.orderLog") }}</strong>
+            <span class="head-sub">{{ application.latest_review?.reason || t("access.common.recentActivity") }}</span>
           </template>
           <el-timeline>
             <el-timeline-item
