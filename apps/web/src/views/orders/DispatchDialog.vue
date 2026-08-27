@@ -19,31 +19,10 @@ const { t } = useI18n();
 const submitting = ref(false);
 const vaAccounts = ref<VaAccountVO[]>([]);
 const treasury = ref<TreasuryAccountVO[]>([]);
-const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, va_account_id: "", payout_account: "", text: "" });
+const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, text: "" });
 
 const sgb = computed(() => treasury.value.find(item => item.key.startsWith("bank-SGB-")));
 const sino = computed(() => treasury.value.find(item => item.key.startsWith("bank-SINO-")));
-const selectedVa = computed(() => vaAccounts.value.find(item => item.id === form.va_account_id) ?? null);
-
-/** demo composeDispatchText 模板 */
-function defaultPayoutAccount(): string {
-  const order = props.order!;
-  return form.channel === DispatchChannel.SGB
-    ? `${(order.person_name || order.customer_name).toUpperCase()} SGB VA`
-    : "pobo cq開-開";
-}
-
-function templateText(): string {
-  const order = props.order!;
-  const amount = order.buy_amount.toLocaleString("en-US", { minimumFractionDigits: 2 });
-  const title = `補單:${order.customer_code || "无编号"}`;
-  const raw = "（在此粘贴客户提供的收款账户资料，或直接编辑）";
-  if (form.channel === DispatchChannel.SGB) {
-    const va = selectedVa.value;
-    return `* sgb（渠道2）\n\n${title}\n\n${raw}\n\n金額：${amount} ${order.buy_currency.toLowerCase()}\n出款帳戶：${form.payout_account || defaultPayoutAccount()}\nAccount 1：\nVirtual Account Number：${va?.virtual_account_number || "未匹配 VA"}\nIBAN：${va?.iban || "未匹配 VA"}\nCurrency：${va?.currency || order.buy_currency}`;
-  }
-  return `* sino(渠道1) pobo\n\n${title}\n${raw}\n\n金額: ${order.buy_currency}${amount}\n出款賬戶: ${form.payout_account || defaultPayoutAccount()}`;
-}
 
 watch(visible, async open => {
   if (!open || !props.order) return;
@@ -51,37 +30,38 @@ watch(visible, async open => {
   vaAccounts.value = context.va_accounts;
   treasury.value = context.treasury;
   form.channel = vaAccounts.value.length ? DispatchChannel.SGB : DispatchChannel.SINO;
-  form.va_account_id = vaAccounts.value[0]?.id ?? "";
-  form.payout_account = defaultPayoutAccount();
-  form.text = templateText();
+  form.text = "";
 });
 
-watch(() => form.channel, () => {
-  if (visible.value && props.order) {
-    form.payout_account = defaultPayoutAccount();
-    form.text = templateText();
+/** 一键复制 VA 收款要素，供排单文案粘贴（排单文案沿用 demo 繁体口径） */
+async function copyVa(va: VaAccountVO) {
+  const block = [
+    `出款帳戶：${va.label}`,
+    "Account 1：",
+    `Virtual Account Number：${va.virtual_account_number}`,
+    `IBAN：${va.iban}`,
+    `Currency：${va.currency}`,
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(block);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = block;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
   }
-});
-
-watch(() => [form.va_account_id, form.payout_account], () => {
-  if (visible.value && props.order) form.text = templateText();
-});
+  ElMessage.success(t("orders.dispatch.vaCopied", { label: va.label }));
+}
 
 async function submit() {
   const order = props.order!;
   const text = form.text.trim();
   if (!text) return ElMessage.warning(t("orders.dispatch.warnEmptyText"));
-  if (text.includes("（在此粘贴客户提供的收款账户资料，或直接编辑）")) {
-    return ElMessage.warning(t("orders.dispatch.warnPlaceholderRemains"));
-  }
   submitting.value = true;
   try {
-    const updated = await createDispatch(order.id, {
-      channel: form.channel,
-      text,
-      va_account_id: form.channel === DispatchChannel.SGB ? form.va_account_id || null : null,
-      payout_account: form.payout_account.trim() || null,
-    });
+    const updated = await createDispatch(order.id, { channel: form.channel, text });
     ElMessage.success(t("orders.dispatch.submitted", { orderNo: order.order_no }));
     visible.value = false;
     emit("done", updated);
@@ -99,29 +79,41 @@ async function submit() {
       <div><span>{{ t("orders.dispatch.payableAmount") }}</span><strong>{{ order ? `${order.buy_currency} ${order.buy_amount.toLocaleString("en-US")}` : "—" }}</strong></div>
     </div>
     <el-form label-position="top">
-      <div class="grid">
-        <el-form-item :label="t('orders.dispatch.channel')">
-          <el-radio-group v-model="form.channel">
-            <el-radio-button :value="DispatchChannel.SGB">SGB</el-radio-button>
-            <el-radio-button :value="DispatchChannel.SINO">SINO</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item :label="t('orders.common.payoutAccount')">
-          <el-input v-model="form.payout_account" maxlength="60" :placeholder="t('orders.dispatch.payoutAccountPlaceholder')" />
-        </el-form-item>
-        <el-form-item v-if="form.channel === 'SGB'" :label="t('orders.dispatch.vaAccount')">
-          <el-select v-model="form.va_account_id" :placeholder="vaAccounts.length ? t('orders.dispatch.selectVa') : t('orders.dispatch.noVa')" style="width: 100%">
-            <el-option
-              v-for="va in vaAccounts"
-              :key="va.id"
-              :value="va.id"
-              :label="`${va.label} · ${va.virtual_account_number} · ${va.currency}`"
-            />
-          </el-select>
-        </el-form-item>
+      <el-form-item :label="t('orders.dispatch.channel')">
+        <el-radio-group v-model="form.channel">
+          <el-radio-button :value="DispatchChannel.SGB">SGB</el-radio-button>
+          <el-radio-button :value="DispatchChannel.SINO">SINO</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+
+      <div v-if="form.channel === 'SGB'" class="va-panel">
+        <div class="va-head">
+          {{ t("orders.dispatch.vaAccount") }}
+          <span>{{ t("orders.dispatch.vaBrowseHint") }}</span>
+        </div>
+        <div v-if="vaAccounts.length" class="va-list">
+          <div v-for="va in vaAccounts" :key="va.id" class="va-card">
+            <div class="va-lines">
+              <div><span>{{ t("orders.dispatch.vaLabel") }}</span><code>{{ va.label }}</code></div>
+              <div><span>Virtual Account Number</span><code>{{ va.virtual_account_number }}</code></div>
+              <div><span>IBAN</span><code>{{ va.iban }}</code></div>
+              <div><span>Currency</span><code>{{ va.currency }}</code></div>
+            </div>
+            <el-button size="small" @click="copyVa(va)">{{ t("orders.dispatch.vaCopy") }}</el-button>
+          </div>
+        </div>
+        <p v-else class="va-empty">{{ t("orders.dispatch.noVa") }}</p>
       </div>
+
       <el-form-item :label="t('orders.dispatch.textLabel')">
-        <el-input v-model="form.text" type="textarea" :rows="12" class="mono-text" />
+        <el-input
+          v-model="form.text"
+          type="textarea"
+          :rows="10"
+          resize="none"
+          class="mono-text"
+          :placeholder="t('orders.dispatch.textPlaceholder')"
+        />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -151,15 +143,69 @@ async function submit() {
   font-size: 12px;
 }
 
-.grid {
+.va-panel {
+  margin-bottom: 14px;
+}
+
+.va-head {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.va-head span {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.va-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.va-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafbfc;
+}
+
+.va-lines {
   display: grid;
-  grid-template-columns: auto 1fr 1fr;
-  gap: 0 14px;
+  gap: 2px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.va-lines span {
+  color: #909399;
+  margin-right: 8px;
+}
+
+.va-lines code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.va-empty {
+  margin: 0;
+  color: #909399;
+  font-size: 12px;
 }
 
 .mono-text :deep(textarea) {
   font-family: ui-monospace, monospace;
   font-size: 12px;
   line-height: 1.7;
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>
