@@ -47,7 +47,7 @@
 | 1.2.7 | B | `OrderPanel.vue` | quote 快照落库后详情页完全不展示 |
 | 1.2.8 | A/B | `seed.mjs:473` | seed 订单 business_type 全 null → 详情"业务类型 —" |
 | 1.2.9 | B | `order.service.ts:711-719` | business_type 为 null 时 KYC 徽标退化为"该客户任意申请的最优状态"→ 业务类型显示 — 而 KYC 显示已通过，互相矛盾 |
-| 1.2.10 | B | `order.service.ts:713` | 订单存 business_type 字符串匹配 scenario_name 字符串，改场景名即断链；应存 scenario_id |
+| 1.2.10 | B | `order.service.ts:713` | 订单存 business_type 字符串匹配 scenario_name 字符串，改场景名即断链；应存 scenario_id。已修：运行时改存 business_scenario_id（9c62a5e）；seed 侧申请 scenario_id 与订单 business_scenario_id 均按名称查 kyc_scenarios 真实回填，seed 数据同样改名不断链 |
 | 1.2.11 | B | `shared/order.ts:143` | 「KYC已过期」徽标存在但全仓库无任何代码写 EXPIRED；材料 validity 配置从不参与判断 |
 
 ### 1.3 单号时区

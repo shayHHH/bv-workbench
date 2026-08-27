@@ -430,10 +430,13 @@ await db.collection("va_accounts").insertMany([
 
 /* 已通过的准入申请（订单 KYC 徽标联查用；scenario 取 demo 第一个业务类型） */
 const kycScenarioName = "港币/美元/外币私户打款买U";
+/* 按名称查真实 kyc_scenarios 拿 _id 回填，seed 数据同样具备"改场景名不断链"性质（审计 1.2.10） */
+const kycScenarioDoc = await db.collection("kyc_scenarios").findOne({ scenario_name: kycScenarioName, is_deleted: false });
+const kycScenarioId = kycScenarioDoc?._id ?? null;
 const approvedAccess = (no, customerId, name, code) => ({
   application_no: no, customer_id: customerId,
   customer_snapshot: { name, customer_code: code, customer_kind: "DIRECT" },
-  scenario_id: null, scenario_code: "1", scenario_name: kycScenarioName,
+  scenario_id: kycScenarioId, scenario_code: "1", scenario_name: kycScenarioName,
   channel_code: "SGB", channel_name: "SGB", review_type: "FX",
   form: { customer_cn_name: name, customer_en_name: null, business_note: null },
   materials: [], status: "APPROVED", owner_user_id: null, owner_name: "sinclair",
@@ -509,7 +512,8 @@ await db.collection("quote_records").insertOne({
 /* business_type 默认取客户已通过的准入业务类型（审计 1.2.8：避免"业务类型 — 而 KYC 已通过"的矛盾） */
 const orderDoc = (no, customerId, name, code, tradeType, sellCur, sellAmt, buyCur, buyAmt, rate, payMethod, status, extra = {}) => ({
   order_no: no, customer_id: customerId, customer_name: name, customer_code: code, person_name: null,
-  business_type: extra.business_type ?? kycScenarioName, trade_type: tradeType,
+  business_type: extra.business_type ?? kycScenarioName,
+  business_scenario_id: extra.business_scenario_id ?? kycScenarioId, trade_type: tradeType,
   sell_currency: sellCur, sell_amount: D(String(sellAmt)), buy_currency: buyCur, buy_amount: D(String(buyAmt)),
   rate, pay_method: payMethod, remark: extra.remark ?? null, quote: extra.quote ?? null,
   status, handler_name: extra.handler ?? "sinclair", owner_user_id: null, dispatch_id: extra.dispatch_id ?? null,
