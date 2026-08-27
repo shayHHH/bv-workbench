@@ -102,6 +102,8 @@ export default {
       addItem: "新增报价配置项",
       itemAdded: "已新增报价项",
       itemRemoved: "已删除该报价项",
+      removeConfirmTitle: "删除报价项",
+      removeConfirmText: "确认删除报价项「{name}」？删除后随配置自动保存，不可恢复。",
       saveFailed: "保存报价配置失败",
     },
     benchmark: {

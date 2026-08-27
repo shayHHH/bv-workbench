@@ -24,7 +24,7 @@ import type {
   VariableOptionVO,
 } from "@bv/shared";
 import { RoundMode, RoundModeLabel } from "@bv/shared";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
@@ -335,9 +335,24 @@ function addItem() {
   ElMessage.success(t("quote.quick.itemAdded"));
 }
 
-function removeItem(index: number) {
+async function removeItem(index: number) {
   const cfg = config.value;
   if (!cfg || cfg.items.length <= 1) return;
+  const item = cfg.items[index];
+  const name = `${item.trade_type || t("quote.batch.uncategorized")} / ${item.prefix || t("quote.batch.unnamed")}`;
+  try {
+    await ElMessageBox.confirm(
+      t("quote.quick.removeConfirmText", { name }),
+      t("quote.quick.removeConfirmTitle"),
+      {
+        type: "warning",
+        confirmButtonText: t("quote.batch.confirmDelete"),
+        cancelButtonText: t("quote.batch.cancel"),
+      },
+    );
+  } catch {
+    return; // 用户取消
+  }
   cfg.items.splice(index, 1);
   ElMessage.success(t("quote.quick.itemRemoved"));
 }
