@@ -12,6 +12,8 @@ import {
 } from "@bv/shared";
 import { Plus, Refresh, Search } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRoute } from "vue-router";
 import { fetchCustomers } from "@/api/customer";
 import { useAuthStore } from "@/stores/auth";
@@ -20,6 +22,7 @@ import CustomerCreateDialog from "./CustomerCreateDialog.vue";
 import CustomerDetailDrawer from "./CustomerDetailDrawer.vue";
 import CustomerEditDialog from "./CustomerEditDialog.vue";
 
+const { t } = useI18n();
 const route = useRoute();
 const auth = useAuthStore();
 
@@ -127,19 +130,19 @@ const riskClass: Record<RiskLevel, string> = {
 
 /* el-table 插槽 row 无类型，统一经带类型的辅助函数取展示内容 */
 const kindText = (row: TableRow) =>
-  row.rowType === "sub" ? "中介下级" : CustomerKindLabel[row.c.customer_kind];
-const subTypeText = (row: TableRow) => (row.c.sub_type ? CustomerSubTypeLabel[row.c.sub_type] : "");
+  row.rowType === "sub" ? t("customer.list.kindSub") : localizeText(CustomerKindLabel[row.c.customer_kind]);
+const subTypeText = (row: TableRow) => (row.c.sub_type ? localizeText(CustomerSubTypeLabel[row.c.sub_type]) : "");
 const regionText = (row: TableRow) => {
   const region = row.c.region ?? row.parent?.region ?? null;
-  return region ? RegionLabel[region] : "未填写地区";
+  return region ? localizeText(RegionLabel[region]) : t("customer.list.regionEmpty");
 };
-const statusText = (row: TableRow) => CustomerStatusLabel[row.c.customer_status];
+const statusText = (row: TableRow) => localizeText(CustomerStatusLabel[row.c.customer_status]);
 const statusType = (row: TableRow) => statusTagType[row.c.customer_status];
-const riskText = (row: TableRow) => RiskLevelLabel[row.c.risk_level];
+const riskText = (row: TableRow) => localizeText(RiskLevelLabel[row.c.risk_level]);
 const riskCls = (row: TableRow) => riskClass[row.c.risk_level];
 const ownerText = (row: TableRow) => {
   const agent = row.c.agent_name ?? row.parent?.agent_name ?? null;
-  return agent ? `交易员 ${agent}` : "待分配";
+  return agent ? t("customer.list.ownerAgent", { name: agent }) : t("customer.common.unassigned");
 };
 const updatedText = (row: TableRow) => formatRelative(row.c.updated_at);
 const isIntermediary = (row: TableRow) =>
@@ -183,11 +186,11 @@ onMounted(load);
     <header class="page-header">
       <div>
         <p class="eyebrow">CLIENT MASTER</p>
-        <h1>客户管理</h1>
-        <p class="subtitle">一个客户主档承载多次申请、钱包地址、额度、凭证和审批记录。</p>
+        <h1>{{ t("customer.list.title") }}</h1>
+        <p class="subtitle">{{ t("customer.list.subtitle") }}</p>
       </div>
       <el-button v-if="canManage" type="primary" :icon="Plus" @click="createVisible = true">
-        新建客户
+        {{ t("customer.list.create") }}
       </el-button>
     </header>
 
@@ -196,20 +199,20 @@ onMounted(load);
         <el-input
           v-model="query.keyword"
           class="keyword"
-          placeholder="搜索客户名称、编号或交易员"
+          :placeholder="t('customer.list.searchPh')"
           clearable
           :prefix-icon="Search"
           @keyup.enter="search"
           @clear="search"
         />
-        <el-select v-model="query.customer_status" class="filter" placeholder="全部状态" clearable @change="search">
+        <el-select v-model="query.customer_status" class="filter" :placeholder="t('customer.list.allStatus')" clearable @change="search">
           <el-option v-for="(label, value) in CustomerStatusLabel" :key="value" :label="label" :value="value" />
         </el-select>
-        <el-select v-model="query.customer_kind" class="filter" placeholder="全部类型" clearable @change="search">
+        <el-select v-model="query.customer_kind" class="filter" :placeholder="t('customer.list.allKind')" clearable @change="search">
           <el-option v-for="(label, value) in CustomerKindLabel" :key="value" :label="label" :value="value" />
         </el-select>
-        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
-        <span class="count">共 {{ total }} / {{ totalAll }} 位客户</span>
+        <el-button :icon="Refresh" @click="resetFilters">{{ t("customer.list.reset") }}</el-button>
+        <span class="count">{{ t("customer.list.countSummary", { total, totalAll }) }}</span>
       </div>
 
       <el-table
@@ -218,7 +221,7 @@ onMounted(load);
         :row-key="(row: TableRow) => `${row.rowType}-${row.c.id}`"
         :row-class-name="({ row }: { row: TableRow }) => (row.rowType === 'sub' ? 'sub-row' : '')"
       >
-        <el-table-column label="客户" min-width="220">
+        <el-table-column :label="t('customer.list.colCustomer')" min-width="220">
           <template #default="{ row }">
             <div class="cell-primary" :class="{ sub: row.rowType === 'sub' }">
               <button
@@ -238,42 +241,42 @@ onMounted(load);
                 <button class="name-link" type="button" @click.stop="openDrawer(row)">
                   {{ row.c.name }}
                 </button>
-                <small>{{ row.c.customer_code || "无编号" }}</small>
+                <small>{{ row.c.customer_code || t("customer.common.noCode") }}</small>
               </span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="客户类型 / 地区" min-width="130">
+        <el-table-column :label="t('customer.list.colKindRegion')" min-width="130">
           <template #default="{ row }">
             {{ kindText(row) }}
             <div v-if="subTypeText(row)" class="sub-type">{{ subTypeText(row) }}</div>
             <div class="muted">{{ regionText(row) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="当前状态" min-width="100">
+        <el-table-column :label="t('customer.common.currentStatus')" min-width="100">
           <template #default="{ row }">
             <el-tag :type="statusType(row)" effect="light">{{ statusText(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="风险" min-width="90">
+        <el-table-column :label="t('customer.list.colRisk')" min-width="90">
           <template #default="{ row }">
             <span :class="riskCls(row)">{{ riskText(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="负责人" min-width="110">
+        <el-table-column :label="t('customer.list.colOwner')" min-width="110">
           <template #default="{ row }">{{ ownerText(row) }}</template>
         </el-table-column>
-        <el-table-column label="最后更新" min-width="100">
+        <el-table-column :label="t('customer.common.lastUpdated')" min-width="100">
           <template #default="{ row }"><span class="muted">{{ updatedText(row) }}</span></template>
         </el-table-column>
-        <el-table-column v-if="canManage" label="操作" min-width="100" align="right">
+        <el-table-column v-if="canManage" :label="t('customer.list.colActions')" min-width="100" align="right">
           <template #default="{ row }">
-            <el-button size="small" @click.stop="openEdit(row)">编辑信息</el-button>
+            <el-button size="small" @click.stop="openEdit(row)">{{ t("customer.common.editInfo") }}</el-button>
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty description="没有匹配的客户，调整关键词或清除筛选条件">
-            <el-button @click="resetFilters">清除筛选</el-button>
+          <el-empty :description="t('customer.list.emptyText')">
+            <el-button @click="resetFilters">{{ t("customer.list.clearFilters") }}</el-button>
           </el-empty>
         </template>
       </el-table>

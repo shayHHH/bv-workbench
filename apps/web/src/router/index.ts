@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { localizeText } from "@/i18n";
 import AppLayout from "@/layout/AppLayout.vue";
 import { useAuthStore } from "@/stores/auth";
 
@@ -27,7 +28,8 @@ export const router = createRouter({
           path: "customers",
           name: "customers",
           component: () => import("@/views/customer/CustomerListView.vue"),
-          meta: { title: "客户管理", roles: ["AGENT", "OPS", "MANAGER", "FINANCE", "ADMIN"] },
+          /* 用户 2026-08-27：客户管理与客户详情抽屉全员可看（meta.roles 为空＝所有登录角色） */
+          meta: { title: "客户管理" },
         },
         {
           path: "quote/quick",
@@ -87,25 +89,37 @@ export const router = createRouter({
           path: "compliance/review",
           name: "complianceReview",
           component: () => import("@/views/compliance/ReviewQueueView.vue"),
-          meta: { title: "合规审核", roles: ["COMPLIANCE", "ADMIN"] },
+          meta: { title: "合规审核", roles: ["COMPLIANCE", "RISK_OFFICER", "ADMIN"] },
         },
         {
           path: "compliance/review/:id",
           name: "complianceReviewDetail",
           component: () => import("@/views/compliance/ReviewDetailView.vue"),
-          meta: { title: "审核详情", roles: ["COMPLIANCE", "ADMIN"] },
+          meta: { title: "审核详情", roles: ["COMPLIANCE", "RISK_OFFICER", "ADMIN"] },
         },
         {
           path: "compliance/kyc-config",
           name: "complianceKycConfig",
           component: () => import("@/views/compliance/KycConfigView.vue"),
-          meta: { title: "KYC list 配置", roles: ["COMPLIANCE", "ADMIN"] },
+          meta: { title: "KYC list 配置", roles: ["COMPLIANCE", "RISK_OFFICER", "ADMIN"] },
+        },
+        {
+          path: "compliance/audit",
+          name: "complianceAudit",
+          component: () => import("@/views/compliance/AuditLogView.vue"),
+          meta: { title: "审计日志", roles: ["COMPLIANCE", "RISK_OFFICER", "ADMIN"] },
         },
         {
           path: "orders",
           name: "orders",
           component: () => import("@/views/orders/TradeOrdersView.vue"),
           meta: { title: "交易订单", roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"] },
+        },
+        {
+          path: "department",
+          name: "department",
+          component: () => import("@/views/department/DepartmentView.vue"),
+          meta: { title: "部门管理", roles: ["MANAGER"] },
         },
         {
           path: "admin/users",
@@ -139,5 +153,6 @@ router.beforeEach(to => {
 
 router.afterEach(to => {
   const title = (to.meta.title as string | undefined) ?? "";
-  document.title = title ? `${title} · Bitvast Workbench` : "Bitvast Workbench";
+  /* meta.title 统一写简体，展示按当前语言转换（切换语言时由 AppLayout 的 watch 同步） */
+  document.title = title ? `${localizeText(title)} · Bitvast Workbench` : "Bitvast Workbench";
 });

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Calendar,
   EditPen,
   FolderOpened,
   Lock,
@@ -12,10 +13,10 @@ import {
   Tickets,
   User,
 } from "@element-plus/icons-vue";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
-import { type AppLocale, setLocale } from "@/i18n";
+import { type AppLocale, localizeText, setLocale } from "@/i18n";
 import { useAuthStore } from "@/stores/auth";
 import UserProfileDialogs from "./UserProfileDialogs.vue";
 
@@ -35,8 +36,10 @@ interface MenuItem {
 
 const menu: MenuItem[] = [
   { path: "/dashboard", titleKey: "layout.menu.dashboard", icon: Monitor },
-  { path: "/customers", titleKey: "layout.menu.customers", icon: User, roles: ["AGENT", "OPS", "MANAGER", "FINANCE", "ADMIN"] },
+  /* 客户管理全员可见（用户 2026-08-27：每个角色都可以看客户列表与详情抽屉） */
+  { path: "/customers", titleKey: "layout.menu.customers", icon: User },
   { path: "/orders", titleKey: "layout.menu.orders", icon: Tickets, roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET"] },
+  { path: "/department", titleKey: "layout.menu.department", icon: Calendar, roles: ["MANAGER"] },
   {
     path: "/quote",
     titleKey: "layout.menu.quote",
@@ -63,10 +66,12 @@ const menu: MenuItem[] = [
     path: "/compliance",
     titleKey: "layout.menu.compliance",
     icon: Stamp,
-    roles: ["COMPLIANCE", "ADMIN"],
+    /* 风控专员＝合规官（RISK_OFFICER 为 admin 自建角色，真实名单在用） */
+    roles: ["COMPLIANCE", "RISK_OFFICER", "ADMIN"],
     children: [
       { path: "/compliance/review", titleKey: "layout.menu.complianceReview" },
       { path: "/compliance/kyc-config", titleKey: "layout.menu.complianceKycConfig" },
+      { path: "/compliance/audit", titleKey: "layout.menu.complianceAudit" },
     ],
   },
   {
@@ -89,13 +94,28 @@ const visibleMenu = computed(() =>
   menu.filter(item => !item.roles || item.roles.includes(auth.roleCode)),
 );
 
+/* 审计 3.4：环境标示按构建环境区分，不再写死"正式环境" */
+const envNote = computed(() => (import.meta.env.PROD ? t("layout.envProd") : t("layout.envDev")));
+
+/* 切换语言时同步浏览器标签标题（路由 meta.title 为简体，经 localizeText 转当前语言） */
+watch(locale, () => {
+  const title = route.meta.title as string | undefined;
+  document.title = title ? `${localizeText(title)} · Bitvast Workbench` : "Bitvast Workbench";
+});
+
 const searchText = ref("");
 const profileVisible = ref(false);
 const passwordVisible = ref(false);
 
+/* 审计 3.5：单号前缀路由（TO/SCH→订单，APP→审核跟踪，RC→合规队列），其余按客户搜索 */
 function submitSearch() {
   const keyword = searchText.value.trim();
-  router.push({ path: "/customers", query: keyword ? { kw: keyword } : {} });
+  const upper = keyword.toUpperCase();
+  let path = "/customers";
+  if (/^(TO|SCH)-/.test(upper)) path = "/orders";
+  else if (/^APP-/.test(upper)) path = "/access/documents";
+  else if (/^RC-/.test(upper)) path = "/compliance/review";
+  router.push({ path, query: keyword ? { kw: keyword } : {} });
 }
 
 function logout() {
@@ -114,7 +134,7 @@ function logout() {
           <small>Trade Workbench</small>
         </div>
       </div>
-      <div class="workspace-label">业务工作台</div>
+      <div class="workspace-label">{{ t("layout.workspace") }}</div>
       <el-menu :default-active="route.path" router class="menu">
         <template v-for="item in visibleMenu" :key="item.path">
           <el-sub-menu v-if="item.children" :index="item.path">
@@ -132,14 +152,14 @@ function logout() {
           </el-menu-item>
         </template>
       </el-menu>
-      <div class="sidebar-note"><span></span>正式环境 · 数据实时入库</div>
+      <div class="sidebar-note"><span></span>{{ envNote }}</div>
     </el-aside>
     <el-container>
       <el-header class="topbar">
         <el-input
           v-model="searchText"
           class="global-search"
-          placeholder="搜索客户、案件编号或交易编号"
+          :placeholder="t('layout.searchPh')"
           :prefix-icon="Search"
           clearable
           @keyup.enter="submitSearch"
@@ -175,15 +195,15 @@ function logout() {
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="profileVisible = true">
                   <el-icon><EditPen /></el-icon>
-                  个人资料
+                  {{ t("layout.profile") }}
                 </el-dropdown-item>
                 <el-dropdown-item @click="passwordVisible = true">
                   <el-icon><Lock /></el-icon>
-                  修改密码
+                  {{ t("layout.changePassword") }}
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="logout">
                   <el-icon><SwitchButton /></el-icon>
-                  退出登录
+                  {{ t("layout.logout") }}
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>

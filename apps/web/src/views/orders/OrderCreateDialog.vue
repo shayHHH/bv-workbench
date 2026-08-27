@@ -9,6 +9,7 @@ import {
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { fetchCustomers } from "@/api/customer";
 import { fetchActiveScenarios } from "@/api/kyc";
 import { createOrder, fetchQuoteCandidates } from "@/api/order";
@@ -16,6 +17,8 @@ import { formatDateTime } from "@/utils/format";
 
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ created: [order: TradeOrderVO] }>();
+
+const { t } = useI18n();
 
 const submitting = ref(false);
 const customerLoading = ref(false);
@@ -70,7 +73,7 @@ function applyTradeTypePreset(type: string) {
   /* 审计 1.2.3：切换交易类型会重置币种与预设汇率，与已选报价冲突，先清除关联 */
   if (form.quote_record_id) {
     form.quote_record_id = "";
-    ElMessage.info("交易类型已变更，已清除关联报价，请重新选择");
+    ElMessage.info(t("orders.create.typeChangedQuoteCleared"));
   }
   const preset = TRADE_TYPE_PRESETS[type];
   if (preset) {
@@ -94,10 +97,10 @@ function pickQuote(id: string) {
 
 async function submit() {
   const tradeType = form.trade_type === "自定义" ? form.custom_trade_type.trim() : form.trade_type;
-  if (!form.customer_id) return ElMessage.warning("请选择客户");
-  if (!tradeType) return ElMessage.warning("请选择或输入交易类型");
-  if (!form.sell_amount) return ElMessage.warning("请填写客户卖出金额");
-  if (!form.buy_amount) return ElMessage.warning("请填写客户买入金额（两侧金额均需手动填写）");
+  if (!form.customer_id) return ElMessage.warning(t("orders.create.selectCustomer"));
+  if (!tradeType) return ElMessage.warning(t("orders.create.selectTradeType"));
+  if (!form.sell_amount) return ElMessage.warning(t("orders.create.fillSellAmount"));
+  if (!form.buy_amount) return ElMessage.warning(t("orders.create.fillBuyAmount"));
   /* 审计 1.2.6：执行汇率与关联报价不一致时要求确认 */
   const pickedQuote = form.quote_record_id
     ? quotes.value.find(item => item.quote_record_id === form.quote_record_id)
@@ -105,9 +108,9 @@ async function submit() {
   if (pickedQuote && form.rate.trim() !== pickedQuote.result) {
     try {
       await ElMessageBox.confirm(
-        `执行汇率（${form.rate}）与关联报价（${pickedQuote.result}）不一致，确认按执行汇率 ${form.rate} 建单？`,
-        "汇率不一致",
-        { confirmButtonText: "确认建单", cancelButtonText: "返回修改" },
+        t("orders.create.rateMismatchConfirm", { rate: form.rate, quoteRate: pickedQuote.result }),
+        t("orders.create.rateMismatchTitle"),
+        { confirmButtonText: t("orders.create.confirmCreate"), cancelButtonText: t("orders.create.backToEdit") },
       );
     } catch {
       return;
@@ -131,7 +134,10 @@ async function submit() {
       remark: form.remark.trim() || null,
       quote_record_id: form.quote_record_id || null,
     });
-    ElMessage.success(`订单已创建：${order.order_no} · ${order.status === "PENDING_KYC" ? "进入待KYC" : "KYC已通过，进入待客户入款"}`);
+    ElMessage.success(t("orders.create.createdSuccess", {
+      orderNo: order.order_no,
+      next: order.status === "PENDING_KYC" ? t("orders.create.createdNextPendingKyc") : t("orders.create.createdNextInflow"),
+    }));
     visible.value = false;
     emit("created", order);
   } finally {
@@ -141,17 +147,17 @@ async function submit() {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="新建交易订单" width="640px" :close-on-click-modal="false">
+  <el-dialog v-model="visible" :title="t('orders.create.title')" width="640px" :close-on-click-modal="false">
     <el-form label-position="top">
       <div class="grid">
-        <el-form-item label="客户" required>
+        <el-form-item :label="t('orders.create.customer')" required>
           <el-select
             v-model="form.customer_id"
             filterable
             remote
             :remote-method="searchCustomers"
             :loading="customerLoading"
-            placeholder="输入客户名称 / 编号搜索"
+            :placeholder="t('orders.create.customerPlaceholder')"
             style="width: 100%"
           >
             <el-option
@@ -162,31 +168,31 @@ async function submit() {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="准入业务类型">
-          <el-select v-model="form.business_scenario_id" clearable placeholder="决定订单 KYC 校验口径" style="width: 100%">
+        <el-form-item :label="t('orders.create.bizScenario')">
+          <el-select v-model="form.business_scenario_id" clearable :placeholder="t('orders.create.bizScenarioPlaceholder')" style="width: 100%">
             <el-option v-for="s in scenarios" :key="s.id" :value="s.id" :label="`#${s.scenario_code} · ${s.scenario_name}`" />
           </el-select>
         </el-form-item>
       </div>
       <div class="grid">
-        <el-form-item label="交易类型" required>
+        <el-form-item :label="t('orders.create.tradeType')" required>
           <el-select v-model="form.trade_type" style="width: 100%" @change="applyTradeTypePreset">
             <el-option v-for="type in Object.keys(TRADE_TYPE_PRESETS)" :key="type" :value="type" :label="type" />
-            <el-option value="自定义" label="自定义…" />
+            <el-option value="自定义" :label="t('orders.create.customTypeOption')" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="form.trade_type === '自定义'" label="自定义类型" required>
+        <el-form-item v-if="form.trade_type === '自定义'" :label="t('orders.create.customType')" required>
           <el-input v-model="form.custom_trade_type" maxlength="30" />
         </el-form-item>
-        <el-form-item v-else label="收款方式">
+        <el-form-item v-else :label="t('orders.create.payMethod')">
           <el-select v-model="form.pay_method" style="width: 100%">
             <el-option v-for="method in PAY_METHODS" :key="method" :value="method" :label="method" />
           </el-select>
         </el-form-item>
       </div>
       <div class="grid legs">
-        <el-form-item label="客户卖出" required>
-          <el-input v-model.number="form.sell_amount" type="number" placeholder="金额">
+        <el-form-item :label="t('orders.common.customerSell')" required>
+          <el-input v-model.number="form.sell_amount" type="number" :placeholder="t('orders.create.amountPlaceholder')">
             <template #prepend>
               <el-select v-model="form.sell_currency" style="width: 90px">
                 <el-option v-for="c in ORDER_CURRENCIES" :key="c" :value="c" :label="c" />
@@ -194,8 +200,8 @@ async function submit() {
             </template>
           </el-input>
         </el-form-item>
-        <el-form-item label="客户买入" required>
-          <el-input v-model.number="form.buy_amount" type="number" placeholder="金额">
+        <el-form-item :label="t('orders.common.customerBuy')" required>
+          <el-input v-model.number="form.buy_amount" type="number" :placeholder="t('orders.create.amountPlaceholder')">
             <template #prepend>
               <el-select v-model="form.buy_currency" style="width: 90px">
                 <el-option v-for="c in ORDER_CURRENCIES" :key="c" :value="c" :label="c" />
@@ -205,11 +211,11 @@ async function submit() {
         </el-form-item>
       </div>
       <div class="grid">
-        <el-form-item label="执行汇率" required>
+        <el-form-item :label="t('orders.common.execRate')" required>
           <el-input v-model="form.rate" maxlength="20" />
         </el-form-item>
-        <el-form-item label="关联报价（客户近期报价记录）">
-          <el-select v-model="form.quote_record_id" clearable placeholder="可选；选择后带入汇率" style="width: 100%" @change="pickQuote">
+        <el-form-item :label="t('orders.create.quoteLink')">
+          <el-select v-model="form.quote_record_id" clearable :placeholder="t('orders.create.quoteLinkPlaceholder')" style="width: 100%" @change="pickQuote">
             <el-option
               v-for="quote in quotes"
               :key="quote.quote_record_id"
@@ -219,16 +225,16 @@ async function submit() {
           </el-select>
         </el-form-item>
       </div>
-      <el-form-item label="客户英文名 / 收款人名">
-        <el-input v-model="form.person_name" maxlength="80" placeholder="用于出款排单收款要素（可选）" />
+      <el-form-item :label="t('orders.create.personName')">
+        <el-input v-model="form.person_name" maxlength="80" :placeholder="t('orders.create.personNamePlaceholder')" />
       </el-form-item>
-      <el-form-item label="备注说明">
-        <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" placeholder="交收要求、渠道约定等（可选）" />
+      <el-form-item :label="t('orders.common.remark')">
+        <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" :placeholder="t('orders.create.remarkPlaceholder')" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">创建订单</el-button>
+      <el-button @click="visible = false">{{ t("orders.common.cancel") }}</el-button>
+      <el-button type="primary" :loading="submitting" @click="submit">{{ t("orders.create.submit") }}</el-button>
     </template>
   </el-dialog>
 </template>

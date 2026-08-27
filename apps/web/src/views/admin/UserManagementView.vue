@@ -3,6 +3,8 @@ import { UserStatus, UserStatusLabel, type RoleVO, type UserVO } from "@bv/share
 import { Plus } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import {
   createRole,
   createUser,
@@ -16,6 +18,7 @@ import {
 import { useAuthStore } from "@/stores/auth";
 import { formatDateTime, formatRelative } from "@/utils/format";
 
+const { t } = useI18n();
 const auth = useAuthStore();
 const activeTab = ref("users");
 const loading = ref(false);
@@ -43,7 +46,7 @@ function openUserDialog() {
 
 async function submitUser() {
   if (!userForm.username.trim() || !userForm.password || !userForm.display_name.trim() || !userForm.role_id) {
-    ElMessage.warning("请填写用户名、初始密码、姓名并选择角色");
+    ElMessage.warning(t("admin.users.fillUserRequired"));
     return;
   }
   userSubmitting.value = true;
@@ -55,7 +58,7 @@ async function submitUser() {
       title: userForm.title.trim() || null,
       role_id: userForm.role_id,
     });
-    ElMessage.success(`账号已创建：${user.username}（${user.role?.name}）`);
+    ElMessage.success(t("admin.users.userCreated", { username: user.username, role: user.role?.name ?? "" }));
     userDialog.value = false;
     load();
   } catch {
@@ -92,15 +95,15 @@ function openEditDialog(user: UserVO) {
 
 async function submitEdit() {
   if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(editForm.username.trim())) {
-    ElMessage.warning("用户名为 3-32 位字母、数字或 _ . -");
+    ElMessage.warning(t("admin.users.usernameInvalid"));
     return;
   }
   if (!editForm.display_name.trim()) {
-    ElMessage.warning("请输入姓名");
+    ElMessage.warning(t("admin.users.nameRequired"));
     return;
   }
   if (!editForm.role_id) {
-    ElMessage.warning("请选择角色");
+    ElMessage.warning(t("admin.users.roleRequired"));
     return;
   }
   editSubmitting.value = true;
@@ -112,7 +115,7 @@ async function submitEdit() {
       // 自己的角色与状态由后端拒绝修改，编辑自己时不提交这两项
       ...(editingSelf.value ? {} : { role_id: editForm.role_id, user_status: editForm.user_status }),
     });
-    ElMessage.success(`账号已更新：${user.display_name}（${user.username}）`);
+    ElMessage.success(t("admin.users.userUpdated", { name: user.display_name, username: user.username }));
     editDialog.value = false;
     if (editingSelf.value && auth.user) {
       auth.setSession(auth.token, {
@@ -134,7 +137,7 @@ async function toggleStatus(user: UserVO) {
   const next = user.user_status === UserStatus.ACTIVE ? UserStatus.DISABLED : UserStatus.ACTIVE;
   try {
     await updateUser(user.id, { user_status: next });
-    ElMessage.success(next === UserStatus.ACTIVE ? "账号已启用" : "账号已停用");
+    ElMessage.success(next === UserStatus.ACTIVE ? t("admin.users.userEnabled") : t("admin.users.userDisabled"));
     load();
   } catch {
     /* 提示由拦截器处理 */
@@ -144,16 +147,21 @@ async function toggleStatus(user: UserVO) {
 async function resetPassword(user: UserVO) {
   try {
     const { value } = await ElMessageBox.prompt(
-      `为 ${user.display_name}（${user.username}）设置新密码`,
-      "重置密码",
-      { inputType: "password", inputPlaceholder: "至少 6 位", confirmButtonText: "重置", cancelButtonText: "取消" },
+      t("admin.users.resetPasswordPrompt", { name: user.display_name, username: user.username }),
+      t("admin.users.resetPassword"),
+      {
+        inputType: "password",
+        inputPlaceholder: t("admin.users.passwordPh"),
+        confirmButtonText: t("admin.users.confirmReset"),
+        cancelButtonText: t("admin.users.cancel"),
+      },
     );
     if (!value || value.length < 6) {
-      ElMessage.warning("新密码至少 6 位");
+      ElMessage.warning(t("admin.users.passwordTooShort"));
       return;
     }
     await resetUserPassword(user.id, value);
-    ElMessage.success("密码已重置");
+    ElMessage.success(t("admin.users.passwordResetSuccess"));
   } catch {
     /* 用户取消或接口错误 */
   }
@@ -161,13 +169,17 @@ async function resetPassword(user: UserVO) {
 
 async function removeUser(user: UserVO) {
   try {
-    await ElMessageBox.confirm(`确定删除账号 ${user.username}？该操作为软删除，可由 DBA 恢复。`, "删除账号", {
-      type: "warning",
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-    });
+    await ElMessageBox.confirm(
+      t("admin.users.deleteUserConfirm", { username: user.username }),
+      t("admin.users.deleteUserTitle"),
+      {
+        type: "warning",
+        confirmButtonText: t("admin.users.delete"),
+        cancelButtonText: t("admin.users.cancel"),
+      },
+    );
     await deleteUser(user.id);
-    ElMessage.success("账号已删除");
+    ElMessage.success(t("admin.users.userDeleted"));
     load();
   } catch {
     /* 用户取消或接口错误 */
@@ -186,7 +198,7 @@ function openRoleDialog() {
 
 async function submitRole() {
   if (!roleForm.role_code.trim() || !roleForm.role_name.trim()) {
-    ElMessage.warning("请填写角色代码与角色名称");
+    ElMessage.warning(t("admin.users.fillRoleRequired"));
     return;
   }
   roleSubmitting.value = true;
@@ -196,7 +208,7 @@ async function submitRole() {
       role_name: roleForm.role_name.trim(),
       description: roleForm.description.trim() || null,
     });
-    ElMessage.success(`角色已创建：${role.role_code} · ${role.role_name}`);
+    ElMessage.success(t("admin.users.roleCreated", { code: role.role_code, name: role.role_name }));
     roleDialog.value = false;
     load();
   } catch {
@@ -208,20 +220,24 @@ async function submitRole() {
 
 async function removeRole(role: RoleVO) {
   try {
-    await ElMessageBox.confirm(`确定删除角色 ${role.role_code} · ${role.role_name}？`, "删除角色", {
-      type: "warning",
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-    });
+    await ElMessageBox.confirm(
+      t("admin.users.deleteRoleConfirm", { code: role.role_code, name: role.role_name }),
+      t("admin.users.deleteRoleTitle"),
+      {
+        type: "warning",
+        confirmButtonText: t("admin.users.delete"),
+        cancelButtonText: t("admin.users.cancel"),
+      },
+    );
     await deleteRole(role.id);
-    ElMessage.success("角色已删除");
+    ElMessage.success(t("admin.users.roleDeleted"));
     load();
   } catch {
     /* 用户取消或接口错误 */
   }
 }
 
-const statusText = (user: UserVO) => UserStatusLabel[user.user_status];
+const statusText = (user: UserVO) => localizeText(UserStatusLabel[user.user_status]);
 const isSelf = (user: UserVO) => user.id === auth.user?.id;
 
 onMounted(load);
@@ -231,27 +247,27 @@ onMounted(load);
   <div>
     <header class="page-header">
       <p class="eyebrow">SYSTEM ADMIN</p>
-      <h1>用户管理</h1>
-      <p class="subtitle">管理系统登录账号与角色；账号按角色获得对应模块的访问权限。</p>
+      <h1>{{ t("admin.users.title") }}</h1>
+      <p class="subtitle">{{ t("admin.users.subtitle") }}</p>
     </header>
 
     <el-card shadow="never">
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="登录账号" name="users">
+        <el-tab-pane :label="t('admin.users.tabUsers')" name="users">
           <div class="toolbar">
-            <span class="count">共 {{ users.length }} 个账号</span>
-            <el-button type="primary" :icon="Plus" @click="openUserDialog">新建账号</el-button>
+            <span class="count">{{ t("admin.users.userCount", { n: users.length }) }}</span>
+            <el-button type="primary" :icon="Plus" @click="openUserDialog">{{ t("admin.users.createUser") }}</el-button>
           </div>
           <el-table v-loading="loading" :data="users" row-key="id">
-            <el-table-column label="账号" min-width="180">
+            <el-table-column :label="t('admin.users.colAccount')" min-width="180">
               <template #default="{ row }">
                 <div class="cell-name">
-                  <strong>{{ row.display_name }}<el-tag v-if="isSelf(row)" size="small" class="self-tag">当前登录</el-tag></strong>
+                  <strong>{{ row.display_name }}<el-tag v-if="isSelf(row)" size="small" class="self-tag">{{ t("admin.users.selfTag") }}</el-tag></strong>
                   <small>{{ row.username }}{{ row.title ? ` · ${row.title}` : "" }}</small>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="角色" width="150">
+            <el-table-column :label="t('admin.users.role')" width="150">
               <template #default="{ row }">
                 <el-tag v-if="row.role" :type="row.role.code === 'ADMIN' ? 'danger' : 'primary'" effect="light">
                   {{ row.role.name }}
@@ -259,56 +275,56 @@ onMounted(load);
                 <span v-else>-</span>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="90">
+            <el-table-column :label="t('admin.users.status')" width="90">
               <template #default="{ row }">
                 <el-tag :type="row.user_status === 'ACTIVE' ? 'success' : 'info'" effect="light">
                   {{ statusText(row) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="最近登录" width="140">
+            <el-table-column :label="t('admin.users.colLastLogin')" width="140">
               <template #default="{ row }">{{ formatRelative(row.last_login_at) }}</template>
             </el-table-column>
-            <el-table-column label="创建时间" width="170">
+            <el-table-column :label="t('admin.users.createdAt')" width="170">
               <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="290" fixed="right">
+            <el-table-column :label="t('admin.users.actions')" width="290" fixed="right">
               <template #default="{ row }">
-                <el-button size="small" type="primary" plain @click="openEditDialog(row)">编辑</el-button>
+                <el-button size="small" type="primary" plain @click="openEditDialog(row)">{{ t("admin.users.edit") }}</el-button>
                 <el-button size="small" :disabled="isSelf(row)" @click="toggleStatus(row)">
-                  {{ row.user_status === "ACTIVE" ? "停用" : "启用" }}
+                  {{ row.user_status === "ACTIVE" ? t("admin.users.disable") : t("admin.users.enable") }}
                 </el-button>
-                <el-button size="small" @click="resetPassword(row)">重置密码</el-button>
+                <el-button size="small" @click="resetPassword(row)">{{ t("admin.users.resetPassword") }}</el-button>
                 <el-button size="small" type="danger" plain :disabled="isSelf(row)" @click="removeUser(row)">
-                  删除
+                  {{ t("admin.users.delete") }}
                 </el-button>
               </template>
             </el-table-column>
           </el-table>
         </el-tab-pane>
 
-        <el-tab-pane label="角色管理" name="roles">
+        <el-tab-pane :label="t('admin.users.tabRoles')" name="roles">
           <div class="toolbar">
-            <span class="count">共 {{ roles.length }} 个角色</span>
-            <el-button type="primary" :icon="Plus" @click="openRoleDialog">新建角色</el-button>
+            <span class="count">{{ t("admin.users.roleCount", { n: roles.length }) }}</span>
+            <el-button type="primary" :icon="Plus" @click="openRoleDialog">{{ t("admin.users.createRole") }}</el-button>
           </div>
           <el-table v-loading="loading" :data="roles" row-key="id">
-            <el-table-column label="角色代码" width="150">
+            <el-table-column :label="t('admin.users.roleCode')" width="150">
               <template #default="{ row }"><code>{{ row.role_code }}</code></template>
             </el-table-column>
-            <el-table-column prop="role_name" label="角色名称" width="140" />
-            <el-table-column prop="description" label="说明" min-width="240" show-overflow-tooltip />
-            <el-table-column label="来源" width="90">
+            <el-table-column prop="role_name" :label="t('admin.users.roleName')" width="140" />
+            <el-table-column prop="description" :label="t('admin.users.description')" min-width="240" show-overflow-tooltip />
+            <el-table-column :label="t('admin.users.colSource')" width="90">
               <template #default="{ row }">
                 <el-tag :type="row.is_builtin ? 'info' : 'primary'" effect="plain">
-                  {{ row.is_builtin ? "内置" : "自定义" }}
+                  {{ row.is_builtin ? t("admin.users.builtin") : t("admin.users.custom") }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="账号数" width="90">
+            <el-table-column :label="t('admin.users.colUserCount')" width="90">
               <template #default="{ row }">{{ row.user_count }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="110">
+            <el-table-column :label="t('admin.users.actions')" width="110">
               <template #default="{ row }">
                 <el-button
                   size="small"
@@ -317,7 +333,7 @@ onMounted(load);
                   :disabled="row.is_builtin || row.user_count > 0"
                   @click="removeRole(row)"
                 >
-                  删除
+                  {{ t("admin.users.delete") }}
                 </el-button>
               </template>
             </el-table-column>
@@ -326,24 +342,24 @@ onMounted(load);
       </el-tabs>
     </el-card>
 
-    <el-dialog v-model="userDialog" title="新建登录账号" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="userDialog" :title="t('admin.users.createUserTitle')" width="520px" :close-on-click-modal="false">
       <el-form label-position="top">
         <div class="grid">
-          <el-form-item label="用户名" required>
-            <el-input v-model="userForm.username" placeholder="3-32 位字母、数字或 _ . -" />
+          <el-form-item :label="t('admin.users.username')" required>
+            <el-input v-model="userForm.username" :placeholder="t('admin.users.usernamePh')" />
           </el-form-item>
-          <el-form-item label="初始密码" required>
-            <el-input v-model="userForm.password" type="password" show-password placeholder="至少 6 位" />
+          <el-form-item :label="t('admin.users.initialPassword')" required>
+            <el-input v-model="userForm.password" type="password" show-password :placeholder="t('admin.users.passwordPh')" />
           </el-form-item>
-          <el-form-item label="姓名" required>
-            <el-input v-model="userForm.display_name" placeholder="用于系统内展示" />
+          <el-form-item :label="t('admin.users.displayName')" required>
+            <el-input v-model="userForm.display_name" :placeholder="t('admin.users.displayNamePh')" />
           </el-form-item>
-          <el-form-item label="职位 / 工号">
-            <el-input v-model="userForm.title" placeholder='如 "Junior Trader · JT-018"（可选）' />
+          <el-form-item :label="t('admin.users.titleLabel')">
+            <el-input v-model="userForm.title" :placeholder="t('admin.users.titlePh')" />
           </el-form-item>
         </div>
-        <el-form-item label="角色" required>
-          <el-select v-model="userForm.role_id" placeholder="选择角色" style="width: 100%">
+        <el-form-item :label="t('admin.users.role')" required>
+          <el-select v-model="userForm.role_id" :placeholder="t('admin.users.rolePh')" style="width: 100%">
             <el-option
               v-for="role in roles"
               :key="role.id"
@@ -354,30 +370,30 @@ onMounted(load);
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="userDialog = false">取消</el-button>
-        <el-button type="primary" :loading="userSubmitting" @click="submitUser">创建账号</el-button>
+        <el-button @click="userDialog = false">{{ t("admin.users.cancel") }}</el-button>
+        <el-button type="primary" :loading="userSubmitting" @click="submitUser">{{ t("admin.users.submitCreateUser") }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="editDialog" title="编辑账号" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="editDialog" :title="t('admin.users.editUserTitle')" width="520px" :close-on-click-modal="false">
       <p class="dialog-subtitle">
-        <template v-if="editingSelf">当前登录账号，角色与状态不可自改 · </template>
-        密码修改请使用列表中的「重置密码」
+        <template v-if="editingSelf">{{ t("admin.users.editSelfHint") }} · </template>
+        {{ t("admin.users.passwordHint") }}
       </p>
       <el-form label-position="top">
         <div class="grid">
-          <el-form-item label="用户名（登录名）" required>
-            <el-input v-model="editForm.username" placeholder="3-32 位字母、数字或 _ . -" maxlength="32" />
+          <el-form-item :label="t('admin.users.usernameLogin')" required>
+            <el-input v-model="editForm.username" :placeholder="t('admin.users.usernamePh')" maxlength="32" />
           </el-form-item>
-          <el-form-item label="姓名" required>
-            <el-input v-model="editForm.display_name" placeholder="用于系统内展示" maxlength="50" />
+          <el-form-item :label="t('admin.users.displayName')" required>
+            <el-input v-model="editForm.display_name" :placeholder="t('admin.users.displayNamePh')" maxlength="50" />
           </el-form-item>
         </div>
-        <el-form-item label="职位 / 工号">
-          <el-input v-model="editForm.title" placeholder='如 "Junior Trader · JT-018"（可选）' maxlength="100" />
+        <el-form-item :label="t('admin.users.titleLabel')">
+          <el-input v-model="editForm.title" :placeholder="t('admin.users.titlePh')" maxlength="100" />
         </el-form-item>
-        <el-form-item label="角色" required>
-          <el-select v-model="editForm.role_id" :disabled="editingSelf" placeholder="选择角色" style="width: 100%">
+        <el-form-item :label="t('admin.users.role')" required>
+          <el-select v-model="editForm.role_id" :disabled="editingSelf" :placeholder="t('admin.users.rolePh')" style="width: 100%">
             <el-option
               v-for="role in roles"
               :key="role.id"
@@ -386,34 +402,34 @@ onMounted(load);
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item :label="t('admin.users.status')">
           <el-radio-group v-model="editForm.user_status" :disabled="editingSelf">
-            <el-radio-button :value="UserStatus.ACTIVE">{{ UserStatusLabel.ACTIVE }}</el-radio-button>
-            <el-radio-button :value="UserStatus.DISABLED">{{ UserStatusLabel.DISABLED }}</el-radio-button>
+            <el-radio-button :value="UserStatus.ACTIVE">{{ localizeText(UserStatusLabel.ACTIVE) }}</el-radio-button>
+            <el-radio-button :value="UserStatus.DISABLED">{{ localizeText(UserStatusLabel.DISABLED) }}</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editDialog = false">取消</el-button>
-        <el-button type="primary" :loading="editSubmitting" @click="submitEdit">保存修改</el-button>
+        <el-button @click="editDialog = false">{{ t("admin.users.cancel") }}</el-button>
+        <el-button type="primary" :loading="editSubmitting" @click="submitEdit">{{ t("admin.users.saveEdit") }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="roleDialog" title="新建角色" width="480px" :close-on-click-modal="false">
+    <el-dialog v-model="roleDialog" :title="t('admin.users.createRole')" width="480px" :close-on-click-modal="false">
       <el-form label-position="top">
-        <el-form-item label="角色代码" required>
-          <el-input v-model="roleForm.role_code" placeholder="大写字母/数字/下划线，如 RISK_OFFICER" />
+        <el-form-item :label="t('admin.users.roleCode')" required>
+          <el-input v-model="roleForm.role_code" :placeholder="t('admin.users.roleCodePh')" />
         </el-form-item>
-        <el-form-item label="角色名称" required>
-          <el-input v-model="roleForm.role_name" placeholder="如 风控专员" />
+        <el-form-item :label="t('admin.users.roleName')" required>
+          <el-input v-model="roleForm.role_name" :placeholder="t('admin.users.roleNamePh')" />
         </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="roleForm.description" type="textarea" :rows="2" placeholder="角色职责说明（可选）" />
+        <el-form-item :label="t('admin.users.description')">
+          <el-input v-model="roleForm.description" type="textarea" :rows="2" :placeholder="t('admin.users.roleDescPh')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="roleDialog = false">取消</el-button>
-        <el-button type="primary" :loading="roleSubmitting" @click="submitRole">创建角色</el-button>
+        <el-button @click="roleDialog = false">{{ t("admin.users.cancel") }}</el-button>
+        <el-button type="primary" :loading="roleSubmitting" @click="submitRole">{{ t("admin.users.submitCreateRole") }}</el-button>
       </template>
     </el-dialog>
   </div>

@@ -10,6 +10,8 @@ import {
 } from "@bv/shared";
 import { Plus } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRoute } from "vue-router";
 import { fetchOrders, type OrderListQuery } from "@/api/order";
 import { useAuthStore } from "@/stores/auth";
@@ -18,6 +20,8 @@ import DispatchDialog from "./DispatchDialog.vue";
 import FundingDialog from "./FundingDialog.vue";
 import OrderCreateDialog from "./OrderCreateDialog.vue";
 import OrderPanel from "./OrderPanel.vue";
+
+const { t } = useI18n();
 
 const auth = useAuthStore();
 const role = computed(() => auth.roleCode);
@@ -41,55 +45,58 @@ const sumStatus = (s: OrderListStatsVO, ...statuses: string[]) =>
   statuses.reduce((n, status) => n + (s.by_status[status] ?? 0), 0);
 const allCount = (s: OrderListStatsVO) => Object.values(s.by_status).reduce((a, b) => a + b, 0);
 
-const TODO_DEFS: Record<string, TodoTab[]> = {
+const TODO_DEFS = computed<Record<string, TodoTab[]>>(() => ({
   AGENT: [
-    { label: "我的交易", params: {}, count: allCount },
-    { label: "待 KYC", params: { status: "PENDING_KYC" }, count: s => sumStatus(s, "PENDING_KYC") },
-    { label: "待客户入款", params: { status: "AWAITING_INFLOW" }, count: s => sumStatus(s, "AWAITING_INFLOW") },
-    { label: "待出款排单", params: { status: "AWAITING_DISPATCH" }, count: s => sumStatus(s, "AWAITING_DISPATCH") },
-    { label: "被退回", params: { flag: "rejected" }, count: s => s.payment_rejected + s.dispatch_rejected },
+    { label: t("orders.list.tabs.myTrades"), params: {}, count: allCount },
+    { label: t("orders.list.tabs.pendingKyc"), params: { status: "PENDING_KYC" }, count: s => sumStatus(s, "PENDING_KYC") },
+    { label: t("orders.list.tabs.awaitingInflow"), params: { status: "AWAITING_INFLOW" }, count: s => sumStatus(s, "AWAITING_INFLOW") },
+    { label: t("orders.list.tabs.awaitingDispatch"), params: { status: "AWAITING_DISPATCH" }, count: s => sumStatus(s, "AWAITING_DISPATCH") },
+    { label: t("orders.list.tabs.rejected"), params: { flag: "rejected" }, count: s => s.payment_rejected + s.dispatch_rejected },
   ],
   OPS: [
-    { label: "待审核", params: { status: "DISPATCH_REVIEW" }, count: s => sumStatus(s, "DISPATCH_REVIEW") },
-    { label: "已审核", params: { status: "AWAITING_PAYOUT,COMPLETED" }, count: s => sumStatus(s, "AWAITING_PAYOUT", "COMPLETED") },
-    { label: "附加异常", params: { flag: "exception" }, count: s => s.exceptions },
-    { label: "全部订单", params: {}, count: allCount },
+    { label: t("orders.list.tabs.pendingReview"), params: { status: "DISPATCH_REVIEW" }, count: s => sumStatus(s, "DISPATCH_REVIEW") },
+    { label: t("orders.list.tabs.reviewed"), params: { status: "AWAITING_PAYOUT,COMPLETED" }, count: s => sumStatus(s, "AWAITING_PAYOUT", "COMPLETED") },
+    { label: t("orders.list.tabs.exception"), params: { flag: "exception" }, count: s => s.exceptions },
+    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
   ],
   FINANCE: [
-    { label: "待法币入款登记", params: { status: "AWAITING_INFLOW", inflow_kind: "fiat" }, count: s => s.inflow_fiat },
-    { label: "已登记", params: { status: "AWAITING_DISPATCH,DISPATCH_REVIEW,AWAITING_PAYOUT,COMPLETED" }, count: s => sumStatus(s, "AWAITING_DISPATCH", "DISPATCH_REVIEW", "AWAITING_PAYOUT", "COMPLETED") },
-    { label: "全部订单", params: {}, count: allCount },
+    { label: t("orders.list.tabs.fiatInflowPending"), params: { status: "AWAITING_INFLOW", inflow_kind: "fiat" }, count: s => s.inflow_fiat },
+    { label: t("orders.list.tabs.registered"), params: { status: "AWAITING_DISPATCH,DISPATCH_REVIEW,AWAITING_PAYOUT,COMPLETED" }, count: s => sumStatus(s, "AWAITING_DISPATCH", "DISPATCH_REVIEW", "AWAITING_PAYOUT", "COMPLETED") },
+    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
   ],
   WALLET: [
-    { label: "待链上入款登记", params: { status: "AWAITING_INFLOW", inflow_kind: "chain" }, count: s => s.inflow_chain },
-    { label: "待地址 KYA", params: { kya_pending: "1" }, count: s => s.kya_pending },
-    { label: "待链上出款", params: { status: "AWAITING_PAYOUT", outflow_kind: "chain" }, count: s => s.outflow_chain },
-    { label: "全部订单", params: {}, count: allCount },
+    { label: t("orders.list.tabs.chainInflowPending"), params: { status: "AWAITING_INFLOW", inflow_kind: "chain" }, count: s => s.inflow_chain },
+    { label: t("orders.list.tabs.kyaPending"), params: { kya_pending: "1" }, count: s => s.kya_pending },
+    { label: t("orders.list.tabs.chainOutflowPending"), params: { status: "AWAITING_PAYOUT", outflow_kind: "chain" }, count: s => s.outflow_chain },
+    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
   ],
   PAYOUT: [
-    { label: "待银行出款", params: { status: "AWAITING_PAYOUT", outflow_kind: "fiat" }, count: s => s.outflow_fiat },
-    { label: "已完成", params: { status: "COMPLETED" }, count: s => sumStatus(s, "COMPLETED") },
-    { label: "全部订单", params: {}, count: allCount },
+    { label: t("orders.list.tabs.bankOutflowPending"), params: { status: "AWAITING_PAYOUT", outflow_kind: "fiat" }, count: s => s.outflow_fiat },
+    { label: t("orders.list.tabs.completed"), params: { status: "COMPLETED" }, count: s => sumStatus(s, "COMPLETED") },
+    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
   ],
   MANAGER: [
-    { label: "全部订单", params: {}, count: allCount },
-    { label: "进行中", params: { status: ACTIVE_STATUSES }, count: s => s.active },
-    { label: "附加异常", params: { flag: "exception" }, count: s => s.exceptions },
-    { label: "已完成", params: { status: "COMPLETED" }, count: s => sumStatus(s, "COMPLETED") },
+    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
+    { label: t("orders.list.tabs.active"), params: { status: ACTIVE_STATUSES }, count: s => s.active },
+    { label: t("orders.list.tabs.exception"), params: { flag: "exception" }, count: s => s.exceptions },
+    { label: t("orders.list.tabs.completed"), params: { status: "COMPLETED" }, count: s => sumStatus(s, "COMPLETED") },
   ],
-};
+}));
 
-const todoTabs = computed(() => TODO_DEFS[role.value] ?? TODO_DEFS.MANAGER);
+const todoTabs = computed(() => TODO_DEFS.value[role.value] ?? TODO_DEFS.value.MANAGER);
 
-const SUBTITLES: Record<string, string> = {
-  AGENT: "订单主线：待KYC → 待客户入款 → 待出款排单 → 出款审核 → 出款执行 → 完成，报价作为前置信息随单留档。",
-  OPS: "复核出款排单与异常处理；风险事件可退回或终止。",
-  FINANCE: "法币入款登记即确认，订单直接进入待出款排单。",
-  MANAGER: "全量订单总览，跟踪状态分布与异常。",
-  PAYOUT: "排单审核通过后执行银行出款并登记，登记即完成。",
-  WALLET: "收 U 地址、地址 KYA、链上入款与出款登记都在订单里完成。",
-  ADMIN: "全量订单总览，跟踪状态分布与异常。",
-};
+const subtitle = computed(() => {
+  const map: Record<string, string> = {
+    AGENT: t("orders.list.subtitle.agent"),
+    OPS: t("orders.list.subtitle.ops"),
+    FINANCE: t("orders.list.subtitle.finance"),
+    MANAGER: t("orders.list.subtitle.manager"),
+    PAYOUT: t("orders.list.subtitle.payout"),
+    WALLET: t("orders.list.subtitle.wallet"),
+    ADMIN: t("orders.list.subtitle.admin"),
+  };
+  return map[role.value] ?? map.MANAGER;
+});
 
 async function load() {
   loading.value = true;
@@ -149,22 +156,22 @@ const KYC_TAG: Record<string, "primary" | "success" | "warning" | "info" | "dang
 function rowCta(order: TradeOrderVO): string {
   const r = role.value;
   if (r === "AGENT" || r === "OPS") {
-    if (r === "AGENT" && order.status === TradeOrderStatus.PENDING_KYC) return "材料上传";
-    if (order.status === TradeOrderStatus.AWAITING_DISPATCH) return "出款排单";
+    if (r === "AGENT" && order.status === TradeOrderStatus.PENDING_KYC) return t("orders.list.cta.materials");
+    if (order.status === TradeOrderStatus.AWAITING_DISPATCH) return t("orders.common.dispatch");
   }
   if (r === "OPS") {
-    if (order.status === TradeOrderStatus.DISPATCH_REVIEW) return "开始审核";
-    if (order.exception) return "处理异常";
+    if (order.status === TradeOrderStatus.DISPATCH_REVIEW) return t("orders.list.cta.startReview");
+    if (order.exception) return t("orders.list.cta.handleException");
   }
-  if (r === "FINANCE" && order.status === TradeOrderStatus.AWAITING_INFLOW && fundingKindOf(order, "inflow") !== FundingKind.CHAIN) return "登记入款";
+  if (r === "FINANCE" && order.status === TradeOrderStatus.AWAITING_INFLOW && fundingKindOf(order, "inflow") !== FundingKind.CHAIN) return t("orders.list.cta.registerInflow");
   if (r === "WALLET") {
     if (order.status === TradeOrderStatus.AWAITING_INFLOW && fundingKindOf(order, "inflow") === FundingKind.CHAIN)
-      return order.wallet_ops?.deposit_address ? "登记入款" : "提供收U地址";
-    if (fundingKindOf(order, "outflow") === FundingKind.CHAIN && !order.wallet_ops?.kya_passed && ["AWAITING_INFLOW", "AWAITING_DISPATCH"].includes(order.status)) return "地址KYA登记";
-    if (order.status === TradeOrderStatus.AWAITING_PAYOUT && fundingKindOf(order, "outflow") === FundingKind.CHAIN) return "登记链上转账";
+      return order.wallet_ops?.deposit_address ? t("orders.list.cta.registerInflow") : t("orders.list.cta.provideDepositAddress");
+    if (fundingKindOf(order, "outflow") === FundingKind.CHAIN && !order.wallet_ops?.kya_passed && ["AWAITING_INFLOW", "AWAITING_DISPATCH"].includes(order.status)) return t("orders.list.cta.kyaRegister");
+    if (order.status === TradeOrderStatus.AWAITING_PAYOUT && fundingKindOf(order, "outflow") === FundingKind.CHAIN) return t("orders.common.registerChainTransfer");
   }
-  if (r === "PAYOUT" && order.status === TradeOrderStatus.AWAITING_PAYOUT && fundingKindOf(order, "outflow") !== FundingKind.CHAIN) return "出款登记";
-  return "查看";
+  if (r === "PAYOUT" && order.status === TradeOrderStatus.AWAITING_PAYOUT && fundingKindOf(order, "outflow") !== FundingKind.CHAIN) return t("orders.common.payoutRegister");
+  return t("orders.list.cta.view");
 }
 
 const fmtMoney = (currency: string, amount: number) => `${currency} ${amount.toLocaleString("en-US")}`;
@@ -220,23 +227,23 @@ onMounted(() => {
     <header class="page-header">
       <div>
         <p class="eyebrow">TRADE ORDERS</p>
-        <h1>{{ role === "MANAGER" ? "交易订单总览" : role === "WALLET" ? "钱包任务" : "交易订单" }}</h1>
-        <p class="subtitle">{{ SUBTITLES[role] ?? SUBTITLES.MANAGER }}</p>
+        <h1>{{ role === "MANAGER" ? t("orders.list.titleOverview") : role === "WALLET" ? t("orders.list.titleWallet") : t("orders.list.title") }}</h1>
+        <p class="subtitle">{{ subtitle }}</p>
       </div>
       <el-button v-if="role === 'AGENT' || role === 'OPS'" type="primary" :icon="Plus" @click="createVisible = true">
-        新建订单
+        {{ t("orders.list.createOrder") }}
       </el-button>
     </header>
 
     <div v-if="stats" class="metric-strip">
-      <div class="metric"><strong>{{ stats.active }}</strong><span>进行中订单</span><small>未完成/未取消</small></div>
-      <div class="metric"><strong>{{ stats.by_status.PENDING_KYC ?? 0 }}</strong><span>待KYC</span><small>等待业务准入</small></div>
-      <div class="metric"><strong>{{ stats.by_status.AWAITING_INFLOW ?? 0 }}</strong><span>待客户入款</span><small>等待入款登记</small></div>
+      <div class="metric"><strong>{{ stats.active }}</strong><span>{{ t("orders.list.metrics.active") }}</span><small>{{ t("orders.list.metrics.activeSub") }}</small></div>
+      <div class="metric"><strong>{{ stats.by_status.PENDING_KYC ?? 0 }}</strong><span>{{ t("orders.list.metrics.pendingKyc") }}</span><small>{{ t("orders.list.metrics.pendingKycSub") }}</small></div>
+      <div class="metric"><strong>{{ stats.by_status.AWAITING_INFLOW ?? 0 }}</strong><span>{{ t("orders.list.tabs.awaitingInflow") }}</span><small>{{ t("orders.list.metrics.awaitingInflowSub") }}</small></div>
       <div class="metric">
         <strong>{{ (stats.by_status.AWAITING_DISPATCH ?? 0) + (stats.by_status.DISPATCH_REVIEW ?? 0) + (stats.by_status.AWAITING_PAYOUT ?? 0) }}</strong>
-        <span>资金执行阶段</span><small>排单 / 审核 / 执行</small>
+        <span>{{ t("orders.list.metrics.fundingStage") }}</span><small>{{ t("orders.list.metrics.fundingStageSub") }}</small>
       </div>
-      <div class="metric"><strong>{{ stats.exceptions }}</strong><span>附加异常</span><small>不打断主线状态</small></div>
+      <div class="metric"><strong>{{ stats.exceptions }}</strong><span>{{ t("orders.list.tabs.exception") }}</span><small>{{ t("orders.list.metrics.exceptionSub") }}</small></div>
     </div>
 
     <el-card shadow="never">
@@ -256,70 +263,70 @@ onMounted(() => {
         <el-input
           v-model="query.keyword"
           class="keyword"
-          placeholder="搜索客户 / 类型 / 订单号"
+          :placeholder="t('orders.list.searchPlaceholder')"
           clearable
           @keyup.enter="search"
           @clear="search"
         />
-        <el-select v-model="query.status" class="status-filter" clearable placeholder="全部状态" @change="search">
+        <el-select v-model="query.status" class="status-filter" clearable :placeholder="t('orders.list.allStatus')" @change="search">
           <el-option v-for="(label, value) in TradeOrderStatusLabel" :key="value" :value="value" :label="label" />
         </el-select>
-        <span class="count">{{ total }} 笔订单 · 点击任意行展开详情</span>
+        <span class="count">{{ t("orders.list.countSummary", { total }) }}</span>
       </div>
 
       <el-table v-loading="loading" :data="items" row-key="id" @row-click="openPanel">
-        <el-table-column label="订单编号" width="165">
+        <el-table-column :label="t('orders.list.columns.orderNo')" width="165">
           <template #default="{ row }">
             <strong class="mono">{{ row.order_no }}</strong>
-            <div class="muted">创建 {{ formatRelative(row.created_at) }}</div>
+            <div class="muted">{{ t("orders.common.createdAt", { time: formatRelative(row.created_at) }) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="客户主体" min-width="150">
+        <el-table-column :label="t('orders.list.columns.customer')" min-width="150">
           <template #default="{ row }">
             <strong>{{ row.customer_name }}</strong>
-            <div class="muted">ID: {{ row.customer_code || "无编号" }}</div>
+            <div class="muted">ID: {{ row.customer_code || t("orders.common.noCode") }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="KYC 状态" width="105">
+        <el-table-column :label="t('orders.common.kycStatus')" width="105">
           <template #default="{ row }">
-            <el-tag :type="KYC_TAG[row.kyc.tone]" size="small" effect="light">{{ row.kyc.label }}</el-tag>
+            <el-tag :type="KYC_TAG[row.kyc.tone]" size="small" effect="light">{{ localizeText(row.kyc.label) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="100">
+        <el-table-column :label="t('orders.list.columns.type')" width="100">
           <template #default="{ row }">
             <el-tag size="small" effect="plain">{{ row.trade_type }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="交易对 / 金额" min-width="200">
+        <el-table-column :label="t('orders.list.columns.pairAmount')" min-width="200">
           <template #default="{ row }">
             <div class="pair">
               <b>{{ fmtMoney(row.sell_currency, row.sell_amount) }}</b>
               <i>→</i>
               <b class="buy">{{ fmtMoney(row.buy_currency, row.buy_amount) }}</b>
             </div>
-            <div class="muted">{{ row.pay_method }} · {{ row.handler_name }} · {{ formatRelative(row.updated_at) }}</div>
+            <div class="muted">{{ localizeText(row.pay_method) }} · {{ row.handler_name }} · {{ formatRelative(row.updated_at) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="执行汇率" width="90">
+        <el-table-column :label="t('orders.common.execRate')" width="90">
           <template #default="{ row }"><span class="mono">{{ row.rate }}</span></template>
         </el-table-column>
-        <el-table-column label="当前状态" min-width="130">
+        <el-table-column :label="t('orders.list.columns.status')" min-width="130">
           <template #default="{ row }">
-            <el-tag :type="STATUS_TAG[row.status]" size="small">{{ TradeOrderStatusLabel[row.status as TradeOrderStatus] }}</el-tag>
+            <el-tag :type="STATUS_TAG[row.status]" size="small">{{ localizeText(TradeOrderStatusLabel[row.status as TradeOrderStatus]) }}</el-tag>
             <div v-if="row.exception" class="flag">{{ row.exception.kind }} · {{ row.exception.reason }}</div>
-            <div v-if="row.dispatch_rejected" class="flag">出款审核驳回</div>
-            <div v-if="row.payment_rejected" class="flag">付款被驳回</div>
+            <div v-if="row.dispatch_rejected" class="flag">{{ t("orders.common.dispatchRejectedFlag") }}</div>
+            <div v-if="row.payment_rejected" class="flag">{{ t("orders.list.paymentRejected") }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" align="right">
+        <el-table-column :label="t('orders.list.columns.actions')" width="120" align="right">
           <template #default="{ row }">
-            <el-button size="small" :type="rowCta(row) === '查看' ? 'default' : 'primary'" plain @click.stop="openPanel(row)">
+            <el-button size="small" :type="rowCta(row) === t('orders.list.cta.view') ? 'default' : 'primary'" plain @click.stop="openPanel(row)">
               {{ rowCta(row) }} →
             </el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !items.length" description="没有匹配的订单，调整筛选条件或创建新订单" />
+      <el-empty v-if="!loading && !items.length" :description="t('orders.list.empty')" />
 
       <div class="pager">
         <el-pagination

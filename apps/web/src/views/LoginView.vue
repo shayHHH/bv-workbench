@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { login } from "@/api/auth";
 import { useAuthStore } from "@/stores/auth";
@@ -7,6 +8,7 @@ import { useAuthStore } from "@/stores/auth";
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const { t } = useI18n();
 
 const username = ref("");
 const password = ref("");
@@ -37,18 +39,18 @@ async function submit() {
           <small>Trade Workbench</small>
         </div>
       </div>
-      <h1>登录交易运营系统</h1>
-      <p class="hint">请使用管理员分配的账号登录</p>
+      <h1>{{ t("login.title") }}</h1>
+      <p class="hint">{{ t("login.hint") }}</p>
       <el-form label-position="top" @submit.prevent="submit">
-        <el-form-item label="用户名">
-          <el-input v-model="username" placeholder="输入用户名" autocomplete="username" />
+        <el-form-item :label="t('login.username')">
+          <el-input v-model="username" :placeholder="t('login.usernamePh')" autocomplete="username" />
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item :label="t('login.password')">
           <el-input
             v-model="password"
             type="password"
             show-password
-            placeholder="输入密码"
+            :placeholder="t('login.passwordPh')"
             autocomplete="current-password"
             @keyup.enter="submit"
           />
@@ -60,7 +62,7 @@ async function submit() {
           native-type="submit"
           @click="submit"
         >
-          登 录
+          {{ t("login.submit") }}
         </el-button>
       </el-form>
     </div>

@@ -16,10 +16,13 @@ import {
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { fetchApplications, fetchCustomerMaterials, openFilePreview } from "@/api/access";
 import { fetchCustomer, fetchCustomerEvents, updateCustomer } from "@/api/customer";
 import { formatDateTime, formatRelative } from "@/utils/format";
 
+const { t } = useI18n();
 const visible = defineModel<boolean>({ required: true });
 const props = defineProps<{ customer: CustomerVO | null }>();
 const emit = defineEmits<{ edit: [customer: CustomerVO]; changed: [] }>();
@@ -145,13 +148,17 @@ async function toggleCooperation() {
   try {
     const { value } = await ElMessageBox.prompt(
       pausing
-        ? `暂停与 ${c.name} 的合作？客户明确不合作、风险原因或长期失联时使用，列表状态将显示「暂停合作」。`
-        : `恢复与 ${c.name} 的合作？风险解除或客户重新确认合作后，状态回到「活跃」。`,
-      pausing ? "暂停合作" : "恢复合作",
+        ? t("customer.drawer.pauseConfirm", { name: c.name })
+        : t("customer.drawer.resumeConfirm", { name: c.name }),
+      pausing ? t("customer.drawer.pauseCooperation") : t("customer.drawer.resumeCooperation"),
       {
-        inputPlaceholder: pausing ? "暂停原因（会写入档案时间线）" : "恢复说明（会写入档案时间线）",
-        confirmButtonText: pausing ? "确认暂停" : "确认恢复",
-        cancelButtonText: "取消",
+        inputPlaceholder: pausing
+          ? t("customer.drawer.pauseReasonPh")
+          : t("customer.drawer.resumeReasonPh"),
+        confirmButtonText: pausing
+          ? t("customer.drawer.confirmPause")
+          : t("customer.drawer.confirmResume"),
+        cancelButtonText: t("customer.common.cancel"),
       },
     );
     statusSubmitting.value = true;
@@ -160,7 +167,11 @@ async function toggleCooperation() {
       change_note: value?.trim() || null,
     });
     current.value = { ...c, ...updated };
-    ElMessage.success(pausing ? `${c.name} 已暂停合作` : `${c.name} 已恢复合作`);
+    ElMessage.success(
+      pausing
+        ? t("customer.drawer.pausedSuccess", { name: c.name })
+        : t("customer.drawer.resumedSuccess", { name: c.name }),
+    );
     events.value = [];
     if (activeTab.value === "timeline") await loadEvents();
     emit("changed");
@@ -190,8 +201,8 @@ function fileSizeText(size: number): string {
 
 function docIcon(mime: string): string {
   if (mime.includes("pdf")) return "PDF";
-  if (mime.startsWith("image/")) return "图";
-  return "档";
+  if (mime.startsWith("image/")) return t("customer.drawer.docIconImage");
+  return t("customer.drawer.docIconFile");
 }
 
 async function previewMaterial(material: CustomerMaterialVO, download = false) {
@@ -202,11 +213,11 @@ async function previewMaterial(material: CustomerMaterialVO, download = false) {
   }
 }
 
-const kindText = (c: CustomerVO) => CustomerKindLabel[c.customer_kind];
-const statusText = (c: CustomerVO) => CustomerStatusLabel[c.customer_status];
-const riskText = (c: CustomerVO) => RiskLevelLabel[c.risk_level];
-const regionText = (c: CustomerVO) => (c.region ? RegionLabel[c.region] : "未填写");
-const subTypeText = (c: CustomerVO) => (c.sub_type ? CustomerSubTypeLabel[c.sub_type] : "未定义");
+const kindText = (c: CustomerVO) => localizeText(CustomerKindLabel[c.customer_kind]);
+const statusText = (c: CustomerVO) => localizeText(CustomerStatusLabel[c.customer_status]);
+const riskText = (c: CustomerVO) => localizeText(RiskLevelLabel[c.risk_level]);
+const regionText = (c: CustomerVO) => (c.region ? localizeText(RegionLabel[c.region]) : t("customer.drawer.regionEmpty"));
+const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTypeLabel[c.sub_type]) : t("customer.drawer.subTypeEmpty"));
 </script>
 
 <template>
@@ -222,49 +233,49 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? CustomerSubTypeLabel[c.sub_
             </el-tag>
           </h2>
           <p class="sub-line">
-            {{ current.customer_code || "无编号" }} · {{ kindText(current) }}
-            <template v-if="current.parent_name"> · 上级中介 {{ current.parent_name }}</template>
+            {{ current.customer_code || t("customer.common.noCode") }} · {{ kindText(current) }}
+            <template v-if="current.parent_name"> · {{ t("customer.drawer.parentBroker") }} {{ current.parent_name }}</template>
           </p>
         </div>
         <div class="head-actions">
-          <el-button size="small" @click="emit('edit', current)">编辑信息</el-button>
-          <button class="drawer-close" type="button" aria-label="关闭" @click="visible = false">×</button>
+          <el-button size="small" @click="emit('edit', current)">{{ t("customer.common.editInfo") }}</el-button>
+          <button class="drawer-close" type="button" :aria-label="t('customer.drawer.close')" @click="visible = false">×</button>
         </div>
       </header>
 
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="概览" name="overview">
+        <el-tab-pane :label="t('customer.drawer.tabOverview')" name="overview">
           <el-descriptions :column="2" class="overview-grid">
-            <el-descriptions-item label="客户编号">{{ current.customer_code || "无编号" }}</el-descriptions-item>
-            <el-descriptions-item label="客户类型">{{ kindText(current) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.customerCode')">{{ current.customer_code || t("customer.common.noCode") }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.drawer.kind')">{{ kindText(current) }}</el-descriptions-item>
             <template v-if="isSub">
-              <el-descriptions-item label="上级中介">
+              <el-descriptions-item :label="t('customer.drawer.parentBroker')">
                 <el-button
                   v-if="current.parent_id"
                   link
                   type="primary"
                   @click="switchTo(current.parent_id!)"
                 >
-                  {{ current.parent_name || "查看" }}
+                  {{ current.parent_name || t("customer.drawer.view") }}
                 </el-button>
                 <span v-else>-</span>
               </el-descriptions-item>
-              <el-descriptions-item label="下级主体类型">{{ subTypeText(current) }}</el-descriptions-item>
+              <el-descriptions-item :label="t('customer.drawer.subType')">{{ subTypeText(current) }}</el-descriptions-item>
             </template>
-            <el-descriptions-item label="风险等级">{{ riskText(current) }}</el-descriptions-item>
-            <el-descriptions-item label="地区">{{ regionText(current) }}</el-descriptions-item>
-            <el-descriptions-item label="所属交易员">{{ current.agent_name || "待分配" }}</el-descriptions-item>
-            <el-descriptions-item label="跟进交易员">{{ current.follow_trader || "-" }}</el-descriptions-item>
-            <el-descriptions-item label="联系电话">{{ current.phone || "-" }}</el-descriptions-item>
-            <el-descriptions-item label="最后更新">{{ formatRelative(current.updated_at) }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间" :span="2">{{ formatDateTime(current.created_at) }}</el-descriptions-item>
-            <el-descriptions-item label="备注" :span="2">{{ current.remark || "-" }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.riskLevel')">{{ riskText(current) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.region')">{{ regionText(current) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.agent')">{{ current.agent_name || t("customer.common.unassigned") }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.followTrader')">{{ current.follow_trader || "-" }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.phone')">{{ current.phone || "-" }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.lastUpdated')">{{ formatRelative(current.updated_at) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.drawer.createdAt')" :span="2">{{ formatDateTime(current.created_at) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('customer.common.remark')" :span="2">{{ current.remark || "-" }}</el-descriptions-item>
           </el-descriptions>
 
           <section v-if="!isSub" class="section">
-            <h3>状态管理</h3>
+            <h3>{{ t("customer.drawer.statusManagement") }}</h3>
             <div class="lifecycle-row">
-              <span>合作生命周期</span>
+              <span>{{ t("customer.drawer.lifecycle") }}</span>
               <el-tag :type="statusTagType[current.customer_status]" effect="light">
                 {{ statusText(current) }}
               </el-tag>
@@ -274,28 +285,28 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? CustomerSubTypeLabel[c.sub_
                 :loading="statusSubmitting"
                 @click="toggleCooperation"
               >
-                {{ suspended ? "恢复合作" : "暂停合作" }}
+                {{ suspended ? t("customer.drawer.resumeCooperation") : t("customer.drawer.pauseCooperation") }}
               </el-button>
             </div>
-            <p class="hint">暂停/恢复会记录操作人、时间与原因，可在「时间线」页签查看。</p>
+            <p class="hint">{{ t("customer.drawer.statusHint") }}</p>
           </section>
 
           <section v-if="isIntermediary && current.sub_customers?.length" class="section">
-            <h3>下级客户（{{ current.sub_customers.length }}）</h3>
+            <h3>{{ t("customer.drawer.subCustomersCount", { n: current.sub_customers.length }) }}</h3>
             <div v-for="sub in current.sub_customers" :key="sub.id" class="sub-row">
               <div class="sub-main">
                 <strong>{{ sub.name }}</strong>
-                <small>{{ sub.customer_code || "无编号" }}{{ sub.sub_type ? ` · ${subTypeText(sub)}` : "" }}</small>
+                <small>{{ sub.customer_code || t("customer.common.noCode") }}{{ sub.sub_type ? ` · ${subTypeText(sub)}` : "" }}</small>
               </div>
               <el-tag :type="statusTagType[sub.customer_status]" effect="light" size="small">
                 {{ statusText(sub) }}
               </el-tag>
-              <el-button size="small" link type="primary" @click="switchTo(sub)">查看 →</el-button>
+              <el-button size="small" link type="primary" @click="switchTo(sub)">{{ t("customer.drawer.view") }} →</el-button>
             </div>
           </section>
         </el-tab-pane>
 
-        <el-tab-pane label="时间线" name="timeline">
+        <el-tab-pane :label="t('customer.drawer.tabTimeline')" name="timeline">
           <div v-loading="eventsLoading" class="timeline-pane">
             <el-timeline v-if="events.length">
               <el-timeline-item
@@ -307,11 +318,11 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? CustomerSubTypeLabel[c.sub_
                 <p class="event-detail">{{ event.detail }}</p>
               </el-timeline-item>
             </el-timeline>
-            <el-empty v-else-if="!eventsLoading" description="暂无档案事件" />
+            <el-empty v-else-if="!eventsLoading" :description="t('customer.drawer.emptyEvents')" />
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="材料" name="documents">
+        <el-tab-pane :label="t('customer.drawer.tabDocuments')" name="documents">
           <div v-loading="materialsLoading" class="tab-pane-body">
             <template v-if="materials.length">
               <div v-for="material in materials" :key="material.id" class="doc-row">
@@ -325,46 +336,46 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? CustomerSubTypeLabel[c.sub_
                     {{ formatRelative(material.created_at) }}
                   </small>
                 </div>
-                <el-button size="small" @click="previewMaterial(material)">预览</el-button>
-                <el-button size="small" @click="previewMaterial(material, true)">下载</el-button>
+                <el-button size="small" @click="previewMaterial(material)">{{ t("customer.drawer.preview") }}</el-button>
+                <el-button size="small" @click="previewMaterial(material, true)">{{ t("customer.drawer.download") }}</el-button>
               </div>
             </template>
             <el-empty
               v-else-if="!materialsLoading"
-              description="暂无归档材料，在材料上传模块归档后会同步到这里"
+              :description="t('customer.drawer.emptyMaterials')"
             />
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="准入记录" name="applications">
+        <el-tab-pane :label="t('customer.drawer.tabApplications')" name="applications">
           <div v-loading="applicationsLoading" class="tab-pane-body">
             <template v-if="applications.length">
               <div v-for="app in applications" :key="app.id" class="app-card">
                 <div class="app-head">
                   <strong>{{ app.application_no }}</strong>
                   <el-tag :type="accessStatusTagType[app.status]" effect="light" size="small">
-                    {{ AccessStatusLabel[app.status] }}
+                    {{ localizeText(AccessStatusLabel[app.status]) }}
                   </el-tag>
                 </div>
                 <small class="app-meta">
-                  {{ app.scenario_name || "未选业务类型" }}
+                  {{ app.scenario_name || t("customer.drawer.noScenario") }}
                   {{ app.channel_code ? ` · ${app.channel_code}` : "" }}
-                  · 必填材料 {{ app.completeness.done }}/{{ app.completeness.total }}
+                  · {{ t("customer.drawer.requiredMaterials", { done: app.completeness.done, total: app.completeness.total }) }}
                   {{ app.owner_name ? ` · ${app.owner_name}` : "" }}
                   · {{ formatRelative(app.submitted_at || app.updated_at) }}
                 </small>
                 <p v-if="app.latest_review?.reason" class="app-reason">
-                  最近结论：{{ app.latest_review.reason }}
+                  {{ t("customer.drawer.latestConclusion", { reason: app.latest_review.reason }) }}
                 </p>
               </div>
             </template>
-            <el-empty v-else-if="!applicationsLoading" description="暂无准入申请" />
+            <el-empty v-else-if="!applicationsLoading" :description="t('customer.drawer.emptyApplications')" />
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="交易与凭证" name="funding" disabled />
+        <el-tab-pane :label="t('customer.drawer.tabFunding')" name="funding" disabled />
       </el-tabs>
-      <p class="tabs-hint">「交易与凭证」将随交易订单模块迁移后开放。</p>
+      <p class="tabs-hint">{{ t("customer.drawer.fundingHint") }}</p>
     </div>
   </el-drawer>
 </template>

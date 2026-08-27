@@ -10,8 +10,11 @@ import {
 } from "@bv/shared";
 import { ElMessage } from "element-plus";
 import { computed, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { fetchCustomers, updateCustomer } from "@/api/customer";
 
+const { t } = useI18n();
 const visible = defineModel<boolean>({ required: true });
 const props = defineProps<{ customer: CustomerVO | null }>();
 const emit = defineEmits<{ updated: [customer: CustomerVO] }>();
@@ -43,11 +46,11 @@ const kindLocked = computed(
     (props.customer?.sub_customers?.length ?? 0) > 0,
 );
 
-const kindHint: Record<CustomerKind, string> = {
-  DIRECT: "客户本人直接交易",
-  INTERMEDIARY: "可挂载下级客户",
-  SUB_CUSTOMER: "归属于指定中介",
-};
+const kindHint = computed<Record<CustomerKind, string>>(() => ({
+  DIRECT: t("customer.edit.kindHint.DIRECT"),
+  INTERMEDIARY: t("customer.edit.kindHint.INTERMEDIARY"),
+  SUB_CUSTOMER: t("customer.edit.kindHint.SUB_CUSTOMER"),
+}));
 
 async function searchBrokers(keyword: string) {
   brokerLoading.value = true;
@@ -102,15 +105,15 @@ async function submit() {
   const c = props.customer;
   if (!c) return;
   if (!form.name.trim()) {
-    ElMessage.warning("请输入客户名称");
+    ElMessage.warning(t("customer.edit.nameRequired"));
     return;
   }
   if (isSub.value && !form.parent_id) {
-    ElMessage.warning("请选择所属中介");
+    ElMessage.warning(t("customer.edit.brokerRequired"));
     return;
   }
   if (!isSub.value && !/^\d{5}$/.test(form.customer_code)) {
-    ElMessage.warning("直客/中介的客户编号必须是五位数字");
+    ElMessage.warning(t("customer.edit.codeInvalid"));
     return;
   }
   submitting.value = true;
@@ -129,7 +132,12 @@ async function submit() {
       customer_status: form.customer_status as never,
       risk_level: form.risk_level as never,
     });
-    ElMessage.success(`客户信息已保存：${updated.customer_code || "无编号"} · ${updated.name}`);
+    ElMessage.success(
+      t("customer.edit.saveSuccess", {
+        code: updated.customer_code || t("customer.common.noCode"),
+        name: updated.name,
+      }),
+    );
     emit("updated", updated);
   } catch {
     /* 错误提示由 http 拦截器统一处理 */
@@ -140,16 +148,16 @@ async function submit() {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="编辑客户信息" width="640px" :close-on-click-modal="false">
+  <el-dialog v-model="visible" :title="t('customer.edit.title')" width="640px" :close-on-click-modal="false">
     <p class="subtitle">
-      {{ customer?.name }} · {{ customer ? CustomerKindLabel[customer.customer_kind] : "" }} · 当前编号
-      {{ customer?.customer_code || "无编号" }}
+      {{ customer?.name }} · {{ customer ? localizeText(CustomerKindLabel[customer.customer_kind]) : "" }} · {{ t("customer.edit.currentCode") }}
+      {{ customer?.customer_code || t("customer.common.noCode") }}
     </p>
     <el-form label-position="top">
-      <el-form-item label="STEP 01 客户类型">
+      <el-form-item :label="t('customer.edit.stepKind')">
         <div v-if="kindLocked" class="kind-locked">
-          <strong>中介</strong>
-          <span>名下有下级客户，暂不可变更类型</span>
+          <strong>{{ t("customer.edit.kindIntermediary") }}</strong>
+          <span>{{ t("customer.edit.kindLockedHint") }}</span>
         </div>
         <el-radio-group v-else v-model="form.customer_kind" class="kind-group">
           <el-radio-button v-for="(label, value) in CustomerKindLabel" :key="value" :value="value">
@@ -161,14 +169,14 @@ async function submit() {
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item v-if="isSub" label="所属中介" required>
+      <el-form-item v-if="isSub" :label="t('customer.edit.parentBroker')" required>
         <el-select
           v-model="form.parent_id"
           filterable
           remote
           :remote-method="searchBrokers"
           :loading="brokerLoading"
-          placeholder="输入中介编号或中介名称搜索选择"
+          :placeholder="t('customer.edit.brokerSearchPh')"
           style="width: 100%"
         >
           <el-option
@@ -181,55 +189,55 @@ async function submit() {
       </el-form-item>
 
       <div class="grid">
-        <el-form-item :label="isSub ? '下级客户编号（可留空）' : '客户编号'" :required="!isSub">
+        <el-form-item :label="isSub ? t('customer.edit.subCodeOptional') : t('customer.common.customerCode')" :required="!isSub">
           <el-input v-model="form.customer_code" maxlength="5" placeholder="20001-29999" />
         </el-form-item>
-        <el-form-item label="客户名称" required>
+        <el-form-item :label="t('customer.edit.name')" required>
           <el-input v-model="form.name" maxlength="100" />
         </el-form-item>
 
-        <el-form-item v-if="isSub" label="下级主体类型（可选）">
-          <el-select v-model="form.sub_type" clearable placeholder="不定义" style="width: 100%">
+        <el-form-item v-if="isSub" :label="t('customer.edit.subTypeOptional')">
+          <el-select v-model="form.sub_type" clearable :placeholder="t('customer.edit.subTypePh')" style="width: 100%">
             <el-option v-for="(label, value) in CustomerSubTypeLabel" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
 
-        <el-form-item label="联系电话">
-          <el-input v-model="form.phone" maxlength="50" placeholder="输入联系电话（可选）" />
+        <el-form-item :label="t('customer.common.phone')">
+          <el-input v-model="form.phone" maxlength="50" :placeholder="t('customer.edit.phonePh')" />
         </el-form-item>
-        <el-form-item label="跟进交易员">
-          <el-input v-model="form.follow_trader" maxlength="50" placeholder="输入跟进交易员" />
+        <el-form-item :label="t('customer.common.followTrader')">
+          <el-input v-model="form.follow_trader" maxlength="50" :placeholder="t('customer.edit.followTraderPh')" />
         </el-form-item>
-        <el-form-item label="地区">
-          <el-select v-model="form.region" clearable placeholder="不填写" style="width: 100%">
+        <el-form-item :label="t('customer.common.region')">
+          <el-select v-model="form.region" clearable :placeholder="t('customer.edit.regionPh')" style="width: 100%">
             <el-option v-for="(label, value) in RegionLabel" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="所属交易员">
-          <el-select v-model="form.agent_name" clearable placeholder="不指定" style="width: 100%">
+        <el-form-item :label="t('customer.common.agent')">
+          <el-select v-model="form.agent_name" clearable :placeholder="t('customer.edit.agentPh')" style="width: 100%">
             <el-option v-for="name in ['杨澜', '周辰', '陈浩']" :key="name" :label="name" :value="name" />
           </el-select>
         </el-form-item>
-        <el-form-item label="当前状态">
+        <el-form-item :label="t('customer.common.currentStatus')">
           <el-select v-model="form.customer_status" style="width: 100%">
             <el-option v-for="(label, value) in CustomerStatusLabel" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="风险等级">
+        <el-form-item :label="t('customer.common.riskLevel')">
           <el-select v-model="form.risk_level" style="width: 100%">
             <el-option v-for="(label, value) in RiskLevelLabel" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
       </div>
 
-      <el-form-item label="备注">
-        <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" placeholder="可记录来源、关系、注意事项或内部说明" />
+      <el-form-item :label="t('customer.common.remark')">
+        <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" :placeholder="t('customer.edit.remarkPh')" />
       </el-form-item>
     </el-form>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">保存信息</el-button>
+      <el-button @click="visible = false">{{ t("customer.common.cancel") }}</el-button>
+      <el-button type="primary" :loading="submitting" @click="submit">{{ t("customer.edit.save") }}</el-button>
     </template>
   </el-dialog>
 </template>

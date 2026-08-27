@@ -56,6 +56,17 @@ export const i18n = createI18n({
   messages: { "zh-CN": zhCN, "zh-TW": zhTW },
 });
 
+/**
+ * 简体原文 → 当前语言展示文本。
+ * 用于不适合抽 key 的场景：router meta.title、@bv/shared 的 *Label 枚举映射等
+ * "多处定义的简体常量"，繁体下经 opencc 转换（含「臺→台」回替），简体下原样返回。
+ * 在模板/computed 中调用会因读取 locale ref 而自动响应语言切换。
+ * 注意：仅用于系统文案常量，禁止对用户数据（客户名等）调用。
+ */
+export function localizeText(text: string): string {
+  return i18n.global.locale.value === "zh-TW" ? toTraditional(text) : text;
+}
+
 export function setLocale(locale: AppLocale): void {
   i18n.global.locale.value = locale;
   try {

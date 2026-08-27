@@ -7,11 +7,14 @@ import {
 } from "@bv/shared";
 import { ElMessage } from "element-plus";
 import { computed, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { createDispatch, fetchDispatchContext } from "@/api/order";
 
 const visible = defineModel<boolean>({ required: true });
 const props = defineProps<{ order: TradeOrderVO | null }>();
 const emit = defineEmits<{ done: [order: TradeOrderVO] }>();
+
+const { t } = useI18n();
 
 const submitting = ref(false);
 const vaAccounts = ref<VaAccountVO[]>([]);
@@ -67,9 +70,9 @@ watch(() => [form.va_account_id, form.payout_account], () => {
 async function submit() {
   const order = props.order!;
   const text = form.text.trim();
-  if (!text) return ElMessage.warning("请粘贴或编辑排单文案");
+  if (!text) return ElMessage.warning(t("orders.dispatch.warnEmptyText"));
   if (text.includes("（在此粘贴客户提供的收款账户资料，或直接编辑）")) {
-    return ElMessage.warning("文案中还保留着占位提示，请替换为客户提供的收款账户资料");
+    return ElMessage.warning(t("orders.dispatch.warnPlaceholderRemains"));
   }
   submitting.value = true;
   try {
@@ -79,7 +82,7 @@ async function submit() {
       va_account_id: form.channel === DispatchChannel.SGB ? form.va_account_id || null : null,
       payout_account: form.payout_account.trim() || null,
     });
-    ElMessage.success(`排单已提交，${order.order_no} 进入出款审核中`);
+    ElMessage.success(t("orders.dispatch.submitted", { orderNo: order.order_no }));
     visible.value = false;
     emit("done", updated);
   } finally {
@@ -89,25 +92,25 @@ async function submit() {
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="`发起出款排单 · ${order?.order_no ?? ''}`" width="640px" :close-on-click-modal="false">
+  <el-dialog v-model="visible" :title="`${t('orders.common.startDispatch')} · ${order?.order_no ?? ''}`" width="640px" :close-on-click-modal="false">
     <div class="channel-strip">
-      <div><span>SGB 通道可用</span><strong>{{ sgb ? `${sgb.currency} ${sgb.available.toLocaleString("en-US")}` : "—" }}</strong></div>
-      <div><span>SINO 通道可用</span><strong>{{ sino ? `${sino.currency} ${sino.available.toLocaleString("en-US")}` : "—" }}</strong></div>
-      <div><span>应付出款</span><strong>{{ order ? `${order.buy_currency} ${order.buy_amount.toLocaleString("en-US")}` : "—" }}</strong></div>
+      <div><span>{{ t("orders.dispatch.sgbAvailable") }}</span><strong>{{ sgb ? `${sgb.currency} ${sgb.available.toLocaleString("en-US")}` : "—" }}</strong></div>
+      <div><span>{{ t("orders.dispatch.sinoAvailable") }}</span><strong>{{ sino ? `${sino.currency} ${sino.available.toLocaleString("en-US")}` : "—" }}</strong></div>
+      <div><span>{{ t("orders.dispatch.payableAmount") }}</span><strong>{{ order ? `${order.buy_currency} ${order.buy_amount.toLocaleString("en-US")}` : "—" }}</strong></div>
     </div>
     <el-form label-position="top">
       <div class="grid">
-        <el-form-item label="出款通道">
+        <el-form-item :label="t('orders.dispatch.channel')">
           <el-radio-group v-model="form.channel">
             <el-radio-button :value="DispatchChannel.SGB">SGB</el-radio-button>
             <el-radio-button :value="DispatchChannel.SINO">SINO</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="出款账户">
-          <el-input v-model="form.payout_account" maxlength="60" placeholder="出款账户名/描述（写入排单文案）" />
+        <el-form-item :label="t('orders.common.payoutAccount')">
+          <el-input v-model="form.payout_account" maxlength="60" :placeholder="t('orders.dispatch.payoutAccountPlaceholder')" />
         </el-form-item>
-        <el-form-item v-if="form.channel === 'SGB'" label="客户 VA 账户">
-          <el-select v-model="form.va_account_id" :placeholder="vaAccounts.length ? '选择 VA' : '该客户没有已登记的 VA 账户'" style="width: 100%">
+        <el-form-item v-if="form.channel === 'SGB'" :label="t('orders.dispatch.vaAccount')">
+          <el-select v-model="form.va_account_id" :placeholder="vaAccounts.length ? t('orders.dispatch.selectVa') : t('orders.dispatch.noVa')" style="width: 100%">
             <el-option
               v-for="va in vaAccounts"
               :key="va.id"
@@ -117,13 +120,13 @@ async function submit() {
           </el-select>
         </el-form-item>
       </div>
-      <el-form-item label="排单文案（粘贴客户提供的收款账户资料后提交）">
+      <el-form-item :label="t('orders.dispatch.textLabel')">
         <el-input v-model="form.text" type="textarea" :rows="12" class="mono-text" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">提交排单审核</el-button>
+      <el-button @click="visible = false">{{ t("orders.common.cancel") }}</el-button>
+      <el-button type="primary" :loading="submitting" @click="submit">{{ t("orders.dispatch.submitReview") }}</el-button>
     </template>
   </el-dialog>
 </template>

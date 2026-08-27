@@ -9,11 +9,15 @@ import {
 import { ElMessage } from "element-plus";
 import { computed, reactive, watch } from "vue";
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { inflowConfirm, outflowExecute } from "@/api/order";
 
 const visible = defineModel<boolean>({ required: true });
 const props = defineProps<{ order: TradeOrderVO | null; side: FundingSide }>();
 const emit = defineEmits<{ done: [order: TradeOrderVO] }>();
+
+const { t } = useI18n();
 
 const submitting = ref(false);
 const form = reactive({
@@ -52,17 +56,25 @@ watch(visible, open => {
 const title = computed(() => {
   if (!props.order) return "";
   if (props.side === "inflow") {
-    return kind.value === FundingKind.CHAIN ? "标记链上入款到账" : kind.value === FundingKind.CASH ? "确认现金交收" : "登记法币入账";
+    return kind.value === FundingKind.CHAIN
+      ? t("orders.common.markChainInflow")
+      : kind.value === FundingKind.CASH
+        ? t("orders.common.confirmCashSettle")
+        : t("orders.common.registerFiatInflow");
   }
-  return kind.value === FundingKind.CHAIN ? "登记链上转账" : kind.value === FundingKind.CASH ? "登记现金交付" : "出款登记";
+  return kind.value === FundingKind.CHAIN
+    ? t("orders.common.registerChainTransfer")
+    : kind.value === FundingKind.CASH
+      ? t("orders.common.registerCashDelivery")
+      : t("orders.common.payoutRegister");
 });
 
 async function submit() {
   const order = props.order!;
-  if (kind.value === FundingKind.CHAIN && !form.hash.trim()) return ElMessage.warning("请填写 Transaction Hash");
-  if (kind.value === FundingKind.CHAIN && !form.confirms.trim()) return ElMessage.warning("请填写链上确认次数（以实际查询为准）");
-  if (kind.value === FundingKind.CASH && !form.place.trim()) return ElMessage.warning("请填写交收地点");
-  if (kind.value === FundingKind.BANK && props.side === "outflow" && !form.account.trim()) return ElMessage.warning("请填写出款账户");
+  if (kind.value === FundingKind.CHAIN && !form.hash.trim()) return ElMessage.warning(t("orders.funding.warnHash"));
+  if (kind.value === FundingKind.CHAIN && !form.confirms.trim()) return ElMessage.warning(t("orders.funding.warnConfirms"));
+  if (kind.value === FundingKind.CASH && !form.place.trim()) return ElMessage.warning(t("orders.funding.warnPlace"));
+  if (kind.value === FundingKind.BANK && props.side === "outflow" && !form.account.trim()) return ElMessage.warning(t("orders.funding.warnAccount"));
   submitting.value = true;
   try {
     const payload = {
@@ -80,7 +92,11 @@ async function submit() {
     };
     const updated =
       props.side === "inflow" ? await inflowConfirm(order.id, payload) : await outflowExecute(order.id, payload);
-    ElMessage.success(props.side === "inflow" ? `入款已登记确认，${order.order_no} 进入待出款排单` : `出款已执行，${order.order_no} 凭证已归档，订单完成`);
+    ElMessage.success(
+      props.side === "inflow"
+        ? t("orders.funding.inflowDone", { orderNo: order.order_no })
+        : t("orders.funding.outflowDone", { orderNo: order.order_no }),
+    );
     visible.value = false;
     emit("done", updated);
   } finally {
@@ -92,12 +108,12 @@ async function submit() {
 <template>
   <el-dialog v-model="visible" :title="`${title} · ${order?.order_no ?? ''}`" width="520px" :close-on-click-modal="false">
     <p class="brief">
-      {{ order?.customer_name }} · {{ side === "inflow" ? "应收" : "应付" }}
+      {{ order?.customer_name }} · {{ side === "inflow" ? t("orders.common.receivable") : t("orders.common.payable") }}
       <strong>{{ currency }} {{ (side === "inflow" ? order?.sell_amount : order?.buy_amount)?.toLocaleString("en-US") }}</strong>
-      · {{ FundingKindLabel[kind] }}
+      · {{ localizeText(FundingKindLabel[kind]) }}
     </p>
     <el-form label-position="top">
-      <el-form-item :label="side === 'inflow' ? '实际到账金额' : '实际出款金额'" required>
+      <el-form-item :label="side === 'inflow' ? t('orders.funding.actualInflowAmount') : t('orders.funding.actualOutflowAmount')" required>
         <el-input v-model.number="form.amount" type="number">
           <template #prepend>{{ currency }}</template>
         </el-input>
@@ -105,40 +121,40 @@ async function submit() {
 
       <template v-if="kind === FundingKind.CHAIN">
         <div class="grid">
-          <el-form-item label="链">
+          <el-form-item :label="t('orders.funding.chain')">
             <el-select v-model="form.chain" style="width: 100%">
               <el-option value="TRC20" label="TRC20" />
               <el-option value="ERC20" label="ERC20" />
             </el-select>
           </el-form-item>
-          <el-form-item label="确认次数">
+          <el-form-item :label="t('orders.funding.confirms')">
             <el-input v-model="form.confirms" />
           </el-form-item>
         </div>
         <el-form-item label="Transaction Hash" required>
-          <el-input v-model="form.hash" placeholder="链上交易哈希" />
+          <el-input v-model="form.hash" :placeholder="t('orders.funding.hashPlaceholder')" />
         </el-form-item>
       </template>
 
       <template v-else-if="kind === FundingKind.CASH">
-        <el-form-item label="交收地点" required>
-          <el-input v-model="form.place" placeholder="如：中环办公室 / 指定交收点" />
+        <el-form-item :label="t('orders.common.settlePlace')" required>
+          <el-input v-model="form.place" :placeholder="t('orders.funding.placePlaceholder')" />
         </el-form-item>
         <div class="grid">
-          <el-form-item label="交收人">
+          <el-form-item :label="t('orders.funding.handler')">
             <el-input v-model="form.handler" />
           </el-form-item>
-          <el-form-item label="信物编号">
+          <el-form-item :label="t('orders.funding.token')">
             <el-input v-model="form.token" />
           </el-form-item>
         </div>
       </template>
 
       <template v-else>
-        <el-form-item :label="side === 'inflow' ? '入账账户' : '出款账户'" :required="side === 'outflow'">
-          <el-input v-model="form.account" placeholder="如：SGB 银行账户 · USD" />
+        <el-form-item :label="side === 'inflow' ? t('orders.funding.inflowAccount') : t('orders.common.payoutAccount')" :required="side === 'outflow'">
+          <el-input v-model="form.account" :placeholder="t('orders.funding.accountPlaceholder')" />
         </el-form-item>
-        <el-form-item label="方式">
+        <el-form-item :label="t('orders.common.method')">
           <el-select v-model="form.method" style="width: 100%">
             <el-option value="电汇转账" label="电汇转账" />
             <el-option value="CHATS" label="CHATS" />
@@ -147,15 +163,15 @@ async function submit() {
         </el-form-item>
       </template>
 
-      <el-form-item :label="side === 'inflow' ? '凭证文件名' : '回单文件名'">
-        <el-input v-model="form.voucher" placeholder="如：transfer-0826.pdf（可选）" />
+      <el-form-item :label="side === 'inflow' ? t('orders.funding.inflowVoucher') : t('orders.funding.outflowVoucher')">
+        <el-input v-model="form.voucher" :placeholder="t('orders.funding.voucherPlaceholder')" />
       </el-form-item>
-      <el-form-item label="说明">
-        <el-input v-model="form.note" maxlength="300" placeholder="可选" />
+      <el-form-item :label="t('orders.common.note')">
+        <el-input v-model="form.note" maxlength="300" :placeholder="t('orders.funding.optional')" />
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
+      <el-button @click="visible = false">{{ t("orders.common.cancel") }}</el-button>
       <el-button type="primary" :loading="submitting" @click="submit">{{ title }}</el-button>
     </template>
   </el-dialog>

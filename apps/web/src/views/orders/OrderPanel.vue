@@ -17,6 +17,8 @@ import {
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Close } from "@element-plus/icons-vue";
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
 import {
   approveDispatch,
@@ -43,6 +45,7 @@ const emit = defineEmits<{
   dispatch: [order: TradeOrderVO];
 }>();
 
+const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 const role = computed(() => auth.roleCode);
@@ -88,7 +91,7 @@ const STATUS_TAG: Record<string, "primary" | "success" | "warning" | "info" | "d
 
 function ownerLabel(side: FundingSide): string {
   if (!order.value) return "";
-  return FundingOwnerLabel[fundingOwnerRole(order.value, side)] ?? "";
+  return localizeText(FundingOwnerLabel[fundingOwnerRole(order.value, side)] ?? "");
 }
 
 function kindOf(side: FundingSide): FundingKind {
@@ -99,25 +102,39 @@ const statusHint = computed(() => {
   const o = order.value;
   if (!o) return "";
   const map: Record<string, string> = {
-    PENDING_KYC: "等待本单业务准入通过；准入审核通过后自动进入待客户入款",
-    AWAITING_INFLOW: `可以交易，等待客户${kindOf("inflow") === FundingKind.CHAIN ? "转 U" : o.pay_method === "现金" ? "交现金" : "TT 付款"}；${ownerLabel("inflow")}登记入款后进入待出款排单`,
-    AWAITING_DISPATCH: "客户入款已确认、资金已冻结，等待交易员发起出款排单",
-    DISPATCH_REVIEW: "出款排单已提交，等待高级交易员审核",
-    AWAITING_PAYOUT: `排单已通过，等待${ownerLabel("outflow")}执行出款`,
-    COMPLETED: "订单已完成闭环",
-    CANCELLED: "订单已终止，重新交易需创建新订单",
+    PENDING_KYC: t("orders.panel.hint.pendingKyc"),
+    AWAITING_INFLOW: t("orders.panel.hint.awaitingInflow", {
+      method: kindOf("inflow") === FundingKind.CHAIN ? t("orders.panel.hint.inflowMethodChain") : o.pay_method === "现金" ? t("orders.panel.hint.inflowMethodCash") : t("orders.panel.hint.inflowMethodTt"),
+      owner: ownerLabel("inflow"),
+    }),
+    AWAITING_DISPATCH: t("orders.panel.hint.awaitingDispatch"),
+    DISPATCH_REVIEW: t("orders.panel.hint.dispatchReview"),
+    AWAITING_PAYOUT: t("orders.panel.hint.awaitingPayout", { owner: ownerLabel("outflow") }),
+    COMPLETED: t("orders.panel.hint.completed"),
+    CANCELLED: t("orders.panel.hint.cancelled"),
   };
   return map[o.status] ?? "";
 });
 
 const stageCurrent = computed(() => (order.value ? orderStageCurrent(order.value.status, order.value.kyc) : 1));
 
+/** 资金卡状态码：模板据此比较/取色，展示文案走 orders.panel.state.* */
+type FundingStateCode =
+  | "idle"
+  | "awaitConfirm"
+  | "awaitDispatch"
+  | "awaitReview"
+  | "awaitExecution"
+  | "arrived"
+  | "archived"
+  | "exception";
+
 interface FundingInfo {
   kind: FundingKind;
   kindLabel: string;
   ownerRole: string;
   ownerLabel: string;
-  state: string;
+  state: FundingStateCode;
   mark: TradeOrderVO["inflow_mark"];
 }
 
@@ -126,39 +143,39 @@ function fundingState(side: FundingSide): FundingInfo {
   const kind = kindOf(side);
   const ownerRole = fundingOwnerRole(o, side);
   const mark = side === "inflow" ? o.inflow_mark : o.outflow_mark;
-  let state = "待发起";
+  let state: FundingStateCode = "idle";
   if (side === "inflow") {
-    if (o.status === TradeOrderStatus.PENDING_KYC) state = "待发起";
-    else if (o.status === TradeOrderStatus.AWAITING_INFLOW) state = "待到账确认";
-    else if (o.status === TradeOrderStatus.CANCELLED) state = mark ? "已到账" : "待发起";
-    else state = "已到账";
-    if (o.exception?.reason === "金额不符" && o.status === TradeOrderStatus.AWAITING_INFLOW) state = "异常";
+    if (o.status === TradeOrderStatus.PENDING_KYC) state = "idle";
+    else if (o.status === TradeOrderStatus.AWAITING_INFLOW) state = "awaitConfirm";
+    else if (o.status === TradeOrderStatus.CANCELLED) state = mark ? "arrived" : "idle";
+    else state = "arrived";
+    if (o.exception?.reason === "金额不符" && o.status === TradeOrderStatus.AWAITING_INFLOW) state = "exception";
   } else {
-    if (o.status === TradeOrderStatus.AWAITING_DISPATCH) state = "待排单";
-    else if (o.status === TradeOrderStatus.DISPATCH_REVIEW) state = "待审核";
-    else if (o.status === TradeOrderStatus.AWAITING_PAYOUT) state = "待执行";
-    else if (o.status === TradeOrderStatus.COMPLETED) state = mark ? "已归档" : "待发起";
-    if (o.dispatch_rejected && o.status === TradeOrderStatus.AWAITING_DISPATCH) state = "异常";
+    if (o.status === TradeOrderStatus.AWAITING_DISPATCH) state = "awaitDispatch";
+    else if (o.status === TradeOrderStatus.DISPATCH_REVIEW) state = "awaitReview";
+    else if (o.status === TradeOrderStatus.AWAITING_PAYOUT) state = "awaitExecution";
+    else if (o.status === TradeOrderStatus.COMPLETED) state = mark ? "archived" : "idle";
+    if (o.dispatch_rejected && o.status === TradeOrderStatus.AWAITING_DISPATCH) state = "exception";
   }
   return {
     kind,
-    kindLabel: FundingKindLabel[kind],
+    kindLabel: localizeText(FundingKindLabel[kind]),
     ownerRole,
-    ownerLabel: FundingOwnerLabel[ownerRole] ?? ownerRole,
+    ownerLabel: localizeText(FundingOwnerLabel[ownerRole] ?? ownerRole),
     state,
     mark,
   };
 }
 
-const STATE_TONE: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
-  待发起: "info",
-  待到账确认: "warning",
-  待排单: "primary",
-  待审核: "info",
-  待执行: "warning",
-  已到账: "success",
-  已归档: "success",
-  异常: "danger",
+const STATE_TONE: Record<FundingStateCode, "primary" | "success" | "warning" | "info" | "danger"> = {
+  idle: "info",
+  awaitConfirm: "warning",
+  awaitDispatch: "primary",
+  awaitReview: "info",
+  awaitExecution: "warning",
+  arrived: "success",
+  archived: "success",
+  exception: "danger",
 };
 
 /** 资金卡字段（按形态与登记内容展示） */
@@ -168,28 +185,33 @@ function markFields(info: FundingInfo, side: FundingSide): Array<[string, string
   const expected = side === "inflow" ? o.sell_amount : o.buy_amount;
   const currency = side === "inflow" ? o.sell_currency : o.buy_currency;
   const rows: Array<[string, string]> = [
-    [side === "inflow" ? "应收金额" : "应付金额", fmtMoney(currency, expected)],
+    [side === "inflow" ? t("orders.panel.fields.expectedRecv") : t("orders.panel.fields.expectedPay"), fmtMoney(currency, expected)],
   ];
   /* 实收/实付上屏：登记后展示实际金额，与应收/应付不符时标注差额（审计 1.1.2） */
   if (mark) {
     const diff = mark.amount - expected;
     rows.push([
-      side === "inflow" ? "实收金额" : "实付金额",
+      side === "inflow" ? t("orders.panel.fields.actualRecv") : t("orders.panel.fields.actualPay"),
       fmtMoney(mark.currency || currency, mark.amount) +
-        (diff !== 0 ? `（与${side === "inflow" ? "应收" : "应付"}差 ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}）` : ""),
+        (diff !== 0
+          ? t("orders.panel.fields.diff", {
+              label: side === "inflow" ? t("orders.common.receivable") : t("orders.common.payable"),
+              diff: `${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}`,
+            })
+          : ""),
     ]);
-    if (mark.method) rows.push(["方式", mark.method]);
-    rows.push(["登记人", `${mark.by} · ${formatDateTime(mark.at)}`]);
+    if (mark.method) rows.push([t("orders.common.method"), mark.method]);
+    rows.push([t("orders.panel.fields.registrar"), `${mark.by} · ${formatDateTime(mark.at)}`]);
   }
   if (info.kind === FundingKind.CHAIN) {
-    if (side === "inflow") rows.push(["公司收 U 地址", o.wallet_ops?.deposit_address || "待钱包运营提供"]);
-    else rows.push(["客户收 U 地址", o.wallet_ops?.payout_address || "待登记"], ["地址 KYA", o.wallet_ops?.kya_passed ? `通过（${o.wallet_ops.kya_by} · ${o.wallet_ops.kya_at ? formatDateTime(o.wallet_ops.kya_at) : ""}）` : "未通过"]);
-    if (mark?.hash) rows.push(["交易哈希", `${mark.hash.slice(0, 18)}…（${mark.chain || "TRC20"} · ${mark.confirms || "-"} 次确认）`]);
+    if (side === "inflow") rows.push([t("orders.panel.fields.companyDepositAddr"), o.wallet_ops?.deposit_address || t("orders.panel.fields.awaitingWalletOps")]);
+    else rows.push([t("orders.panel.fields.customerPayoutAddr"), o.wallet_ops?.payout_address || t("orders.panel.fields.awaitingRegister")], [t("orders.panel.fields.addressKya"), o.wallet_ops?.kya_passed ? t("orders.panel.fields.kyaPassed", { by: o.wallet_ops.kya_by, at: o.wallet_ops.kya_at ? formatDateTime(o.wallet_ops.kya_at) : "" }) : t("orders.panel.fields.kyaNotPassed")]);
+    if (mark?.hash) rows.push([t("orders.panel.fields.txHash"), t("orders.panel.fields.hashDetail", { hash: mark.hash.slice(0, 18), chain: mark.chain || "TRC20", confirms: mark.confirms || "-" })]);
   }
-  if (info.kind === FundingKind.BANK && mark?.account) rows.push(["账户", mark.account]);
-  if (info.kind === FundingKind.CASH && mark?.place) rows.push(["交收地点", mark.place + (mark.handler ? ` · ${mark.handler}` : "")]);
-  if (mark?.voucher) rows.push(["凭证", mark.voucher]);
-  if (mark?.note) rows.push(["说明", mark.note]);
+  if (info.kind === FundingKind.BANK && mark?.account) rows.push([t("orders.panel.fields.account"), mark.account]);
+  if (info.kind === FundingKind.CASH && mark?.place) rows.push([t("orders.common.settlePlace"), mark.place + (mark.handler ? ` · ${mark.handler}` : "")]);
+  if (mark?.voucher) rows.push([t("orders.panel.fields.voucher"), mark.voucher]);
+  if (mark?.note) rows.push([t("orders.common.note"), mark.note]);
   return rows;
 }
 
@@ -218,11 +240,11 @@ const actionBlocks = computed<ActionBlock[]>(() => {
   if (role.value === "OPS" && o.exception) {
     blocks.push({
       tone: "danger",
-      text: `附加异常：${o.exception.reason}。解除或取消后主线继续推进。`,
+      text: t("orders.panel.actions.exceptionText", { reason: o.exception.reason }),
       buttons: [
-        { label: "解除异常", run: () => resolveExc("restore") },
-        { label: "取消订单", run: () => resolveExc("cancel") },
-        ...(o.exception.escalated ? [] : [{ label: "升级合规", run: () => resolveExc("escalate") }]),
+        { label: t("orders.panel.actions.resolveException"), run: () => resolveExc("restore") },
+        { label: t("orders.common.cancelOrder"), run: () => resolveExc("cancel") },
+        ...(o.exception.escalated ? [] : [{ label: t("orders.panel.actions.escalateCompliance"), run: () => resolveExc("escalate") }]),
       ],
     });
   }
@@ -230,28 +252,32 @@ const actionBlocks = computed<ActionBlock[]>(() => {
     if (o.status === TradeOrderStatus.PENDING_KYC) {
       blocks.push({
         tone: "warning",
-        text: `等待本单业务准入通过（当前「${o.kyc.label}」）。上传材料并提交合规审核，通过后订单自动进入待客户入款。`,
+        text: t("orders.panel.actions.pendingKycText", { kyc: localizeText(o.kyc.label) }),
         buttons: [
-          { label: "前往材料上传", primary: true, run: () => router.push("/access/materials") },
-          { label: "同步 KYC 结果", run: doKycSync },
-          { label: "取消订单", run: () => doCancel(false) },
+          { label: t("orders.panel.actions.gotoMaterials"), primary: true, run: () => router.push("/access/materials") },
+          { label: t("orders.panel.actions.syncKyc"), run: doKycSync },
+          { label: t("orders.common.cancelOrder"), run: () => doCancel(false) },
         ],
       });
     }
     if (o.status === TradeOrderStatus.AWAITING_INFLOW) {
       blocks.push({
         tone: "info",
-        text: `等待客户${inflowInfo.kind === FundingKind.CHAIN ? "转入 USDT" : inflowInfo.kind === FundingKind.CASH ? "交付现金" : "银行转账"} ${fmtMoney(o.sell_currency, o.sell_amount)}；到账后由${inflowInfo.ownerLabel}登记入款并直接推进。`,
-        buttons: [{ label: "取消订单", run: () => doCancel(false) }],
+        text: t("orders.panel.actions.awaitingInflowText", {
+          method: inflowInfo.kind === FundingKind.CHAIN ? t("orders.panel.actions.methodChain") : inflowInfo.kind === FundingKind.CASH ? t("orders.panel.actions.methodCash") : t("orders.panel.actions.methodBank"),
+          amount: fmtMoney(o.sell_currency, o.sell_amount),
+          owner: inflowInfo.ownerLabel,
+        }),
+        buttons: [{ label: t("orders.common.cancelOrder"), run: () => doCancel(false) }],
       });
     }
     if (o.status === TradeOrderStatus.AWAITING_DISPATCH) {
       blocks.push({
         tone: "mint",
-        text: "入款已确认、资金已冻结，可发起出款排单。",
+        text: t("orders.panel.actions.awaitingDispatchText"),
         buttons: [
-          { label: "发起出款排单", primary: true, run: () => emit("dispatch", o) },
-          { label: "取消订单", run: () => doCancel(false) },
+          { label: t("orders.common.startDispatch"), primary: true, run: () => emit("dispatch", o) },
+          { label: t("orders.common.cancelOrder"), run: () => doCancel(false) },
         ],
       });
     }
@@ -259,14 +285,14 @@ const actionBlocks = computed<ActionBlock[]>(() => {
   if (o.status === TradeOrderStatus.AWAITING_INFLOW && role.value === inflowInfo.ownerRole) {
     blocks.push({
       tone: "warning",
-      text: `客户入款待你登记（${inflowInfo.kindLabel}），登记即确认，订单进入待出款排单。`,
+      text: t("orders.panel.actions.inflowOwnerText", { kind: inflowInfo.kindLabel }),
       buttons: [
         {
-          label: inflowInfo.kind === FundingKind.CHAIN ? "标记链上入款到账" : inflowInfo.kind === FundingKind.CASH ? "确认现金交收" : "登记法币入账",
+          label: inflowInfo.kind === FundingKind.CHAIN ? t("orders.common.markChainInflow") : inflowInfo.kind === FundingKind.CASH ? t("orders.common.confirmCashSettle") : t("orders.common.registerFiatInflow"),
           primary: true,
           run: () => emit("funding", o, "inflow"),
         },
-        { label: "入款异常", run: doInflowException },
+        { label: t("orders.panel.actions.inflowException"), run: doInflowException },
       ],
     });
   }
@@ -275,38 +301,38 @@ const actionBlocks = computed<ActionBlock[]>(() => {
       tone: "mint",
       text:
         outflowInfo.kind === FundingKind.CHAIN
-          ? `排单审核已通过，可向客户地址转出 ${fmtMoney(o.buy_currency, o.buy_amount)}，并登记交易哈希。`
-          : `排单审核已通过，可执行${outflowInfo.kind === FundingKind.CASH ? "现金交付" : "银行出款"}并归档凭证，登记后订单完成。`,
+          ? t("orders.panel.actions.outflowChainText", { amount: fmtMoney(o.buy_currency, o.buy_amount) })
+          : t("orders.panel.actions.outflowText", { action: outflowInfo.kind === FundingKind.CASH ? t("orders.panel.actions.outflowActionCash") : t("orders.panel.actions.outflowActionBank") }),
       buttons: [
         {
-          label: outflowInfo.kind === FundingKind.CHAIN ? "登记链上转账" : outflowInfo.kind === FundingKind.CASH ? "登记现金交付" : "出款登记",
+          label: outflowInfo.kind === FundingKind.CHAIN ? t("orders.common.registerChainTransfer") : outflowInfo.kind === FundingKind.CASH ? t("orders.common.registerCashDelivery") : t("orders.common.payoutRegister"),
           primary: true,
           run: () => emit("funding", o, "outflow"),
         },
-        { label: "执行异常退回", run: doOutflowReturn },
-        ...(dispatch.value ? [{ label: "查看排单文案", run: () => (tab.value = "payout") }] : []),
+        { label: t("orders.panel.actions.outflowReturn"), run: doOutflowReturn },
+        ...(dispatch.value ? [{ label: t("orders.panel.actions.viewDispatchText"), run: () => (tab.value = "payout") }] : []),
       ],
     });
   }
   if (role.value === "WALLET" && outflowInfo.kind === FundingKind.CHAIN && !o.wallet_ops?.kya_passed && ([TradeOrderStatus.AWAITING_INFLOW, TradeOrderStatus.AWAITING_DISPATCH, TradeOrderStatus.AWAITING_PAYOUT] as TradeOrderStatus[]).includes(o.status)) {
     blocks.push({
       tone: "warning",
-      text: "客户收 U 地址尚未通过 KYA，链上出款前必须完成登记。",
-      buttons: [{ label: "登记客户地址并 KYA", primary: true, run: doKya }],
+      text: t("orders.panel.actions.kyaText"),
+      buttons: [{ label: t("orders.panel.actions.kyaButton"), primary: true, run: doKya }],
     });
   }
   if (role.value === "WALLET" && inflowInfo.kind === FundingKind.CHAIN && !o.wallet_ops?.deposit_address && o.status === TradeOrderStatus.AWAITING_INFLOW) {
     blocks.push({
       tone: "info",
-      text: "客户等待公司收 U 地址，提供后可通知客户转入。",
-      buttons: [{ label: "提供公司收 U 地址", primary: true, run: doDepositAddress }],
+      text: t("orders.panel.actions.depositText"),
+      buttons: [{ label: t("orders.panel.actions.depositButton"), primary: true, run: doDepositAddress }],
     });
   }
   if (role.value === "OPS" && o.status === TradeOrderStatus.AWAITING_PAYOUT) {
     blocks.push({
       tone: "info",
-      text: "执行前如出现风险事件，可终止本单并作废排单。",
-      buttons: [{ label: "风险终止", run: () => doCancel(true) }],
+      text: t("orders.panel.actions.riskText"),
+      buttons: [{ label: t("orders.panel.actions.riskStop"), run: () => doCancel(true) }],
     });
   }
   if (["OPS", "FINANCE", "WALLET"].includes(role.value) && !o.exception && !([TradeOrderStatus.COMPLETED, TradeOrderStatus.CANCELLED] as TradeOrderStatus[]).includes(o.status) && role.value !== inflowInfo.ownerRole) {
@@ -320,12 +346,17 @@ async function doCancel(riskStop: boolean) {
   const o = order.value!;
   try {
     const { value } = await ElMessageBox.prompt(
-      `${o.customer_name} · ${fmtMoney(o.sell_currency, o.sell_amount)} → ${fmtMoney(o.buy_currency, o.buy_amount)}。${o.freeze?.state === "FROZEN" ? "已冻结资金将释放；" : ""}${riskStop ? "终止" : "取消"}后重新交易需创建新订单。`,
-      riskStop ? `风险终止订单 ${o.order_no}？` : `取消订单 ${o.order_no}？`,
-      { inputPlaceholder: riskStop ? "终止原因" : "取消原因", confirmButtonText: riskStop ? "确认终止" : "确认取消", cancelButtonText: "返回" },
+      t("orders.panel.dialogs.cancelBody", {
+        customer: o.customer_name,
+        sell: fmtMoney(o.sell_currency, o.sell_amount),
+        buy: fmtMoney(o.buy_currency, o.buy_amount),
+        extra: `${o.freeze?.state === "FROZEN" ? t("orders.panel.dialogs.frozenReleaseNote") : ""}${riskStop ? t("orders.panel.dialogs.stopTail") : t("orders.panel.dialogs.cancelTail")}`,
+      }),
+      riskStop ? t("orders.panel.dialogs.riskStopTitle", { orderNo: o.order_no }) : t("orders.panel.dialogs.cancelTitle", { orderNo: o.order_no }),
+      { inputPlaceholder: riskStop ? t("orders.panel.dialogs.stopReason") : t("orders.panel.dialogs.cancelReason"), confirmButtonText: riskStop ? t("orders.panel.dialogs.confirmStop") : t("orders.panel.dialogs.confirmCancel"), cancelButtonText: t("orders.common.back") },
     );
     const updated = riskStop ? await riskStopOrder(o.id, value?.trim() || undefined) : await cancelOrder(o.id, value?.trim() || undefined);
-    ElMessage.success(riskStop ? "订单已风险终止" : "订单已取消");
+    ElMessage.success(riskStop ? t("orders.panel.dialogs.stopped") : t("orders.panel.dialogs.orderCancelled"));
     applyUpdate(updated);
   } catch { /* 取消 */ }
 }
@@ -333,7 +364,7 @@ async function doCancel(riskStop: boolean) {
 async function doKycSync() {
   try {
     const updated = await syncOrderKyc(order.value!.id);
-    ElMessage.success(`KYC 已通过，${updated.order_no} 进入待客户入款`);
+    ElMessage.success(t("orders.panel.dialogs.kycSynced", { orderNo: updated.order_no }));
     applyUpdate(updated);
   } catch { /* 拦截器提示 */ }
 }
@@ -342,13 +373,13 @@ async function doDepositAddress() {
   const o = order.value!;
   try {
     const { value } = await ElMessageBox.prompt(
-      `${o.customer_name} · 应收 ${fmtMoney(o.sell_currency, o.sell_amount)}。地址将同步给交易员转交客户。`,
-      `提供公司收 U 地址 · ${o.order_no}`,
-      { inputPlaceholder: "收 U 地址（TRC20）", confirmButtonText: "确认提供", cancelButtonText: "取消" },
+      t("orders.panel.dialogs.depositPromptBody", { customer: o.customer_name, amount: fmtMoney(o.sell_currency, o.sell_amount) }),
+      t("orders.panel.dialogs.depositPromptTitle", { orderNo: o.order_no }),
+      { inputPlaceholder: t("orders.panel.dialogs.depositPlaceholder"), confirmButtonText: t("orders.panel.dialogs.confirmProvide"), cancelButtonText: t("orders.common.cancel") },
     );
     if (!value?.trim()) return;
     applyUpdate(await walletDepositAddress(o.id, value.trim()));
-    ElMessage.success("收 U 地址已提供");
+    ElMessage.success(t("orders.panel.dialogs.depositDone"));
   } catch { /* 取消 */ }
 }
 
@@ -356,13 +387,13 @@ async function doKya() {
   const o = order.value!;
   try {
     const { value } = await ElMessageBox.prompt(
-      `${o.customer_name} · 应付 ${fmtMoney(o.buy_currency, o.buy_amount)}。KYA 通过后才能执行链上出款。`,
-      `登记客户收 U 地址并做 KYA · ${o.order_no}`,
-      { inputValue: o.wallet_ops?.payout_address || "", inputPlaceholder: "客户收 U 地址", confirmButtonText: "KYA 通过", cancelButtonText: "取消" },
+      t("orders.panel.dialogs.kyaPromptBody", { customer: o.customer_name, amount: fmtMoney(o.buy_currency, o.buy_amount) }),
+      t("orders.panel.dialogs.kyaPromptTitle", { orderNo: o.order_no }),
+      { inputValue: o.wallet_ops?.payout_address || "", inputPlaceholder: t("orders.panel.dialogs.kyaPlaceholder"), confirmButtonText: t("orders.panel.dialogs.kyaConfirm"), cancelButtonText: t("orders.common.cancel") },
     );
     if (!value?.trim()) return;
     applyUpdate(await walletKya(o.id, value.trim()));
-    ElMessage.success("地址 KYA 已通过");
+    ElMessage.success(t("orders.panel.dialogs.kyaDone"));
   } catch { /* 取消 */ }
 }
 
@@ -370,12 +401,12 @@ async function doOutflowReturn() {
   const o = order.value!;
   try {
     const { value } = await ElMessageBox.prompt(
-      "执行前发现账户错误、地址 KYA 失败或通道不可用时，订单退回待出款排单重新准备。",
-      `执行异常退回 ${o.order_no}？`,
-      { inputPlaceholder: "异常原因", confirmButtonText: "确认退回", cancelButtonText: "返回" },
+      t("orders.panel.dialogs.outflowReturnBody"),
+      t("orders.panel.dialogs.outflowReturnTitle", { orderNo: o.order_no }),
+      { inputPlaceholder: t("orders.panel.dialogs.exceptionReason"), confirmButtonText: t("orders.panel.dialogs.confirmReturn"), cancelButtonText: t("orders.common.back") },
     );
     applyUpdate(await outflowReturn(o.id, value?.trim() || undefined));
-    ElMessage.success("已退回待出款排单");
+    ElMessage.success(t("orders.panel.dialogs.returned"));
   } catch { /* 取消 */ }
 }
 
@@ -383,12 +414,12 @@ async function doInflowException() {
   const o = order.value!;
   try {
     const { value } = await ElMessageBox.prompt(
-      `${o.customer_name} · 应收 ${fmtMoney(o.sell_currency, o.sell_amount)}。订单将转入异常处理。`,
-      `标记入款异常 · ${o.order_no}`,
-      { inputPlaceholder: "异常说明（如：实际到账金额与应收不符）", confirmButtonText: "确认标记", cancelButtonText: "取消" },
+      t("orders.panel.dialogs.inflowExcBody", { customer: o.customer_name, amount: fmtMoney(o.sell_currency, o.sell_amount) }),
+      t("orders.panel.dialogs.inflowExcTitle", { orderNo: o.order_no }),
+      { inputPlaceholder: t("orders.panel.dialogs.inflowExcPlaceholder"), confirmButtonText: t("orders.panel.dialogs.confirmMark"), cancelButtonText: t("orders.common.cancel") },
     );
     applyUpdate(await markException(o.id, { kind: "业务异常", reason: "金额不符", detail: value?.trim() || "入款金额与应收不符" }));
-    ElMessage.success("已标记入款异常");
+    ElMessage.success(t("orders.panel.dialogs.inflowExcMarked"));
   } catch { /* 取消 */ }
 }
 
@@ -398,23 +429,23 @@ async function resolveExc(action: "restore" | "cancel" | "escalate") {
     let note: string | undefined;
     if (action !== "escalate") {
       const { value } = await ElMessageBox.prompt(
-        action === "restore" ? `异常解除后订单继续按主线状态推进。` : "订单将标记已取消，已冻结资金将释放。",
-        action === "restore" ? `解除订单 ${o.order_no} 的异常？` : `取消订单 ${o.order_no}？`,
-        { inputPlaceholder: action === "restore" ? "处理说明" : "取消原因", confirmButtonText: action === "restore" ? "确认解除" : "确认取消", cancelButtonText: "返回" },
+        action === "restore" ? t("orders.panel.dialogs.resolveRestoreBody") : t("orders.panel.dialogs.resolveCancelBody"),
+        action === "restore" ? t("orders.panel.dialogs.resolveRestoreTitle", { orderNo: o.order_no }) : t("orders.panel.dialogs.cancelTitle", { orderNo: o.order_no }),
+        { inputPlaceholder: action === "restore" ? t("orders.panel.dialogs.resolveNotePlaceholder") : t("orders.panel.dialogs.cancelReason"), confirmButtonText: action === "restore" ? t("orders.panel.dialogs.confirmResolve") : t("orders.panel.dialogs.confirmCancel"), cancelButtonText: t("orders.common.back") },
       );
       note = value?.trim() || undefined;
     }
     applyUpdate(await resolveException(o.id, action, note));
-    ElMessage.success(action === "restore" ? "异常已解除" : action === "cancel" ? "订单已取消" : "已升级合规");
+    ElMessage.success(action === "restore" ? t("orders.panel.dialogs.resolved") : action === "cancel" ? t("orders.panel.dialogs.orderCancelled") : t("orders.panel.dialogs.escalated"));
   } catch { /* 取消 */ }
 }
 
 async function doDispatchApprove() {
   const o = order.value!;
   try {
-    await ElMessageBox.confirm(`${dispatch.value?.dispatch_no} · ${fmtMoney(o.buy_currency, o.buy_amount)}。通过后转入待出款执行。`, "排单审核通过？", { confirmButtonText: "审核通过", cancelButtonText: "取消" });
+    await ElMessageBox.confirm(t("orders.panel.dialogs.approveBody", { dispatchNo: dispatch.value?.dispatch_no, amount: fmtMoney(o.buy_currency, o.buy_amount) }), t("orders.panel.dialogs.approveTitle"), { confirmButtonText: t("orders.common.approve"), cancelButtonText: t("orders.common.cancel") });
     applyUpdate(await approveDispatch(o.id));
-    ElMessage.success("出款审核通过");
+    ElMessage.success(t("orders.panel.dialogs.approved"));
   } catch { /* 取消 */ }
 }
 
@@ -422,12 +453,12 @@ async function doDispatchReturn() {
   const o = order.value!;
   try {
     const { value } = await ElMessageBox.prompt(
-      `${o.customer_name} · ${fmtMoney(o.buy_currency, o.buy_amount)}。驳回后订单回到待出款排单，交易员重新提交后再次进入审核。`,
-      `驳回排单 ${dispatch.value?.dispatch_no}？`,
-      { inputPlaceholder: "驳回原因", confirmButtonText: "确认驳回", cancelButtonText: "返回" },
+      t("orders.panel.dialogs.returnDispatchBody", { customer: o.customer_name, amount: fmtMoney(o.buy_currency, o.buy_amount) }),
+      t("orders.panel.dialogs.returnDispatchTitle", { dispatchNo: dispatch.value?.dispatch_no }),
+      { inputPlaceholder: t("orders.panel.dialogs.rejectReason"), confirmButtonText: t("orders.panel.dialogs.confirmReject"), cancelButtonText: t("orders.common.back") },
     );
     applyUpdate(await returnDispatch(o.id, value?.trim() || undefined));
-    ElMessage.success("排单已驳回");
+    ElMessage.success(t("orders.panel.dialogs.dispatchReturned"));
   } catch { /* 取消 */ }
 }
 </script>
@@ -447,61 +478,61 @@ async function doDispatchReturn() {
           <el-button :icon="Close" text @click="emit('close')" />
         </div>
         <div class="title-row">
-          <h2>{{ order.customer_name }}（{{ order.customer_code || "无编号" }}）</h2>
+          <h2>{{ order.customer_name }}（{{ order.customer_code || t("orders.common.noCode") }}）</h2>
           <el-tag :type="STATUS_TAG[order.status]" effect="dark" size="small">
-            {{ TradeOrderStatusLabel[order.status] }}
+            {{ localizeText(TradeOrderStatusLabel[order.status]) }}
           </el-tag>
           <el-tag v-if="order.exception" type="danger" size="small" effect="light">
             {{ order.exception.kind }} · {{ order.exception.reason }}
           </el-tag>
-          <el-tag v-if="order.dispatch_rejected" type="danger" size="small" effect="light">出款审核驳回</el-tag>
+          <el-tag v-if="order.dispatch_rejected" type="danger" size="small" effect="light">{{ t("orders.common.dispatchRejectedFlag") }}</el-tag>
         </div>
         <p class="hint">
           {{ statusHint }}
-          <time>创建 {{ formatDateTime(order.created_at) }}{{ order.handler_name ? ` · ${order.handler_name}` : "" }}</time>
+          <time>{{ t("orders.common.createdAt", { time: formatDateTime(order.created_at) }) }}{{ order.handler_name ? ` · ${order.handler_name}` : "" }}</time>
         </p>
 
         <div class="trade-hero">
           <div class="hero-row">
             <div class="hero-cell">
-              <span>业务类型</span>
+              <span>{{ t("orders.panel.bizType") }}</span>
               <strong :class="{ 'biz-unset': !order.business_type }">
-                {{ order.business_type || "未指定（按客户整体准入）" }}
+                {{ order.business_type || t("orders.panel.bizUnset") }}
               </strong>
             </div>
             <div class="hero-cell">
-              <span>KYC 状态</span>
-              <strong :class="`kyc-text-${order.kyc.tone}`">{{ order.kyc.label }}</strong>
+              <span>{{ t("orders.common.kycStatus") }}</span>
+              <strong :class="`kyc-text-${order.kyc.tone}`">{{ localizeText(order.kyc.label) }}</strong>
             </div>
           </div>
           <div class="hero-legs">
-            <div><span>客户卖出</span><strong>{{ fmtMoney(order.sell_currency, order.sell_amount) }}</strong></div>
+            <div><span>{{ t("orders.common.customerSell") }}</span><strong>{{ fmtMoney(order.sell_currency, order.sell_amount) }}</strong></div>
             <i>→</i>
-            <div><span>客户买入</span><strong>{{ fmtMoney(order.buy_currency, order.buy_amount) }}</strong></div>
+            <div><span>{{ t("orders.common.customerBuy") }}</span><strong>{{ fmtMoney(order.buy_currency, order.buy_amount) }}</strong></div>
             <div class="hero-rate">
-              <span>执行汇率</span>
+              <span>{{ t("orders.common.execRate") }}</span>
               <strong class="mono">{{ order.rate }}</strong>
-              <em>{{ order.pay_method }}</em>
+              <em>{{ localizeText(order.pay_method) }}</em>
             </div>
           </div>
-          <div class="hero-remark"><span>备注说明</span><p :class="{ empty: !order.remark }">{{ order.remark || "创建订单时未填写说明" }}</p></div>
+          <div class="hero-remark"><span>{{ t("orders.common.remark") }}</span><p :class="{ empty: !order.remark }">{{ order.remark || t("orders.panel.remarkEmpty") }}</p></div>
           <!-- 建单时关联的报价快照：让各角色都能看到交易员依据的报价（审计 1.2.7） -->
           <div v-if="order.quote" class="hero-quote">
-            <span>关联报价</span>
+            <span>{{ t("orders.panel.quoteLinked") }}</span>
             <code class="mono">{{ order.quote.deal_rate }}</code>
-            <em>{{ order.quote.source }}</em>
+            <em>{{ localizeText(order.quote.source) }}</em>
             <em v-if="order.quote.quoted_by">{{ order.quote.quoted_by }}{{ order.quote.quoted_at ? ` · ${formatDateTime(order.quote.quoted_at)}` : "" }}</em>
-            <em v-if="order.quote.cost_rate">成本 {{ order.quote.cost_rate }}</em>
-            <em v-if="order.quote.fee">手续费 {{ order.quote.fee }}</em>
+            <em v-if="order.quote.cost_rate">{{ t("orders.panel.quoteCost", { rate: order.quote.cost_rate }) }}</em>
+            <em v-if="order.quote.fee">{{ t("orders.panel.quoteFee", { fee: order.quote.fee }) }}</em>
             <em v-if="Number(order.quote.deal_rate) !== Number(order.rate)" class="quote-mismatch">
-              ⚠ 与执行汇率 {{ order.rate }} 不一致
+              {{ t("orders.panel.quoteMismatch", { rate: order.rate }) }}
             </em>
           </div>
         </div>
 
         <div v-if="order.status === 'CANCELLED'" class="stage-cancelled">
-          <el-tag type="danger" size="small">已取消</el-tag>
-          <span>订单已取消，未走完主线流程；历史操作见「活动」。</span>
+          <el-tag type="danger" size="small">{{ t("orders.panel.cancelledTag") }}</el-tag>
+          <span>{{ t("orders.panel.cancelledNote") }}</span>
         </div>
         <div v-else class="stage-bar">
           <div
@@ -511,33 +542,33 @@ async function doDispatchReturn() {
             :class="{ done: index < stageCurrent, active: index === stageCurrent }"
           >
             <i>{{ index < stageCurrent ? "✓" : index + 1 }}</i>
-            <span>{{ stage }}</span>
+            <span>{{ localizeText(stage) }}</span>
           </div>
         </div>
       </header>
 
       <el-tabs v-model="tab" class="panel-tabs">
-        <el-tab-pane label="收款" name="payment" />
-        <el-tab-pane label="出款排单" name="payout" />
-        <el-tab-pane label="出款" name="execution" />
-        <el-tab-pane :label="`活动（${order.timeline.length}）`" name="activity" />
+        <el-tab-pane :label="t('orders.panel.tabs.payment')" name="payment" />
+        <el-tab-pane :label="t('orders.common.dispatch')" name="payout" />
+        <el-tab-pane :label="t('orders.panel.tabs.execution')" name="execution" />
+        <el-tab-pane :label="t('orders.panel.tabs.activity', { count: order.timeline.length })" name="activity" />
       </el-tabs>
 
       <div class="panel-body">
         <!-- 收款 -->
         <template v-if="tab === 'payment'">
           <el-alert v-if="!order.kyc.ready && !['COMPLETED', 'CANCELLED'].includes(order.status)" type="warning" :closable="false" class="mb">
-            当前客户 KYC 未通过（{{ order.kyc.label }}），可继续跟进交易意向，但不能确认到账。
+            {{ t("orders.panel.kycNotReadyAlert", { kyc: localizeText(order.kyc.label) }) }}
           </el-alert>
           <el-alert v-if="order.exception" type="error" :closable="false" class="mb">
-            附加异常：{{ order.exception.kind }} · {{ order.exception.reason }} — {{ order.exception.detail }}{{ order.exception.escalated ? "（已升级合规）" : "" }}
+            {{ t("orders.panel.exceptionAlert", { kind: order.exception.kind, reason: order.exception.reason, detail: order.exception.detail }) }}{{ order.exception.escalated ? t("orders.panel.escalatedSuffix") : "" }}
           </el-alert>
-          <section class="funding-card" :class="{ done: ['已到账'].includes(fundingState('inflow').state), error: fundingState('inflow').state === '异常' }">
+          <section class="funding-card" :class="{ done: fundingState('inflow').state === 'arrived', error: fundingState('inflow').state === 'exception' }">
             <header>
-              <div><strong>客户入款</strong><em>{{ fundingState("inflow").kindLabel }}</em></div>
-              <el-tag :type="STATE_TONE[fundingState('inflow').state]" size="small">{{ fundingState("inflow").state }}</el-tag>
+              <div><strong>{{ t("orders.panel.customerInflow") }}</strong><em>{{ fundingState("inflow").kindLabel }}</em></div>
+              <el-tag :type="STATE_TONE[fundingState('inflow').state]" size="small">{{ t(`orders.panel.state.${fundingState("inflow").state}`) }}</el-tag>
             </header>
-            <p class="owner">责任人：<strong>{{ fundingState("inflow").ownerLabel }}</strong><template v-if="order.inflow_mark"> · 已由 {{ order.inflow_mark.by }} 于 {{ formatDateTime(order.inflow_mark.at) }} 标记</template></p>
+            <p class="owner">{{ t("orders.panel.owner") }}<strong>{{ fundingState("inflow").ownerLabel }}</strong><template v-if="order.inflow_mark"> · {{ t("orders.panel.markedBy", { by: order.inflow_mark.by, at: formatDateTime(order.inflow_mark.at) }) }}</template></p>
             <dl>
               <div v-for="[label, value] in markFields(fundingState('inflow'), 'inflow')" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
             </dl>
@@ -547,80 +578,80 @@ async function doDispatchReturn() {
         <!-- 出款排单 -->
         <template v-if="tab === 'payout'">
           <el-alert v-if="order.dispatch_rejected" type="error" :closable="false" class="mb">
-            出款审核驳回：{{ order.dispatch_rejected.reason }}（{{ order.dispatch_rejected.by }} · {{ formatDateTime(order.dispatch_rejected.at) }}），请重新发起排单。
+            {{ t("orders.panel.rejectedAlert", { reason: order.dispatch_rejected.reason, by: order.dispatch_rejected.by, at: formatDateTime(order.dispatch_rejected.at) }) }}
           </el-alert>
           <section class="block">
-            <h4>出款排单</h4>
+            <h4>{{ t("orders.common.dispatch") }}</h4>
             <template v-if="dispatch">
               <div class="dispatch-head">
                 <strong class="mono">{{ dispatch.dispatch_no }}</strong>
-                <el-tag size="small">{{ dispatch.channel }} 通道</el-tag>
-                <small>{{ dispatch.submitted_by }} · {{ formatDateTime(dispatch.submitted_at) }} 提交</small>
+                <el-tag size="small">{{ t("orders.panel.channelTag", { channel: dispatch.channel }) }}</el-tag>
+                <small>{{ t("orders.panel.submittedMeta", { by: dispatch.submitted_by, at: formatDateTime(dispatch.submitted_at) }) }}</small>
               </div>
               <pre class="dispatch-text">{{ dispatch.final_text }}</pre>
             </template>
             <p v-else-if="order.status === 'AWAITING_DISPATCH'" class="empty-inline">
-              {{ isTrader ? "入款已确认，可在下方发起出款排单。" : "等待交易员在订单内发起排单。" }}
+              {{ isTrader ? t("orders.panel.dispatchEmptyTrader") : t("orders.panel.dispatchEmptyWait") }}
             </p>
-            <p v-else class="empty-inline">收款确认后进入排单环节。</p>
+            <p v-else class="empty-inline">{{ t("orders.panel.dispatchEmptyBefore") }}</p>
           </section>
           <section class="block">
-            <h4>出款审核</h4>
+            <h4>{{ t("orders.panel.reviewTitle") }}</h4>
             <template v-if="dispatch && order.status === 'DISPATCH_REVIEW'">
               <div class="review-row">
                 <div>
                   <strong>{{ fmtMoney(dispatch.currency, dispatch.amount) }}</strong>
-                  <small>{{ dispatch.channel }} 通道 · 收款 {{ dispatch.payee }}</small>
+                  <small>{{ t("orders.panel.reviewMeta", { channel: dispatch.channel, payee: dispatch.payee }) }}</small>
                 </div>
                 <div v-if="role === 'OPS'" class="review-actions">
-                  <el-button size="small" type="primary" @click="doDispatchApprove">审核通过</el-button>
-                  <el-button size="small" @click="doDispatchReturn">驳回</el-button>
+                  <el-button size="small" type="primary" @click="doDispatchApprove">{{ t("orders.common.approve") }}</el-button>
+                  <el-button size="small" @click="doDispatchReturn">{{ t("orders.common.reject") }}</el-button>
                 </div>
-                <small v-else class="muted">等待高级交易员给出 审核通过 / 驳回 结论</small>
+                <small v-else class="muted">{{ t("orders.panel.waitReviewer") }}</small>
               </div>
             </template>
-            <p v-else-if="dispatch?.reviewed_at" class="empty-inline">✓ 审核通过 · {{ dispatch.reviewed_by }} · {{ formatDateTime(dispatch.reviewed_at) }}</p>
-            <p v-else class="empty-inline">排单提交后进入出款审核。</p>
+            <p v-else-if="dispatch?.reviewed_at" class="empty-inline">{{ t("orders.panel.reviewedAt", { by: dispatch.reviewed_by, at: formatDateTime(dispatch.reviewed_at) }) }}</p>
+            <p v-else class="empty-inline">{{ t("orders.panel.reviewEmpty") }}</p>
           </section>
           <section class="block">
-            <h4>库存影响</h4>
+            <h4>{{ t("orders.panel.inventoryTitle") }}</h4>
             <dl v-if="order.freeze">
-              <div><dt>冻结账户</dt><dd>{{ order.freeze.account_name }}</dd></div>
-              <div><dt>冻结金额</dt><dd>{{ fmtMoney(order.freeze.currency, order.freeze.amount) }}</dd></div>
-              <div><dt>冻结状态</dt><dd>{{ { FROZEN: "已冻结", RELEASED: "已释放", CONSUMED: "已消耗" }[order.freeze.state] }}</dd></div>
+              <div><dt>{{ t("orders.panel.freezeAccount") }}</dt><dd>{{ order.freeze.account_name }}</dd></div>
+              <div><dt>{{ t("orders.panel.freezeAmount") }}</dt><dd>{{ fmtMoney(order.freeze.currency, order.freeze.amount) }}</dd></div>
+              <div><dt>{{ t("orders.panel.freezeState") }}</dt><dd>{{ t(`orders.panel.freezeStates.${order.freeze.state}`) }}</dd></div>
             </dl>
-            <p v-else class="empty-inline">收款确认后自动冻结应付资金。</p>
+            <p v-else class="empty-inline">{{ t("orders.panel.freezeEmpty") }}</p>
           </section>
         </template>
 
         <!-- 出款 -->
         <template v-if="tab === 'execution'">
-          <section class="funding-card" :class="{ done: fundingState('outflow').state === '已归档', error: fundingState('outflow').state === '异常' }">
+          <section class="funding-card" :class="{ done: fundingState('outflow').state === 'archived', error: fundingState('outflow').state === 'exception' }">
             <header>
-              <div><strong>平台出款</strong><em>{{ fundingState("outflow").kindLabel }}</em></div>
-              <el-tag :type="STATE_TONE[fundingState('outflow').state]" size="small">{{ fundingState("outflow").state }}</el-tag>
+              <div><strong>{{ t("orders.panel.platformOutflow") }}</strong><em>{{ fundingState("outflow").kindLabel }}</em></div>
+              <el-tag :type="STATE_TONE[fundingState('outflow').state]" size="small">{{ t(`orders.panel.state.${fundingState("outflow").state}`) }}</el-tag>
             </header>
-            <p class="owner">责任人：<strong>{{ fundingState("outflow").ownerLabel }}</strong><template v-if="order.outflow_mark"> · 已由 {{ order.outflow_mark.by }} 于 {{ formatDateTime(order.outflow_mark.at) }} 执行</template></p>
+            <p class="owner">{{ t("orders.panel.owner") }}<strong>{{ fundingState("outflow").ownerLabel }}</strong><template v-if="order.outflow_mark"> · {{ t("orders.panel.executedBy", { by: order.outflow_mark.by, at: formatDateTime(order.outflow_mark.at) }) }}</template></p>
             <dl>
               <div v-for="[label, value] in markFields(fundingState('outflow'), 'outflow')" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
             </dl>
           </section>
           <section class="block">
-            <h4>出款执行</h4>
+            <h4>{{ t("orders.panel.executionTitle") }}</h4>
             <p v-if="dispatch?.receipt" class="empty-inline">
-              回单 {{ dispatch.receipt.file_name }}{{ dispatch.receipt.reference ? ` · ${dispatch.receipt.reference}` : "" }} · {{ dispatch.paid_by }} · {{ dispatch.paid_at ? formatDateTime(dispatch.paid_at) : "" }}
+              {{ t("orders.panel.receipt") }} {{ dispatch.receipt.file_name }}{{ dispatch.receipt.reference ? ` · ${dispatch.receipt.reference}` : "" }} · {{ dispatch.paid_by }} · {{ dispatch.paid_at ? formatDateTime(dispatch.paid_at) : "" }}
             </p>
-            <p v-else-if="order.status === 'AWAITING_PAYOUT'" class="empty-inline">等待{{ fundingState("outflow").ownerLabel }}执行出款。</p>
-            <p v-else class="empty-inline">出款审核通过后由责任人执行。</p>
+            <p v-else-if="order.status === 'AWAITING_PAYOUT'" class="empty-inline">{{ t("orders.panel.waitOwnerExecute", { owner: fundingState("outflow").ownerLabel }) }}</p>
+            <p v-else class="empty-inline">{{ t("orders.panel.executeAfterReview") }}</p>
           </section>
           <section v-if="order.profit" class="block">
-            <h4>佣金与收益 <small class="estimate-tag">估算（比例见 PROFIT_RATE_CONFIG，待接真实成本）</small></h4>
+            <h4>{{ t("orders.panel.profitTitle") }} <small class="estimate-tag">{{ t("orders.panel.profitEstimate") }}</small></h4>
             <div class="profit">
-              <div><span>汇差收益</span><b>{{ fmtMoney(order.profit.currency, order.profit.spread) }}</b></div>
-              <div><span>手续费</span><b>{{ fmtMoney(order.profit.currency, order.profit.fee) }}</b></div>
-              <div class="cost"><span>渠道成本</span><b>− {{ fmtMoney(order.profit.currency, order.profit.channel_cost) }}</b></div>
-              <div class="cost"><span>交易员佣金</span><b>− {{ fmtMoney(order.profit.currency, order.profit.commission) }}</b></div>
-              <div class="net"><span>净收益</span><strong>{{ fmtMoney(order.profit.currency, order.profit.net) }}</strong></div>
+              <div><span>{{ t("orders.panel.profitSpread") }}</span><b>{{ fmtMoney(order.profit.currency, order.profit.spread) }}</b></div>
+              <div><span>{{ t("orders.panel.profitFee") }}</span><b>{{ fmtMoney(order.profit.currency, order.profit.fee) }}</b></div>
+              <div class="cost"><span>{{ t("orders.panel.profitChannelCost") }}</span><b>− {{ fmtMoney(order.profit.currency, order.profit.channel_cost) }}</b></div>
+              <div class="cost"><span>{{ t("orders.panel.profitCommission") }}</span><b>− {{ fmtMoney(order.profit.currency, order.profit.commission) }}</b></div>
+              <div class="net"><span>{{ t("orders.panel.profitNet") }}</span><strong>{{ fmtMoney(order.profit.currency, order.profit.net) }}</strong></div>
             </div>
           </section>
         </template>
