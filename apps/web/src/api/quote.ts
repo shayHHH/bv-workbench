@@ -44,11 +44,18 @@ export async function fetchChannelRates(): Promise<ChannelRateVO[]> {
   return data;
 }
 
-/** 从 XE 行情源同步；未配置行情源时 synced=false，仅回读库中现值 */
-export async function syncChannelRates(): Promise<{ synced: boolean; rates: ChannelRateVO[] }> {
-  const { data } = await http.post<{ synced: boolean; rates: ChannelRateVO[] }>(
-    "/quote/channel-rates/sync",
-  );
+/** 从 XE 行情源同步；未配置行情源时 synced=false，仅回读库中现值。
+    真实同步成功后服务端会全量刷新引用渠道汇率的报价（refreshed 为刷新汇总）。 */
+export async function syncChannelRates(): Promise<{
+  synced: boolean;
+  rates: ChannelRateVO[];
+  refreshed?: { customers: number; items: number };
+}> {
+  const { data } = await http.post<{
+    synced: boolean;
+    rates: ChannelRateVO[];
+    refreshed?: { customers: number; items: number };
+  }>("/quote/channel-rates/sync");
   return data;
 }
 

@@ -46,9 +46,12 @@ export class QuoteController {
     return this.marketService.getBenchmarkState();
   }
 
+  /** 保存基准价后全量自动刷新引用它的报价（结果有变化的项落库并写历史） */
   @Put("benchmarks")
-  saveBenchmarks(@Body() dto: SaveBenchmarksDto, @CurrentUser() operator: JwtPayload) {
-    return this.marketService.saveBenchmarks(dto, operator);
+  async saveBenchmarks(@Body() dto: SaveBenchmarksDto, @CurrentUser() operator: JwtPayload) {
+    const state = await this.marketService.saveBenchmarks(dto, operator);
+    const refreshed = await this.quoteService.recalculateAllConfigs(operator);
+    return { ...state, refreshed };
   }
 
   @Get("benchmark-snapshots")
@@ -62,14 +65,20 @@ export class QuoteController {
   }
 
   @Patch("channel-rates")
-  updateChannelRates(@Body() dto: UpdateChannelRatesDto, @CurrentUser() operator: JwtPayload) {
-    return this.marketService.updateChannelRates(dto, operator);
+  async updateChannelRates(@Body() dto: UpdateChannelRatesDto, @CurrentUser() operator: JwtPayload) {
+    const rates = await this.marketService.updateChannelRates(dto, operator);
+    const refreshed = await this.quoteService.recalculateAllConfigs(operator);
+    return { rates, refreshed };
   }
 
-  /** 从 XE 行情源同步（未配置行情源时 synced=false，仅回读库中现值） */
+  /** 从 XE 行情源同步（未配置行情源时 synced=false，仅回读库中现值）；
+      真实同步成功后同样全量刷新引用渠道汇率的报价 */
   @Post("channel-rates/sync")
-  syncChannelRates(@CurrentUser() operator: JwtPayload) {
-    return this.marketService.syncChannelRates(operator);
+  async syncChannelRates(@CurrentUser() operator: JwtPayload) {
+    const result = await this.marketService.syncChannelRates(operator);
+    if (!result.synced) return result;
+    const refreshed = await this.quoteService.recalculateAllConfigs(operator);
+    return { ...result, refreshed };
   }
 
   /* ---------- 客户报价配置 ---------- */

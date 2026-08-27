@@ -268,7 +268,7 @@ await db.collection("quote_configs").insertMany([
         "USDT/CNH-TT",
         "",
         [chanVar("xe_usdt_cnh"), op("-"), num("3.0289")],
-        { digits: 9, last_result: D("4.207900000"), last_quoted_at: at(3) },
+        { digits: 8, last_result: D("4.20790000"), last_quoted_at: at(3) },
       ),
       item(
         new ObjectId(),

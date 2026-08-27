@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { InjectModel } from "@nestjs/mongoose";
 import {
   createItemAwareResolver,
+  CustomerKind,
   evaluateFormula,
   FORMULA_OPERATORS,
   FormulaOperator,
@@ -16,6 +17,7 @@ import {
   QuoteConfigVO,
   QuoteItemVO,
   QuoteRecordVO,
+  QuoteRefreshSummary,
   QuoteVariablesVO,
   RecalculateResultVO,
   RoundMode,
@@ -170,6 +172,51 @@ export class QuoteService {
     await doc.save();
     if (records.length) await this.recordModel.insertMany(records);
     return { config: this.toConfigVO(doc), errors };
+  }
+
+  /**
+   * 基准价/渠道汇率变动后的全量自动刷新：重算所有客户的报价配置，
+   * 只有计算结果发生变化的项才更新 last_result 并写历史记录（避免噪音）。
+   * 中介客户先算——下级客户的 BROKER_ITEM 变量读中介项的 last_result，
+   * 保证一次变动就传导到下级报价。
+   */
+  async recalculateAllConfigs(operator: JwtPayload): Promise<QuoteRefreshSummary> {
+    const lookup = await this.marketService.variableNumberLookup();
+    const { configs, customers } = await this.loadConfigsWithCustomers();
+    const rank = (config: QuoteConfigDocument) =>
+      customers.get(config.customer_id.toString())?.customer_kind === CustomerKind.INTERMEDIARY
+        ? 0
+        : 1;
+    const ordered = [...configs].sort((a, b) => rank(a) - rank(b));
+
+    const now = new Date();
+    let itemCount = 0;
+    let customerCount = 0;
+    for (const config of ordered) {
+      const customer = customers.get(config.customer_id.toString());
+      if (!customer) continue;
+      const resolver = await this.buildResolver(customer, config, lookup);
+      const records: Partial<QuoteRecord>[] = [];
+      for (const item of config.items) {
+        const tokens = item.formula.map(raw => toToken(raw as Record<string, unknown>));
+        if (!tokens.length) continue;
+        const result = evaluateFormula(tokens, resolver, item.digits, item.round_mode);
+        if (!result.ok || result.value === null) continue; // 求值失败的项保留旧值，不打断整体刷新
+        const previous = item.last_result ? Number(item.last_result.toString()) : null;
+        if (previous !== null && Number(result.value) === previous) continue;
+        item.last_result = Types.Decimal128.fromString(result.value);
+        item.last_quoted_at = now;
+        records.push(this.buildRecord(customer, item, tokens, resolver, result.value, now, operator));
+        itemCount += 1;
+      }
+      if (records.length) {
+        config.set("updated_by", new Types.ObjectId(operator.sub));
+        await config.save();
+        await this.recordModel.insertMany(records);
+        customerCount += 1;
+      }
+    }
+    return { customers: customerCount, items: itemCount };
   }
 
   /* ---------------------------------------------------------------- */
@@ -451,8 +498,9 @@ export class QuoteService {
   async buildResolver(
     customer: CustomerDocument,
     config: QuoteConfigDocument,
+    sharedLookup?: (source: VariableSource, code: string) => number | null,
   ): Promise<VariableResolver> {
-    const lookup = await this.marketService.variableNumberLookup();
+    const lookup = sharedLookup ?? (await this.marketService.variableNumberLookup());
     const brokerResults = await this.brokerItemResults(customer);
     const ownItems = new Map<string, QuoteItemVO>(
       config.items.map(item => [item._id.toString(), this.toItemVO(item)]),

@@ -442,18 +442,47 @@ function removeBenchmarkRow(index: number) {
 }
 
 async function saveBenchmarkDraft() {
-  benchmark.value = await saveBenchmarks({ items: benchmarkDraft.value });
+  const state = await saveBenchmarks({ items: benchmarkDraft.value });
+  benchmark.value = state;
   benchmarkEditing.value = false;
-  if (selected.value) variables.value = await fetchQuoteVariables(selected.value.id);
-  ElMessage.success(t("quote.benchmark.saved"));
+  /* 服务端已全量自动重算引用基准价的报价，取回当前客户的最新落库结果 */
+  await reloadCurrentResults();
+  ElMessage.success(
+    state.refreshed?.items
+      ? t("quote.benchmark.savedRefreshed", {
+          customers: state.refreshed.customers,
+          items: state.refreshed.items,
+        })
+      : t("quote.benchmark.saved"),
+  );
+}
+
+/** 变量与当前客户各报价项的 last_result / last_quoted_at 拉新（不整体替换避免打断输入） */
+async function reloadCurrentResults() {
+  const customer = selected.value;
+  if (!customer) return;
+  const [vars, remoteConfig] = await Promise.all([
+    fetchQuoteVariables(customer.id),
+    fetchQuoteConfig(customer.id),
+  ]);
+  variables.value = vars;
+  const cfg = config.value;
+  if (!cfg) return;
+  for (const remote of remoteConfig.items) {
+    const local = cfg.items.find(item => item.id === remote.id);
+    if (local) {
+      local.last_result = remote.last_result;
+      local.last_quoted_at = remote.last_quoted_at;
+    }
+  }
 }
 
 /* ---------- 渠道汇率 ---------- */
 async function refreshChannels() {
-  /* 配置了 XE 行情源时走真实同步，否则仅重读库中人工数据 */
+  /* 配置了 XE 行情源时走真实同步（同步成功后服务端全量刷新引用渠道汇率的报价） */
   const result = await syncChannelRates();
   channels.value = result.rates;
-  if (selected.value) variables.value = await fetchQuoteVariables(selected.value.id);
+  await reloadCurrentResults();
   channelFlash.value = true;
   setTimeout(() => {
     channelFlash.value = false;
@@ -595,39 +624,42 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               </div>
             </header>
 
-            <div class="output-field">
-              <div class="field-label">
-                <span>{{ t("quote.quick.opening") }}</span>
-                <small>{{ t("quote.quick.openingHint") }}</small>
+            <!-- 抬头 / 落款并排一行，预览正文在下 -->
+            <div class="output-header-row">
+              <div class="output-field">
+                <div class="field-label">
+                  <span>{{ t("quote.quick.opening") }}</span>
+                  <small>{{ t("quote.quick.openingHint") }}</small>
+                </div>
+                <el-input v-model="config.text.opening" />
               </div>
-              <el-input v-model="config.text.opening" />
+              <div class="output-field">
+                <div class="field-label">
+                  <span>{{ t("quote.quick.ending") }}</span>
+                  <small>{{ t("quote.quick.endingHint") }}</small>
+                </div>
+                <el-input
+                  v-model="config.text.ending"
+                  :placeholder="t('quote.quick.endingPlaceholder')"
+                  @blur="rememberEnding"
+                />
+              </div>
             </div>
 
             <pre class="output-body">{{ quoteBody }}</pre>
 
-            <div class="output-field">
-              <div class="field-label">
-                <span>{{ t("quote.quick.ending") }}</span>
-                <small>{{ t("quote.quick.endingHint") }}</small>
-              </div>
-              <el-input
-                v-model="config.text.ending"
-                :placeholder="t('quote.quick.endingPlaceholder')"
-                @blur="rememberEnding"
-              />
-              <div v-if="config.common_notes.length" class="notes-row">
-                <span class="notes-label">{{ t("quote.quick.commonNotes") }}</span>
-                <el-tag
-                  v-for="note in config.common_notes"
-                  :key="note"
-                  closable
-                  size="small"
-                  @click="applyNote(note)"
-                  @close="removeNote(note)"
-                >
-                  {{ note }}
-                </el-tag>
-              </div>
+            <div v-if="config.common_notes.length" class="notes-row">
+              <span class="notes-label">{{ t("quote.quick.commonNotes") }}</span>
+              <el-tag
+                v-for="note in config.common_notes"
+                :key="note"
+                closable
+                size="small"
+                @click="applyNote(note)"
+                @close="removeNote(note)"
+              >
+                {{ note }}
+              </el-tag>
             </div>
 
             <div class="check-list">
@@ -1097,8 +1129,16 @@ h1 {
   color: #909399;
 }
 
+/* 抬头（Header）与落款（Footer）并排一行 */
+.output-header-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 .output-field {
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .field-label {

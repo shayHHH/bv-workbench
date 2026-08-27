@@ -16,6 +16,7 @@ import {
   QuoteBenchmarkSnapshotDocument,
 } from "./schemas/benchmark.schema";
 import { QuoteChannelRate, QuoteChannelRateDocument } from "./schemas/channel-rate.schema";
+import { QuoteConfig, QuoteConfigDocument } from "./schemas/quote-config.schema";
 import { QuerySnapshotsDto, SaveBenchmarksDto, UpdateChannelRatesDto } from "./dto/quote.dto";
 
 function dec(value: Types.Decimal128 | null | undefined): string | null {
@@ -32,8 +33,22 @@ export class QuoteMarketService {
     private readonly snapshotModel: Model<QuoteBenchmarkSnapshotDocument>,
     @InjectModel(QuoteChannelRate.name)
     private readonly channelModel: Model<QuoteChannelRateDocument>,
+    @InjectModel(QuoteConfig.name)
+    private readonly configModel: Model<QuoteConfigDocument>,
     private readonly xeRates: XeRatesService,
   ) {}
+
+  /** 该基准价 code 被多少个报价公式引用（BENCHMARK 变量） */
+  private async benchmarkUsageCount(code: string): Promise<number> {
+    return this.configModel.countDocuments({
+      is_deleted: false,
+      items: {
+        $elemMatch: {
+          formula: { $elemMatch: { source: VariableSource.BENCHMARK, code } },
+        },
+      },
+    });
+  }
 
   async getBenchmarkState(): Promise<BenchmarkStateVO> {
     const [items, latest] = await Promise.all([
@@ -71,6 +86,18 @@ export class QuoteMarketService {
     const operatorId = new Types.ObjectId(operator.sub);
     const keptIds = new Set<string>();
 
+    /* 先校验删除（无事务，写入前拦截）：被报价公式引用的行不允许删除 */
+    const submittedIds = new Set(dto.items.map(item => item.id).filter(Boolean));
+    for (const doc of existing) {
+      if (submittedIds.has(doc._id.toString())) continue;
+      const usage = await this.benchmarkUsageCount(doc.code);
+      if (usage > 0) {
+        throw new BadRequestException(
+          `「${doc.label}」正被 ${usage} 位客户的报价公式引用，不能删除；请先调整相关公式`,
+        );
+      }
+    }
+
     for (const [index, item] of dto.items.entries()) {
       const doc = item.id ? byId.get(item.id) : undefined;
       if (item.id && !doc) throw new BadRequestException("基准价项目不存在或已被删除");
@@ -82,6 +109,21 @@ export class QuoteMarketService {
         await doc.save();
         keptIds.add(doc._id.toString());
       } else {
+        /* 与已删除行同名 → 复活原行（保留原 code），引用它的公式自动重新接上 */
+        const revived = await this.benchmarkModel
+          .findOne({ is_deleted: true, label: item.label.trim() })
+          .sort({ updated_at: -1 });
+        if (revived) {
+          revived.is_deleted = false;
+          revived.set("deleted_at", null);
+          revived.set("deleted_by", null);
+          revived.value = Types.Decimal128.fromString(item.value);
+          revived.sort = index;
+          revived.set("updated_by", operatorId);
+          await revived.save();
+          keptIds.add(revived._id.toString());
+          continue;
+        }
         const id = new Types.ObjectId();
         const created = await this.benchmarkModel.create({
           _id: id,
@@ -96,7 +138,7 @@ export class QuoteMarketService {
       }
     }
 
-    /* 未提交的行 = 用户删除的行（引用它的公式此后求值报「变量暂无取值」） */
+    /* 未提交的行 = 用户删除的行（删除许可已在写入前校验） */
     for (const doc of existing) {
       if (keptIds.has(doc._id.toString())) continue;
       doc.is_deleted = true;

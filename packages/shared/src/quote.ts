@@ -103,10 +103,18 @@ export interface BenchmarkItemVO {
   sort: number;
 }
 
+/** 基准价/渠道汇率变动后全量自动刷新的汇总 */
+export interface QuoteRefreshSummary {
+  customers: number;
+  items: number;
+}
+
 export interface BenchmarkStateVO {
   items: BenchmarkItemVO[];
   saved_at: string | null;
   operator_name: string | null;
+  /** 保存基准价后自动重算的范围（仅保存接口返回） */
+  refreshed?: QuoteRefreshSummary;
 }
 
 export interface SaveBenchmarksInput {
