@@ -723,7 +723,6 @@ onMounted(async () => {
 
 <style scoped>
 .mu-page {
-  max-width: 1380px;
   display: flex;
   flex-direction: column;
   gap: 16px;
