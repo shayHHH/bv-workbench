@@ -463,7 +463,12 @@ async function doDispatchReturn() {
 
         <div class="trade-hero">
           <div class="hero-row">
-            <div class="hero-cell"><span>业务类型</span><strong>{{ order.business_type || "—" }}</strong></div>
+            <div class="hero-cell">
+              <span>业务类型</span>
+              <strong :class="{ 'biz-unset': !order.business_type }">
+                {{ order.business_type || "未指定（按客户整体准入）" }}
+              </strong>
+            </div>
             <div class="hero-cell">
               <span>KYC 状态</span>
               <strong :class="`kyc-text-${order.kyc.tone}`">{{ order.kyc.label }}</strong>
@@ -609,7 +614,7 @@ async function doDispatchReturn() {
             <p v-else class="empty-inline">出款审核通过后由责任人执行。</p>
           </section>
           <section v-if="order.profit" class="block">
-            <h4>佣金与收益</h4>
+            <h4>佣金与收益 <small class="estimate-tag">估算（比例见 PROFIT_RATE_CONFIG，待接真实成本）</small></h4>
             <div class="profit">
               <div><span>汇差收益</span><b>{{ fmtMoney(order.profit.currency, order.profit.spread) }}</b></div>
               <div><span>手续费</span><b>{{ fmtMoney(order.profit.currency, order.profit.fee) }}</b></div>
@@ -792,6 +797,18 @@ async function doDispatchReturn() {
 .hero-remark p {
   display: inline;
   margin: 0;
+}
+
+.biz-unset {
+  color: #909399;
+  font-weight: 400;
+}
+
+.estimate-tag {
+  color: #e6a23c;
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 6px;
 }
 
 .hero-quote {

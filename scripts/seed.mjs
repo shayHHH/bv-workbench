@@ -105,18 +105,18 @@ const auroraId = new ObjectId();
 const zhengKaiwenId = new ObjectId();
 
 await db.collection("customers").insertMany([
-  { _id: chenJianingId, ...customer("20001", "陈嘉宁", CustomerKind.DIRECT, { region: "HK", agent_name: "杨澜", phone: "+852 6123 4567", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 18, 2) },
-  { _id: northstarId, ...customer("20002", "Northstar Trading Limited", CustomerKind.INTERMEDIARY, { region: "HK", agent_name: "杨澜", customer_status: "ACTIVE", risk_level: "MEDIUM", remark: "企业中介，可挂载下级客户" }), ...base(24 * 16, 5) },
-  { _id: new ObjectId(), ...customer("22156", "Northstar 贸易联系人 A", CustomerKind.SUB_CUSTOMER, { parent_id: northstarId, sub_type: "PERSONAL", region: "HK", agent_name: "杨澜" }), ...base(24 * 10, 24) },
+  { _id: chenJianingId, ...customer("20001", "陈嘉宁", CustomerKind.DIRECT, { region: "HK", agent_name: "sinclair", phone: "+852 6123 4567", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 18, 2) },
+  { _id: northstarId, ...customer("20002", "Northstar Trading Limited", CustomerKind.INTERMEDIARY, { region: "HK", agent_name: "sinclair", customer_status: "ACTIVE", risk_level: "MEDIUM", remark: "企业中介，可挂载下级客户" }), ...base(24 * 16, 5) },
+  { _id: new ObjectId(), ...customer("22156", "Northstar 贸易联系人 A", CustomerKind.SUB_CUSTOMER, { parent_id: northstarId, sub_type: "PERSONAL", region: "HK", agent_name: "sinclair" }), ...base(24 * 10, 24) },
   { _id: new ObjectId(), ...customer(null, "Northstar 付款人 B", CustomerKind.SUB_CUSTOMER, { parent_id: northstarId, sub_type: "CORPORATE", region: "HK" }), ...base(24 * 9, 30) },
-  { _id: brokerLinId, ...customer("20005", "中介林", CustomerKind.INTERMEDIARY, { region: "HK", agent_name: "杨澜", customer_status: "ACTIVE", risk_level: "LOW", remark: "中介报价源" }), ...base(24 * 14, 8) },
-  { _id: raviId, ...customer("22001", "ravi", CustomerKind.SUB_CUSTOMER, { parent_id: brokerLinId, sub_type: "PERSONAL", region: "HK", agent_name: "杨澜", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 12, 6) },
-  { _id: linYawenId, ...customer("20003", "林雅雯", CustomerKind.DIRECT, { region: "CN_MAINLAND", agent_name: "周辰", phone: "+86 138 0013 8000", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 13, 10) },
-  { _id: new ObjectId(), ...customer("20004", "赵明远", CustomerKind.DIRECT, { region: "CN_MAINLAND", agent_name: "陈浩", customer_status: "SUSPENDED", risk_level: "HIGH", remark: "命中高风险地区关联规则，暂停合作" }), ...base(24 * 12, 24 * 3) },
-  { _id: auroraId, ...customer("20006", "Aurora Capital Pte. Ltd.", CustomerKind.DIRECT, { region: "SG", agent_name: "周辰", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 8, 20) },
-  { _id: new ObjectId(), ...customer("20007", "Mosaic Ventures Pte. Ltd.", CustomerKind.DIRECT, { region: "SG", agent_name: "陈浩", customer_status: "DORMANT", risk_level: "MEDIUM" }), ...base(24 * 7, 24 * 5) },
-  { _id: zhengKaiwenId, ...customer("20008", "郑凯文", CustomerKind.DIRECT, { region: "HK", agent_name: "杨澜", phone: "+852 9876 1234" }), ...base(24 * 2, 1) },
-  { _id: new ObjectId(), ...customer("20009", "李婉晴", CustomerKind.DIRECT, { region: "HK", agent_name: "杨澜", customer_status: "DORMANT", risk_level: "LOW" }), ...base(24 * 6, 24 * 4) },
+  { _id: brokerLinId, ...customer("20005", "中介林", CustomerKind.INTERMEDIARY, { region: "HK", agent_name: "sinclair", customer_status: "ACTIVE", risk_level: "LOW", remark: "中介报价源" }), ...base(24 * 14, 8) },
+  { _id: raviId, ...customer("22001", "ravi", CustomerKind.SUB_CUSTOMER, { parent_id: brokerLinId, sub_type: "PERSONAL", region: "HK", agent_name: "sinclair", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 12, 6) },
+  { _id: linYawenId, ...customer("20003", "林雅雯", CustomerKind.DIRECT, { region: "CN_MAINLAND", agent_name: "jacky", phone: "+86 138 0013 8000", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 13, 10) },
+  { _id: new ObjectId(), ...customer("20004", "赵明远", CustomerKind.DIRECT, { region: "CN_MAINLAND", agent_name: "choy", customer_status: "SUSPENDED", risk_level: "HIGH", remark: "命中高风险地区关联规则，暂停合作" }), ...base(24 * 12, 24 * 3) },
+  { _id: auroraId, ...customer("20006", "Aurora Capital Pte. Ltd.", CustomerKind.DIRECT, { region: "SG", agent_name: "jacky", customer_status: "ACTIVE", risk_level: "LOW" }), ...base(24 * 8, 20) },
+  { _id: new ObjectId(), ...customer("20007", "Mosaic Ventures Pte. Ltd.", CustomerKind.DIRECT, { region: "SG", agent_name: "choy", customer_status: "DORMANT", risk_level: "MEDIUM" }), ...base(24 * 7, 24 * 5) },
+  { _id: zhengKaiwenId, ...customer("20008", "郑凯文", CustomerKind.DIRECT, { region: "HK", agent_name: "sinclair", phone: "+852 9876 1234" }), ...base(24 * 2, 1) },
+  { _id: new ObjectId(), ...customer("20009", "李婉晴", CustomerKind.DIRECT, { region: "HK", agent_name: "sinclair", customer_status: "DORMANT", risk_level: "LOW" }), ...base(24 * 6, 24 * 4) },
 ]);
 
 /* ---- 报价域演示数据（重建；仅限开发环境） ---- */
@@ -151,7 +151,7 @@ await db.collection("quote_benchmarks").insertMany(
 );
 await db.collection("quote_benchmark_snapshots").insertOne({
   saved_at: at(20),
-  operator_name: "杨澜",
+  operator_name: "sinclair",
   prices: benchmarks.map(([, label, value]) => ({ label, value: D(value) })),
   ...base(20),
 });
@@ -326,16 +326,16 @@ const record = (customerId, hoursAgo, tradeType, prefix, suffix, formulaText, fo
 });
 
 await db.collection("quote_records").insertMany([
-  record(raviId, 3, "美元", "sino", "(含手续费)", "sino每日价格", "7.823", [{ label: "sino每日价格", value: "7.823" }], "7.8230", 4, "杨澜"),
-  record(raviId, 3, "港币", "sgb", "", "sino每日价格 + 3", "7.823 + 3", [{ label: "sino每日价格", value: "7.823" }], "10.8230", 4, "杨澜"),
-  record(raviId, 3, "USDT/CNH-TT", "USDT/CNH-TT", "", "XE-USDT:CNH - 3.0289", "7.2368 - 3.0289", [{ label: "XE-USDT:CNH", value: "7.2368" }], "4.207900000", 9, "杨澜"),
-  record(raviId, 26, "美元", "sino", "(含手续费)", "sino每日价格", "7.823", [{ label: "sino每日价格", value: "7.823" }], "7.8230", 4, "杨澜"),
-  record(raviId, 26, "港币", "sgb", "", "sino每日价格 + 3", "7.823 + 3", [{ label: "sino每日价格", value: "7.823" }], "10.8230", 4, "周辰"),
-  record(raviId, 50, "USDT/CNH-TT", "USDT/CNH-TT", "", "XE-USDT:CNH - 3.0289", "7.2479 - 3.0289", [{ label: "XE-USDT:CNH", value: "7.2479" }], "4.219000000", 9, "杨澜"),
-  record(raviId, 74, "美元", "sino", "(含手续费)", "sino每日价格", "7.8195", [{ label: "sino每日价格", value: "7.8195" }], "7.8195", 4, "周辰"),
-  record(raviId, 98, "港币", "sgb", "", "sino每日价格 + 3", "7.8195 + 3", [{ label: "sino每日价格", value: "7.8195" }], "10.8195", 4, "杨澜"),
-  record(chenJianingId, 8, "美元", "sino", "(含手续费)", "sino每日价格", "7.823", [{ label: "sino每日价格", value: "7.823" }], "7.8230", 4, "杨澜"),
-  record(chenJianingId, 8, "港币", "sgb", "", "sino每日价格 + 3 * 3", "7.823 + 3 * 3", [{ label: "sino每日价格", value: "7.823" }], "16.8230", 4, "杨澜"),
+  record(raviId, 3, "美元", "sino", "(含手续费)", "sino每日价格", "7.823", [{ label: "sino每日价格", value: "7.823" }], "7.8230", 4, "sinclair"),
+  record(raviId, 3, "港币", "sgb", "", "sino每日价格 + 3", "7.823 + 3", [{ label: "sino每日价格", value: "7.823" }], "10.8230", 4, "sinclair"),
+  record(raviId, 3, "USDT/CNH-TT", "USDT/CNH-TT", "", "XE-USDT:CNH - 3.0289", "7.2368 - 3.0289", [{ label: "XE-USDT:CNH", value: "7.2368" }], "4.207900000", 9, "sinclair"),
+  record(raviId, 26, "美元", "sino", "(含手续费)", "sino每日价格", "7.823", [{ label: "sino每日价格", value: "7.823" }], "7.8230", 4, "sinclair"),
+  record(raviId, 26, "港币", "sgb", "", "sino每日价格 + 3", "7.823 + 3", [{ label: "sino每日价格", value: "7.823" }], "10.8230", 4, "jacky"),
+  record(raviId, 50, "USDT/CNH-TT", "USDT/CNH-TT", "", "XE-USDT:CNH - 3.0289", "7.2479 - 3.0289", [{ label: "XE-USDT:CNH", value: "7.2479" }], "4.219000000", 9, "sinclair"),
+  record(raviId, 74, "美元", "sino", "(含手续费)", "sino每日价格", "7.8195", [{ label: "sino每日价格", value: "7.8195" }], "7.8195", 4, "jacky"),
+  record(raviId, 98, "港币", "sgb", "", "sino每日价格 + 3", "7.8195 + 3", [{ label: "sino每日价格", value: "7.8195" }], "10.8195", 4, "sinclair"),
+  record(chenJianingId, 8, "美元", "sino", "(含手续费)", "sino每日价格", "7.823", [{ label: "sino每日价格", value: "7.823" }], "7.8230", 4, "sinclair"),
+  record(chenJianingId, 8, "港币", "sgb", "", "sino每日价格 + 3 * 3", "7.823 + 3 * 3", [{ label: "sino每日价格", value: "7.823" }], "16.8230", 4, "sinclair"),
 ]);
 
 /* ---- KYC 材料清单（demo 原样迁移：21 个业务类型，四层结构 业务类型→渠道→材料模块→材料项；重建） ---- */
