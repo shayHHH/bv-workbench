@@ -86,14 +86,6 @@ const STATUS_TAG: Record<string, "primary" | "success" | "warning" | "info" | "d
   CANCELLED: "info",
 };
 
-const KYC_TAG: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
-  success: "success",
-  info: "primary",
-  warning: "warning",
-  danger: "danger",
-  neutral: "info",
-};
-
 function ownerLabel(side: FundingSide): string {
   if (!order.value) return "";
   return FundingOwnerLabel[fundingOwnerRole(order.value, side)] ?? "";
@@ -457,14 +449,18 @@ async function doDispatchReturn() {
             <div class="hero-cell"><span>业务类型</span><strong>{{ order.business_type || "—" }}</strong></div>
             <div class="hero-cell">
               <span>KYC 状态</span>
-              <el-tag :type="KYC_TAG[order.kyc.tone]" size="small" effect="light">{{ order.kyc.label }}</el-tag>
+              <strong :class="`kyc-text-${order.kyc.tone}`">{{ order.kyc.label }}</strong>
             </div>
-            <div class="hero-cell"><span>执行汇率</span><strong class="mono">{{ order.rate }}</strong><em>{{ order.pay_method }}</em></div>
           </div>
           <div class="hero-legs">
             <div><span>客户卖出</span><strong>{{ fmtMoney(order.sell_currency, order.sell_amount) }}</strong></div>
             <i>→</i>
             <div><span>客户买入</span><strong>{{ fmtMoney(order.buy_currency, order.buy_amount) }}</strong></div>
+            <div class="hero-rate">
+              <span>执行汇率</span>
+              <strong class="mono">{{ order.rate }}</strong>
+              <em>{{ order.pay_method }}</em>
+            </div>
           </div>
           <div class="hero-remark"><span>备注说明</span><p :class="{ empty: !order.remark }">{{ order.remark || "创建订单时未填写说明" }}</p></div>
         </div>
@@ -677,7 +673,7 @@ async function doDispatchReturn() {
 
 .hero-row {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-columns: 1.2fr 1fr;
   gap: 10px;
 }
 
@@ -692,6 +688,19 @@ async function doDispatchReturn() {
   font-style: normal;
   font-size: 11px;
   margin-left: 6px;
+}
+
+/* KYC 状态为纯文字展示，按语气着色 */
+.kyc-text-success {
+  color: #67c23a;
+}
+
+.kyc-text-warning {
+  color: #e6a23c;
+}
+
+.kyc-text-danger {
+  color: #f56c6c;
 }
 
 .hero-legs {
@@ -716,6 +725,29 @@ async function doDispatchReturn() {
 .hero-legs i {
   color: #ff7a00;
   font-style: normal;
+}
+
+/* 执行汇率与货币对同行展示，靠右对齐 */
+.hero-rate {
+  margin-left: auto;
+  text-align: right;
+}
+
+.hero-rate span {
+  display: block;
+  color: #909399;
+  font-size: 11px;
+}
+
+.hero-rate strong {
+  font-size: 15px;
+}
+
+.hero-rate em {
+  color: #909399;
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 6px;
 }
 
 .hero-remark {
@@ -761,6 +793,24 @@ async function doDispatchReturn() {
   position: relative;
 }
 
+/* 节点间连接线：从上一个圆心连到当前圆心，构成完整流程条 */
+.stage + .stage::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  right: calc(50% + 14px);
+  width: calc(100% - 28px);
+  height: 2px;
+  border-radius: 1px;
+  background: #e4e7ed;
+}
+
+/* 已完成/进行中节点的入线着色，体现推进进度 */
+.stage + .stage.done::before,
+.stage + .stage.active::before {
+  background: #a8dcb5;
+}
+
 .stage i {
   width: 20px;
   height: 20px;
@@ -771,6 +821,8 @@ async function doDispatchReturn() {
   font-style: normal;
   display: grid;
   place-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .stage.done i {
