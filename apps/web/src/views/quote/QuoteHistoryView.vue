@@ -6,7 +6,7 @@
 import { Refresh, Search } from "@element-plus/icons-vue";
 import type { BenchmarkSnapshotVO, QuoteRecordVO } from "@bv/shared";
 import { RoundModeLabel } from "@bv/shared";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { fetchBenchmarkSnapshots, fetchQuoteRecords } from "@/api/quote";
 import {
@@ -137,8 +137,42 @@ async function selectCustomer(option: QuoteCustomerOption) {
 }
 
 function handleDocumentClick(event: MouseEvent) {
-  if (!searchBoxRef.value?.contains(event.target as Node)) dropdownOpen.value = false;
+  const target = event.target as Node;
+  if (!searchBoxRef.value?.contains(target) && !dropdownRef.value?.contains(target)) {
+    dropdownOpen.value = false;
+  }
 }
+
+/* 下拉面板 Teleport 到 body（fixed 定位），避免被卡片/表格等层叠上下文遮挡 */
+const dropdownRef = ref<HTMLElement>();
+const dropdownStyle = ref<Record<string, string>>({});
+
+function updateDropdownPos() {
+  const rect = searchBoxRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  dropdownStyle.value = {
+    top: `${rect.bottom + 4}px`,
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+  };
+}
+
+watch(dropdownOpen, open => {
+  if (open) {
+    updateDropdownPos();
+    window.addEventListener("scroll", updateDropdownPos, true);
+    window.addEventListener("resize", updateDropdownPos);
+  } else {
+    window.removeEventListener("scroll", updateDropdownPos, true);
+    window.removeEventListener("resize", updateDropdownPos);
+  }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleDocumentClick);
+  window.removeEventListener("scroll", updateDropdownPos, true);
+  window.removeEventListener("resize", updateDropdownPos);
+});
 
 /* ---------- 明细抽屉 ---------- */
 const drawerVisible = ref(false);
@@ -221,23 +255,25 @@ onMounted(async () => {
                 @input="dropdownOpen = true; highlight = 0"
                 @keydown="handleSearchKeydown"
               />
-              <div v-if="dropdownOpen" class="dropdown">
-                <button
-                  v-for="(option, index) in matches"
-                  :key="option.id"
-                  type="button"
-                  class="dropdown-item"
-                  :class="{ active: index === highlight }"
-                  @mouseenter="highlight = index"
-                  @click="selectCustomer(option)"
-                >
-                  <strong>{{ customerDisplayLabel(option) }}</strong>
-                  <span>{{ option.broker_label ?? t("quote.common.direct") }}</span>
-                </button>
-                <div v-if="!matches.length" class="dropdown-empty">
-                  {{ t("quote.common.noMatchedCustomer") }}
+              <Teleport to="body">
+                <div v-if="dropdownOpen" ref="dropdownRef" class="dropdown" :style="dropdownStyle">
+                  <button
+                    v-for="(option, index) in matches"
+                    :key="option.id"
+                    type="button"
+                    class="dropdown-item"
+                    :class="{ active: index === highlight }"
+                    @mouseenter="highlight = index"
+                    @click="selectCustomer(option)"
+                  >
+                    <strong>{{ customerDisplayLabel(option) }}</strong>
+                    <span>{{ option.broker_label ?? t("quote.common.direct") }}</span>
+                  </button>
+                  <div v-if="!matches.length" class="dropdown-empty">
+                    {{ t("quote.common.noMatchedCustomer") }}
+                  </div>
                 </div>
-              </div>
+              </Teleport>
             </div>
             <span>{{ t("quote.history.dateRange") }}</span>
             <strong class="range-text">{{ rangeText }}</strong>
@@ -399,15 +435,13 @@ h1 {
 }
 
 .dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  position: fixed;
   background: #fff;
   border: 1px solid #ebeef5;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 30;
+  /* 与 Element Plus popper 同层级，压过表格固定列/页签 */
+  z-index: 2100;
   max-height: 280px;
   overflow-y: auto;
   padding: 4px;
