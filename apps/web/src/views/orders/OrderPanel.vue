@@ -165,8 +165,22 @@ const STATE_TONE: Record<string, "primary" | "success" | "warning" | "info" | "d
 function markFields(info: FundingInfo, side: FundingSide): Array<[string, string]> {
   const o = order.value!;
   const mark = info.mark;
-  const amountLabel = side === "inflow" ? fmtMoney(o.sell_currency, o.sell_amount) : fmtMoney(o.buy_currency, o.buy_amount);
-  const rows: Array<[string, string]> = [[side === "inflow" ? "应收金额" : "应付金额", amountLabel]];
+  const expected = side === "inflow" ? o.sell_amount : o.buy_amount;
+  const currency = side === "inflow" ? o.sell_currency : o.buy_currency;
+  const rows: Array<[string, string]> = [
+    [side === "inflow" ? "应收金额" : "应付金额", fmtMoney(currency, expected)],
+  ];
+  /* 实收/实付上屏：登记后展示实际金额，与应收/应付不符时标注差额（审计 1.1.2） */
+  if (mark) {
+    const diff = mark.amount - expected;
+    rows.push([
+      side === "inflow" ? "实收金额" : "实付金额",
+      fmtMoney(mark.currency || currency, mark.amount) +
+        (diff !== 0 ? `（与${side === "inflow" ? "应收" : "应付"}差 ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}）` : ""),
+    ]);
+    if (mark.method) rows.push(["方式", mark.method]);
+    rows.push(["登记人", `${mark.by} · ${formatDateTime(mark.at)}`]);
+  }
   if (info.kind === FundingKind.CHAIN) {
     if (side === "inflow") rows.push(["公司收 U 地址", o.wallet_ops?.deposit_address || "待钱包运营提供"]);
     else rows.push(["客户收 U 地址", o.wallet_ops?.payout_address || "待登记"], ["地址 KYA", o.wallet_ops?.kya_passed ? `通过（${o.wallet_ops.kya_by} · ${o.wallet_ops.kya_at ? formatDateTime(o.wallet_ops.kya_at) : ""}）` : "未通过"]);
@@ -442,7 +456,10 @@ async function doDispatchReturn() {
           </el-tag>
           <el-tag v-if="order.dispatch_rejected" type="danger" size="small" effect="light">出款审核驳回</el-tag>
         </div>
-        <p class="hint">{{ statusHint }}<time>创建 {{ formatDateTime(order.created_at) }}</time></p>
+        <p class="hint">
+          {{ statusHint }}
+          <time>创建 {{ formatDateTime(order.created_at) }}{{ order.handler_name ? ` · ${order.handler_name}` : "" }}</time>
+        </p>
 
         <div class="trade-hero">
           <div class="hero-row">
@@ -463,6 +480,18 @@ async function doDispatchReturn() {
             </div>
           </div>
           <div class="hero-remark"><span>备注说明</span><p :class="{ empty: !order.remark }">{{ order.remark || "创建订单时未填写说明" }}</p></div>
+          <!-- 建单时关联的报价快照：让各角色都能看到交易员依据的报价（审计 1.2.7） -->
+          <div v-if="order.quote" class="hero-quote">
+            <span>关联报价</span>
+            <code class="mono">{{ order.quote.deal_rate }}</code>
+            <em>{{ order.quote.source }}</em>
+            <em v-if="order.quote.quoted_by">{{ order.quote.quoted_by }}{{ order.quote.quoted_at ? ` · ${formatDateTime(order.quote.quoted_at)}` : "" }}</em>
+            <em v-if="order.quote.cost_rate">成本 {{ order.quote.cost_rate }}</em>
+            <em v-if="order.quote.fee">手续费 {{ order.quote.fee }}</em>
+            <em v-if="Number(order.quote.deal_rate) !== Number(order.rate)" class="quote-mismatch">
+              ⚠ 与执行汇率 {{ order.rate }} 不一致
+            </em>
+          </div>
         </div>
 
         <div v-if="order.status === 'CANCELLED'" class="stage-cancelled">
@@ -763,6 +792,35 @@ async function doDispatchReturn() {
 .hero-remark p {
   display: inline;
   margin: 0;
+}
+
+.hero-quote {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e4e7ed;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hero-quote > span {
+  color: #909399;
+}
+
+.hero-quote code {
+  font-weight: 700;
+  color: #d9531e;
+}
+
+.hero-quote em {
+  color: #909399;
+  font-style: normal;
+}
+
+.hero-quote .quote-mismatch {
+  color: #e6a23c;
 }
 
 .hero-remark p.empty {

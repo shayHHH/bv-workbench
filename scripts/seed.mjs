@@ -379,17 +379,30 @@ for (const name of ["trade_orders", "payout_orders", "treasury_accounts", "va_ac
   await db.collection(name).deleteMany({});
 }
 
-/* 简化账户（demo 9 个；frozen 与下方订单冻结一致：SGB-USD 25000 = TO-110；SINO-USD 235000 = TO-105+TO-106） */
+/* 单号从 created_at（本地时区）派生：修复"写死单号日期 vs 相对创建时间"逐日漂移（审计 2.1） */
+const bizNo = (prefix, hoursAgo, seq) => {
+  const d = at(hoursAgo);
+  const p = n => String(n).padStart(2, "0");
+  return `${prefix}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${seq}`;
+};
+
+/* 简化账户（demo 9 个）。余额与下方订单流水自洽（审计 2.4）：
+   opening ± 已确认流水 = available + frozen。
+   SGB-USD：opening 2,050,000 − TO-107 消耗 220,000 − TO-110 冻结 25,000；
+   SINO-USD：opening 900,000 − 冻结 235,000（TO-105 150,000 + TO-106 85,000）；
+   SGB-HKD：opening 240,000 + TO-106 入款 663,000；
+   wallet-USDT：opening 200,000 + 链上入款 150,300 + 220,440 + 25,060；
+   现金/VA 账户无订单流水，available = opening（TO-103 的 HKD 现金尚未到账，不计入）。 */
 const treasuryRows = [
-  ["cash-HKD", "现金库存", "现金库存 · HKD", "HKD", 1256400, 0, 1100000, 500000],
-  ["cash-USD", "现金库存", "现金库存 · USD", "USD", 342000, 0, 380000, 400000],
+  ["cash-HKD", "现金库存", "现金库存 · HKD", "HKD", 1100000, 0, 1100000, 500000],
+  ["cash-USD", "现金库存", "现金库存 · USD", "USD", 380000, 0, 380000, 400000],
   ["cash-CNY", "现金库存", "现金库存 · CNY", "CNY", 508000, 0, 508000, 200000],
-  ["cash-EUR", "现金库存", "现金库存 · EUR", "EUR", 96000, 0, 90000, 50000],
-  ["bank-SGB-USD", "银行账户", "SGB 银行账户 · USD", "USD", 1825000, 25000, 2050000, 800000],
+  ["cash-EUR", "现金库存", "现金库存 · EUR", "EUR", 96000, 0, 96000, 50000],
+  ["bank-SGB-USD", "银行账户", "SGB 银行账户 · USD", "USD", 1805000, 25000, 2050000, 800000],
   ["bank-SGB-HKD", "银行账户", "SGB 银行账户 · HKD", "HKD", 903000, 0, 240000, 300000],
-  ["bank-SINO-USD", "银行账户", "SINO 清算账户 · USD", "USD", 685000, 235000, 900000, 800000],
-  ["va-USD", "VA 账户", "SGB VA 归集账户 · USD", "USD", 660000, 0, 610000, 200000],
-  ["wallet-USDT", "USDT 钱包", "USDT 热钱包 · TRC20", "USDT", 486000, 0, 200000, 100000],
+  ["bank-SINO-USD", "银行账户", "SINO 清算账户 · USD", "USD", 665000, 235000, 900000, 800000],
+  ["va-USD", "VA 账户", "SGB VA 归集账户 · USD", "USD", 610000, 0, 610000, 200000],
+  ["wallet-USDT", "USDT 钱包", "USDT 热钱包 · TRC20", "USDT", 595800, 0, 200000, 100000],
 ];
 await db.collection("treasury_accounts").insertMany(
   treasuryRows.map(([key, group, name, currency, available, frozen, opening, floor]) => ({
@@ -427,17 +440,24 @@ const approvedAccess = (no, customerId, name, code) => ({
   latest_review: null, timeline: [], submitted_at: at(24 * 6), ...base(24 * 7, 24 * 6),
 });
 await db.collection("access_applications").insertMany([
-  approvedAccess("APP-20260820-901", zhengKaiwenId, "郑凯文", "20008"),
-  approvedAccess("APP-20260820-902", linYawenId, "林雅雯", "20003"),
-  approvedAccess("APP-20260820-903", auroraId, "Aurora Capital Pte. Ltd.", "20006"),
-  approvedAccess("APP-20260820-904", northstarId, "Northstar Trading Limited", "20002"),
-  approvedAccess("APP-20260820-905", chenJianingId, "陈嘉宁", "20001"),
+  approvedAccess(bizNo("APP", 24 * 7, "901"), zhengKaiwenId, "郑凯文", "20008"),
+  approvedAccess(bizNo("APP", 24 * 7, "902"), linYawenId, "林雅雯", "20003"),
+  approvedAccess(bizNo("APP", 24 * 7, "903"), auroraId, "Aurora Capital Pte. Ltd.", "20006"),
+  approvedAccess(bizNo("APP", 24 * 7, "904"), northstarId, "Northstar Trading Limited", "20002"),
+  approvedAccess(bizNo("APP", 24 * 7, "905"), chenJianingId, "陈嘉宁", "20001"),
 ]);
 
-/* 出款排单（与订单联动：SCH-001 审核中 / SCH-004 待出款 / SCH-002 已出款） */
+/* 出款排单（与订单联动：SCH-001 审核中 / SCH-004 待出款 / SCH-002 已出款）。
+   单号与各时点从提交时刻派生，且 提交 → 审核 → 出款 时间顺序自洽（审计 2.2）。 */
 const sch001Id = new ObjectId();
 const sch004Id = new ObjectId();
 const sch002Id = new ObjectId();
+const SCH001_SUB_H = 8;
+const SCH004_SUB_H = 24;
+const SCH002_SUB_H = 48;
+const schNo001 = bizNo("SCH", SCH001_SUB_H, "001");
+const schNo004 = bizNo("SCH", SCH004_SUB_H, "004");
+const schNo002 = bizNo("SCH", SCH002_SUB_H, "002");
 const to105Id = new ObjectId();
 const to106Id = new ObjectId();
 const to107Id = new ObjectId();
@@ -450,12 +470,21 @@ const dispatchDoc = (_id, no, orderId, orderNo, customerId, name, code, channel,
   status, submitted_by: "sinclair", submitted_at: at(30), reviewed_by: null, reviewed_at: null,
   paid_by: null, paid_at: null, receipt: null, ...base(30, 5), ...extra,
 });
+const orderNo105 = bizNo("TO", 130, "105");
+const orderNo106 = bizNo("TO", 150, "106");
+const orderNo107 = bizNo("TO", 175, "107");
 await db.collection("payout_orders").insertMany([
-  dispatchDoc(sch001Id, "SCH-20260819-001", to105Id, "TO-20260819-105", linYawenId, "林雅雯", "20003", "SINO", "USD", 150000, "REVIEWING"),
-  dispatchDoc(sch004Id, "SCH-20260818-004", to106Id, "TO-20260818-106", auroraId, "Aurora Capital Pte. Ltd.", "20006", "SINO", "USD", 85000, "AWAITING_PAYOUT", { reviewed_by: "jacky", reviewed_at: at(20) }),
-  dispatchDoc(sch002Id, "SCH-20260817-002", to107Id, "TO-20260817-107", new ObjectId(), "李婉晴", "20009", "SGB", "USD", 220000, "PAID", {
+  dispatchDoc(sch001Id, schNo001, to105Id, orderNo105, linYawenId, "林雅雯", "20003", "SINO", "USD", 150000, "REVIEWING", {
+    submitted_at: at(SCH001_SUB_H), ...base(SCH001_SUB_H, SCH001_SUB_H),
+  }),
+  dispatchDoc(sch004Id, schNo004, to106Id, orderNo106, auroraId, "Aurora Capital Pte. Ltd.", "20006", "SINO", "USD", 85000, "AWAITING_PAYOUT", {
+    reviewed_by: "jacky", reviewed_at: at(20),
+    submitted_at: at(SCH004_SUB_H), ...base(SCH004_SUB_H, 20),
+  }),
+  dispatchDoc(sch002Id, schNo002, to107Id, orderNo107, new ObjectId(), "李婉晴", "20009", "SGB", "USD", 220000, "PAID", {
     reviewed_by: "jacky", reviewed_at: at(46), paid_by: "payouttest", paid_at: at(40),
-    receipt: { file_name: "SGB-回单-20260818.pdf", reference: "808-****-001", note: null, uploaded_by: "payouttest", uploaded_at: at(40), matched: true },
+    receipt: { file_name: "SGB-回单.pdf", reference: "808-****-001", note: null, uploaded_by: "payouttest", uploaded_at: at(40), matched: true },
+    submitted_at: at(SCH002_SUB_H), ...base(SCH002_SUB_H, 40),
   }),
 ]);
 
@@ -464,13 +493,23 @@ const liWanqingId = (await db.collection("customers").findOne({ customer_code: "
 const mosaicId = (await db.collection("customers").findOne({ customer_code: "20007" }))._id;
 const zhaoMingyuanId = (await db.collection("customers").findOne({ customer_code: "20004" }))._id;
 await db.collection("access_applications").insertMany([
-  approvedAccess("APP-20260820-906", liWanqingId, "李婉晴", "20009"),
-  approvedAccess("APP-20260820-907", mosaicId, "Mosaic Ventures Pte. Ltd.", "20007"),
+  approvedAccess(bizNo("APP", 24 * 7, "906"), liWanqingId, "李婉晴", "20009"),
+  approvedAccess(bizNo("APP", 24 * 7, "907"), mosaicId, "Mosaic Ventures Pte. Ltd.", "20007"),
 ]);
 const tl = (hoursAgo, title, detail, actor) => ({ at: at(hoursAgo), title, detail, actor });
+/* TO-102 关联的真实报价记录（往期报价里可查到，订单详情"关联报价"引用它；审计 2.5 悬空快照修复） */
+const mosaicQuoteId = new ObjectId();
+await db.collection("quote_records").insertOne({
+  _id: mosaicQuoteId, customer_id: mosaicId, trade_type: "转账换U", prefix: "USDT",
+  suffix: "", formula_text: "手工核价", formula_calc: "1.0020",
+  variables: [{ label: "手工核价", value: "1.0020" }], result: D("1.0020"),
+  broker_point: null, bv_point: null, digits: 4, round_mode: "HALF_UP",
+  quoted_at: at(11), operator_name: "sinclair", ...base(11),
+});
+/* business_type 默认取客户已通过的准入业务类型（审计 1.2.8：避免"业务类型 — 而 KYC 已通过"的矛盾） */
 const orderDoc = (no, customerId, name, code, tradeType, sellCur, sellAmt, buyCur, buyAmt, rate, payMethod, status, extra = {}) => ({
   order_no: no, customer_id: customerId, customer_name: name, customer_code: code, person_name: null,
-  business_type: extra.business_type ?? null, trade_type: tradeType,
+  business_type: extra.business_type ?? kycScenarioName, trade_type: tradeType,
   sell_currency: sellCur, sell_amount: D(String(sellAmt)), buy_currency: buyCur, buy_amount: D(String(buyAmt)),
   rate, pay_method: payMethod, remark: extra.remark ?? null, quote: extra.quote ?? null,
   status, handler_name: extra.handler ?? "sinclair", owner_user_id: null, dispatch_id: extra.dispatch_id ?? null,
@@ -484,66 +523,66 @@ const chainMark = (hoursAgo, amount, hash) => ({
   chain: "TRC20", hash, confirms: "24", place: null, handler: null, token: null, method: "链上收款", note: null,
 });
 await db.collection("trade_orders").insertMany([
-  orderDoc("TO-20260824-101", zhengKaiwenId, "郑凯文", "20008", "U换现金", "USDT", 5000, "HKD", 39000, "7.8000", "USDT 转入", "AWAITING_INFLOW", {
+  orderDoc(bizNo("TO", 9, "101"), zhengKaiwenId, "郑凯文", "20008", "U换现金", "USDT", 5000, "HKD", 39000, "7.8000", "USDT 转入", "AWAITING_INFLOW", {
     createdH: 9, updatedH: 9,
     timeline: [tl(9, "KYC 校验通过", "建单时客户 郑凯文 已准入（审核通过），订单直接进入待客户入款", "系统"), tl(9, "订单创建", "U换现金 · 卖出 USDT 5,000 买入 HKD 39,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }),
-  orderDoc("TO-20260824-102", mosaicId, "Mosaic Ventures Pte. Ltd.", "20007", "转账换U", "USD", 30000, "USDT", 29940, "1.0020", "银行转账", "AWAITING_INFLOW", {
+  orderDoc(bizNo("TO", 10, "102"), mosaicId, "Mosaic Ventures Pte. Ltd.", "20007", "转账换U", "USD", 30000, "USDT", 29940, "1.0020", "银行转账", "AWAITING_INFLOW", {
     createdH: 10, updatedH: 10,
-    quote: { quote_record_id: null, deal_rate: "1.0020", cost_rate: "0.9990", source: "快速报价", quoted_at: at(11), quoted_by: "sinclair", fee: "USD 30" },
+    quote: { quote_record_id: mosaicQuoteId.toString(), deal_rate: "1.0020", cost_rate: "0.9990", source: "快速报价", quoted_at: at(11), quoted_by: "sinclair", fee: "USD 30" },
     timeline: [tl(10, "关联报价", "成交价 1.0020 · 成本价 0.9990 · 手续费 USD 30", "初级交易员 sinclair"), tl(10, "订单创建", "转账换U · 卖出 USD 30,000 买入 USDT 29,940 · 创建人 sinclair", "初级交易员 sinclair")],
   }),
-  orderDoc("TO-20260823-103", zhengKaiwenId, "郑凯文", "20008", "现金换U", "HKD", 156400, "USDT", 20000, "7.8200", "现金", "AWAITING_INFLOW", {
+  orderDoc(bizNo("TO", 26, "103"), zhengKaiwenId, "郑凯文", "20008", "现金换U", "HKD", 156400, "USDT", 20000, "7.8200", "现金", "AWAITING_INFLOW", {
     createdH: 26, updatedH: 20, handler: "sinclair",
     wallet_ops: { deposit_address: null, deposit_by: null, deposit_at: null, payout_address: "TWb5Yd8Nc2Kf7Rq3Hm9Ls1Xz6Gv4Tu0Pe", kya_passed: false, kya_by: null, kya_at: null },
     timeline: [tl(20, "通知客户付款", "等待客户交付 HKD 156,400 现金", "初级交易员 sinclair"), tl(26, "订单创建", "现金换U · 卖出 HKD 156,400 买入 USDT 20,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }),
-  { ...orderDoc("TO-20260819-105", linYawenId, "林雅雯", "20003", "U换转账", "USDT", 150300, "USD", 150000, "0.9980", "USDT 转入", "DISPATCH_REVIEW", {
+  { ...orderDoc(orderNo105, linYawenId, "林雅雯", "20003", "U换转账", "USDT", 150300, "USD", 150000, "0.9980", "USDT 转入", "DISPATCH_REVIEW", {
     createdH: 130, updatedH: 8, handler: "jacky", dispatch_id: sch001Id,
     wallet_ops: { deposit_address: "TXk7Rm2Qd9Vb4Nc8Hs1Lp6Wz3Ye5Gu0Tf", deposit_by: "wallettest", deposit_at: at(129), payout_address: null, kya_passed: true, kya_by: "wallettest", kya_at: at(128) },
     inflow_mark: chainMark(127, 150300, "9f2c7a1e5b34d806fa71c2e93b5d4087ac16e2f9d3b7c8514a0e6d9f2b3c7a15"),
     freeze: { account_key: "bank-SINO-USD", account_name: "SINO 清算账户 · USD", currency: "USD", amount: D("150000"), state: "FROZEN" },
-    timeline: [tl(8, "排单已提交", "SCH-20260819-001 · USD 150,000 · SINO 通道，进入排单审核", "初级交易员 sinclair"), tl(127, "入款已确认", "150,300 USDT 到账，冻结 USD 150,000，进入待出款排单", "钱包运营 wallettest"), tl(130, "订单创建", "U换转账 · 卖出 USDT 150,300 买入 USD 150,000 · 创建人 sinclair", "初级交易员 sinclair")],
+    timeline: [tl(8, "排单已提交", `${schNo001} · USD 150,000 · SINO 通道，进入排单审核`, "初级交易员 sinclair"), tl(127, "入款已确认", "150,300 USDT 到账，冻结 USD 150,000，进入待出款排单", "钱包运营 wallettest"), tl(130, "订单创建", "U换转账 · 卖出 USDT 150,300 买入 USD 150,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }) },
-  { ...orderDoc("TO-20260818-106", auroraId, "Aurora Capital Pte. Ltd.", "20006", "法币换法币", "HKD", 663000, "USD", 85000, "7.8000", "银行转账", "AWAITING_PAYOUT", {
+  { ...orderDoc(orderNo106, auroraId, "Aurora Capital Pte. Ltd.", "20006", "法币换法币", "HKD", 663000, "USD", 85000, "7.8000", "银行转账", "AWAITING_PAYOUT", {
     createdH: 150, updatedH: 20, handler: "jacky", dispatch_id: sch004Id,
     inflow_mark: { by: "ivy", at: at(148), amount: 663000, currency: "HKD", account: "SGB 银行账户 · HKD", voucher: "aurora-chats-0818.pdf", chain: null, hash: null, confirms: null, place: null, handler: null, token: null, method: "电汇转账", note: "CHATS 汇入" },
     freeze: { account_key: "bank-SINO-USD", account_name: "SINO 清算账户 · USD", currency: "USD", amount: D("85000"), state: "FROZEN" },
-    timeline: [tl(20, "排单审核通过", "SCH-20260818-004 转入待出款执行（执行人：出款员 payouttest）", "高级交易员 jacky"), tl(148, "入款已确认", "HKD 663,000 到账，冻结 USD 85,000，进入待出款排单", "财务 ivy"), tl(150, "订单创建", "法币换法币 · 卖出 HKD 663,000 买入 USD 85,000 · 创建人 sinclair", "初级交易员 sinclair")],
+    timeline: [tl(20, "排单审核通过", `${schNo004} 转入待出款执行（执行人：出款员 payouttest）`, "高级交易员 jacky"), tl(148, "入款已确认", "HKD 663,000 到账，冻结 USD 85,000，进入待出款排单", "财务 ivy"), tl(150, "订单创建", "法币换法币 · 卖出 HKD 663,000 买入 USD 85,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }) },
-  { ...orderDoc("TO-20260817-107", liWanqingId, "李婉晴", "20009", "U换转账", "USDT", 220440, "USD", 220000, "0.9980", "USDT 转入", "COMPLETED", {
-    createdH: 175, updatedH: 40, handler: "payouttest", dispatch_id: sch002Id, receipt_ref: "SGB-回单-20260818.pdf",
+  { ...orderDoc(orderNo107, liWanqingId, "李婉晴", "20009", "U换转账", "USDT", 220440, "USD", 220000, "0.9980", "USDT 转入", "COMPLETED", {
+    createdH: 175, updatedH: 40, handler: "payouttest", dispatch_id: sch002Id, receipt_ref: "SGB-回单.pdf",
     wallet_ops: { deposit_address: "TZp9Wc3Kd6Nb2Vq8Hs1Lp6Wz3Ye5Gu0Ef", deposit_by: "wallettest", deposit_at: at(174), payout_address: null, kya_passed: false, kya_by: null, kya_at: null },
     inflow_mark: chainMark(172, 220440, "6a4e9c02b7d158f3e0c74b295ad86031fc52e9b7d403a1685cf29d7e04b3a1c6"),
-    outflow_mark: { by: "payouttest", at: at(40), amount: 220000, currency: "USD", account: "SGB 银行账户 · USD", voucher: "SGB-回单-20260818.pdf", chain: null, hash: null, confirms: null, place: null, handler: null, token: null, method: null, note: null },
+    outflow_mark: { by: "payouttest", at: at(40), amount: 220000, currency: "USD", account: "SGB 银行账户 · USD", voucher: "SGB-回单.pdf", chain: null, hash: null, confirms: null, place: null, handler: null, token: null, method: null, note: null },
     freeze: { account_key: "bank-SGB-USD", account_name: "SGB 银行账户 · USD", currency: "USD", amount: D("220000"), state: "CONSUMED" },
     profit: { currency: "USD", spread: 880, fee: 220, channel_cost: 110, commission: 770, net: 220 },
-    timeline: [tl(40, "订单完成", "出款已执行、凭证已归档，预计净收益 USD 220，订单闭环", "出款员 payouttest"), tl(40, "银行出款已完成", "SGB 银行账户 · USD 220,000 已出款，回单已归档", "出款员 payouttest"), tl(46, "排单审核通过", "SCH-20260817-002 转入待出款执行", "高级交易员 jacky"), tl(175, "订单创建", "U换转账 · 卖出 USDT 220,440 买入 USD 220,000 · 创建人 sinclair", "初级交易员 sinclair")],
+    timeline: [tl(40, "订单完成", "出款已执行、凭证已归档，预计净收益 USD 220，订单闭环", "出款员 payouttest"), tl(40, "银行出款已完成", "SGB 银行账户 · USD 220,000 已出款，回单已归档", "出款员 payouttest"), tl(46, "排单审核通过", `${schNo002} 转入待出款执行`, "高级交易员 jacky"), tl(175, "订单创建", "U换转账 · 卖出 USDT 220,440 买入 USD 220,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }) },
-  orderDoc("TO-20260823-108", northstarId, "Northstar Trading Limited", "20002", "转账换U", "USD", 50000, "USDT", 49900, "1.0020", "银行转账", "AWAITING_INFLOW", {
+  orderDoc(bizNo("TO", 30, "108"), northstarId, "Northstar Trading Limited", "20002", "转账换U", "USD", 50000, "USDT", 49900, "1.0020", "银行转账", "AWAITING_INFLOW", {
     createdH: 30, updatedH: 12, handler: "jacky",
     exception: { kind: "业务异常", reason: "金额不符", detail: "客户实付 USD 48,000，与应收 USD 50,000 不符", prev_status: "AWAITING_INFLOW", escalated: false, since: at(12) },
     timeline: [tl(12, "标记异常", "付款金额不符：实付 USD 48,000 / 应收 USD 50,000，等待处理", "高级交易员 jacky"), tl(30, "订单创建", "转账换U · 卖出 USD 50,000 买入 USDT 49,900 · 创建人 sinclair", "初级交易员 sinclair")],
   }),
-  orderDoc("TO-20260822-109", zhaoMingyuanId, "赵明远", "20004", "转账换U", "USD", 120000, "USDT", 119760, "1.0020", "银行转账", "PENDING_KYC", {
+  orderDoc(bizNo("TO", 55, "109"), zhaoMingyuanId, "赵明远", "20004", "转账换U", "USD", 120000, "USDT", 119760, "1.0020", "银行转账", "PENDING_KYC", {
     createdH: 55, updatedH: 50, handler: "keen", business_type: kycScenarioName,
     exception: { kind: "合规异常", reason: "高风险客户", detail: "客户命中可疑交易规则，待合规复核", prev_status: "PENDING_KYC", escalated: true, since: at(50) },
     timeline: [tl(50, "升级合规", "命中高风险规则，已转合规复核，主线停留在待KYC", "高级交易员 jacky"), tl(55, "合规提示", `「${kycScenarioName}」准入未通过，本单进入待KYC`, "系统"), tl(55, "订单创建", "转账换U · 卖出 USD 120,000 买入 USDT 119,760 · 创建人 choy", "初级交易员 choy")],
   }),
-  { ...orderDoc("TO-20260824-110", zhengKaiwenId, "郑凯文", "20008", "U换转账", "USDT", 25060, "USD", 25000, "0.9976", "USDT 转入", "AWAITING_DISPATCH", {
+  { ...orderDoc(bizNo("TO", 9, "110"), zhengKaiwenId, "郑凯文", "20008", "U换转账", "USDT", 25060, "USD", 25000, "0.9976", "USDT 转入", "AWAITING_DISPATCH", {
     createdH: 9, updatedH: 8, handler: "sinclair",
     wallet_ops: { deposit_address: "TQm4Rf7Xb2Vd9Kc1Ns6Hp3Lw8Zy5Ge0Ur", deposit_by: "wallettest", deposit_at: at(9), payout_address: null, kya_passed: false, kya_by: null, kya_at: null },
     inflow_mark: chainMark(8, 25060, "3d8b1f60ac52e7194b0d6c83fa27e5b19d4c0a76e8f3b512c9a7d04e6b18f2c3"),
     freeze: { account_key: "bank-SGB-USD", account_name: "SGB 银行账户 · USD", currency: "USD", amount: D("25000"), state: "FROZEN" },
     timeline: [tl(8, "入款已确认", "25,060 USDT 到账，冻结 USD 25,000，进入待出款排单", "钱包运营 wallettest"), tl(9, "订单创建", "U换转账 · 卖出 USDT 25,060 买入 USD 25,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }) },
-  orderDoc("TO-20260821-111", liWanqingId, "李婉晴", "20009", "现金换U", "HKD", 78000, "USDT", 10000, "7.8000", "现金", "CANCELLED", {
+  orderDoc(bizNo("TO", 80, "111"), liWanqingId, "李婉晴", "20009", "现金换U", "HKD", 78000, "USDT", 10000, "7.8000", "现金", "CANCELLED", {
     createdH: 80, updatedH: 75,
     timeline: [tl(75, "订单取消", "客户主动取消，未发生资金动作，订单作废", "初级交易员 sinclair"), tl(80, "订单创建", "现金换U · 卖出 HKD 78,000 买入 USDT 10,000 · 创建人 sinclair", "初级交易员 sinclair")],
   }),
 ]);
 /* 修正排单的 order_id 引用（trade_orders 插入后回填真实 _id） */
-for (const [schNo, orderNo] of [["SCH-20260819-001", "TO-20260819-105"], ["SCH-20260818-004", "TO-20260818-106"], ["SCH-20260817-002", "TO-20260817-107"]]) {
+for (const [schNo, orderNo] of [[schNo001, orderNo105], [schNo004, orderNo106], [schNo002, orderNo107]]) {
   const order = await db.collection("trade_orders").findOne({ order_no: orderNo });
   if (order) {
     await db.collection("payout_orders").updateOne({ dispatch_no: schNo }, { $set: { order_id: order._id } });
