@@ -1094,7 +1094,7 @@ export default {
       baseInfo: "基础信息",
       customer: "客户",
       broker: "绑定中介",
-      quotedAt: "报价时间",
+      quotedAt: "计算时间",
       operator: "操作人",
       tradeType: "交易类型",
       prefixDesc: "前缀描述",
