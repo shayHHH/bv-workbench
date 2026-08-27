@@ -22,6 +22,14 @@ export function formatRelative(iso: string | null | undefined): string {
   return date.getFullYear() === now.getFullYear() ? md : `${date.getFullYear()}-${md}`;
 }
 
+/** 纯日期 YYYY-MM-DD（本地时区） */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "-";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "-";
   const date = new Date(iso);

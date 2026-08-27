@@ -10,7 +10,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { cancelApplication, fetchApplications, reopenApplication } from "@/api/access";
-import { formatRelative } from "@/utils/format";
+import { formatDate, formatRelative } from "@/utils/format";
 
 const router = useRouter();
 
@@ -184,7 +184,7 @@ onMounted(load);
               <span class="name-block">
                 <strong>{{ row.customer_snapshot.name }}</strong>
                 <small>
-                  {{ row.customer_snapshot.customer_code || "无编号" }} · {{ row.application_no }}
+                  {{ row.customer_snapshot.customer_code || "无编号" }} · {{ formatDate(row.created_at) }}
                 </small>
               </span>
             </div>
