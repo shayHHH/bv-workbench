@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AccessApplication, AccessApplicationSchema } from "../access/access-application.schema";
 import { Customer, CustomerSchema } from "../customer/customer.schema";
+import { KycScenario, KycScenarioSchema } from "../kyc/kyc-scenario.schema";
 import { QuoteRecord, QuoteRecordSchema } from "../quote/schemas/quote-record.schema";
 import { OrderController } from "./order.controller";
 import { OrderService } from "./order.service";
@@ -20,6 +21,7 @@ import { VaAccount, VaAccountSchema } from "./schemas/va-account.schema";
       { name: Customer.name, schema: CustomerSchema },
       { name: AccessApplication.name, schema: AccessApplicationSchema },
       { name: QuoteRecord.name, schema: QuoteRecordSchema },
+      { name: KycScenario.name, schema: KycScenarioSchema },
     ]),
   ],
   controllers: [OrderController],

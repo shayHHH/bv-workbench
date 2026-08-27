@@ -7,7 +7,7 @@ import {
   type QuoteCandidateVO,
   type TradeOrderVO,
 } from "@bv/shared";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { reactive, ref, watch } from "vue";
 import { fetchCustomers } from "@/api/customer";
 import { fetchActiveScenarios } from "@/api/kyc";
@@ -25,7 +25,8 @@ const quotes = ref<QuoteCandidateVO[]>([]);
 
 const form = reactive({
   customer_id: "",
-  business_type: "",
+  business_scenario_id: "",
+  person_name: "",
   trade_type: "转账换U",
   custom_trade_type: "",
   sell_currency: "USD",
@@ -55,7 +56,7 @@ watch(visible, open => {
   searchCustomers("");
   fetchActiveScenarios().then(list => {
     scenarios.value = list;
-    if (!form.business_type && list.length) form.business_type = list[0].scenario_name;
+    if (!form.business_scenario_id && list.length) form.business_scenario_id = list[0].id;
   });
 });
 
@@ -66,6 +67,11 @@ watch(() => form.customer_id, id => {
 });
 
 function applyTradeTypePreset(type: string) {
+  /* 审计 1.2.3：切换交易类型会重置币种与预设汇率，与已选报价冲突，先清除关联 */
+  if (form.quote_record_id) {
+    form.quote_record_id = "";
+    ElMessage.info("交易类型已变更，已清除关联报价，请重新选择");
+  }
   const preset = TRADE_TYPE_PRESETS[type];
   if (preset) {
     form.sell_currency = preset[0];
@@ -77,7 +83,13 @@ function applyTradeTypePreset(type: string) {
 
 function pickQuote(id: string) {
   const quote = quotes.value.find(item => item.quote_record_id === id);
-  if (quote) form.rate = quote.result;
+  if (!quote) return;
+  form.rate = quote.result;
+  /* 审计 1.2.4：带出汇率后联动金额（仅在买入额未填时按 卖出×汇率 预填，可修改） */
+  const rate = Number(quote.result);
+  if (form.sell_amount && !form.buy_amount && Number.isFinite(rate) && rate > 0) {
+    form.buy_amount = Math.round(form.sell_amount * rate * 100) / 100;
+  }
 }
 
 async function submit() {
@@ -86,11 +98,29 @@ async function submit() {
   if (!tradeType) return ElMessage.warning("请选择或输入交易类型");
   if (!form.sell_amount) return ElMessage.warning("请填写客户卖出金额");
   if (!form.buy_amount) return ElMessage.warning("请填写客户买入金额（两侧金额均需手动填写）");
+  /* 审计 1.2.6：执行汇率与关联报价不一致时要求确认 */
+  const pickedQuote = form.quote_record_id
+    ? quotes.value.find(item => item.quote_record_id === form.quote_record_id)
+    : null;
+  if (pickedQuote && form.rate.trim() !== pickedQuote.result) {
+    try {
+      await ElMessageBox.confirm(
+        `执行汇率（${form.rate}）与关联报价（${pickedQuote.result}）不一致，确认按执行汇率 ${form.rate} 建单？`,
+        "汇率不一致",
+        { confirmButtonText: "确认建单", cancelButtonText: "返回修改" },
+      );
+    } catch {
+      return;
+    }
+  }
+  const pickedScenario = scenarios.value.find(item => item.id === form.business_scenario_id) ?? null;
   submitting.value = true;
   try {
     const order = await createOrder({
       customer_id: form.customer_id,
-      business_type: form.business_type || null,
+      business_type: pickedScenario?.scenario_name ?? null,
+      business_scenario_id: form.business_scenario_id || null,
+      person_name: form.person_name.trim() || null,
       trade_type: tradeType,
       sell_currency: form.sell_currency,
       sell_amount: form.sell_amount,
@@ -133,8 +163,8 @@ async function submit() {
           </el-select>
         </el-form-item>
         <el-form-item label="准入业务类型">
-          <el-select v-model="form.business_type" clearable placeholder="决定订单 KYC 校验口径" style="width: 100%">
-            <el-option v-for="s in scenarios" :key="s.id" :value="s.scenario_name" :label="`#${s.scenario_code} · ${s.scenario_name}`" />
+          <el-select v-model="form.business_scenario_id" clearable placeholder="决定订单 KYC 校验口径" style="width: 100%">
+            <el-option v-for="s in scenarios" :key="s.id" :value="s.id" :label="`#${s.scenario_code} · ${s.scenario_name}`" />
           </el-select>
         </el-form-item>
       </div>
@@ -189,6 +219,9 @@ async function submit() {
           </el-select>
         </el-form-item>
       </div>
+      <el-form-item label="客户英文名 / 收款人名">
+        <el-input v-model="form.person_name" maxlength="80" placeholder="用于出款排单收款要素（可选）" />
+      </el-form-item>
       <el-form-item label="备注说明">
         <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" placeholder="交收要求、渠道约定等（可选）" />
       </el-form-item>

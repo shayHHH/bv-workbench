@@ -20,6 +20,16 @@ export class CreateOrderDto {
   @MaxLength(60)
   business_type?: string | null;
 
+  @IsOptional()
+  @IsMongoId()
+  business_scenario_id?: string | null;
+
+  /** 客户英文名/收款人名（排单收款要素用），选填 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  person_name?: string | null;
+
   @IsString()
   @MaxLength(30)
   trade_type: string;
@@ -138,6 +148,12 @@ export class CreateDispatchDto {
   @IsOptional()
   @IsMongoId()
   va_account_id?: string | null;
+
+  /** 出款账户名/描述（可编辑，默认由渠道推导），审计 1.4.2 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  payout_account?: string | null;
 }
 
 export class WalletAddressDto {

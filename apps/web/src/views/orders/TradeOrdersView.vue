@@ -10,6 +10,7 @@ import {
 } from "@bv/shared";
 import { Plus } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { fetchOrders, type OrderListQuery } from "@/api/order";
 import { useAuthStore } from "@/stores/auth";
 import { formatRelative } from "@/utils/format";
@@ -204,8 +205,12 @@ function onActionDone() {
   panelRef.value?.reload();
 }
 
+const route = useRoute();
+
 onMounted(() => {
   activeTodo.value = "";
+  const kw = typeof route.query.kw === "string" ? route.query.kw.trim() : "";
+  if (kw) query.keyword = kw;
   load();
 });
 </script>

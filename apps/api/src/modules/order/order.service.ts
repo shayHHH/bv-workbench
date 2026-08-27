@@ -20,6 +20,7 @@ import {
   OrderListStatsVO,
   PageResult,
   PayoutOrderVO,
+  PROFIT_RATE_CONFIG,
   QuoteCandidateVO,
   TradeOrderStatus,
   TradeOrderVO,
@@ -31,6 +32,7 @@ import { JwtPayload } from "../../auth/auth.types";
 import { nextBusinessNo } from "../../common/sequence";
 import { AccessApplication, AccessApplicationDocument } from "../access/access-application.schema";
 import { Customer, CustomerDocument } from "../customer/customer.schema";
+import { KycScenario, KycScenarioDocument } from "../kyc/kyc-scenario.schema";
 import { QuoteRecord, QuoteRecordDocument } from "../quote/schemas/quote-record.schema";
 import {
   CreateDispatchDto,
@@ -71,6 +73,7 @@ export class OrderService {
     @InjectModel(AccessApplication.name)
     private readonly applicationModel: Model<AccessApplicationDocument>,
     @InjectModel(QuoteRecord.name) private readonly quoteRecordModel: Model<QuoteRecordDocument>,
+    @InjectModel(KycScenario.name) private readonly scenarioModel: Model<KycScenarioDocument>,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -96,7 +99,17 @@ export class OrderService {
       }
     }
 
-    const kyc = await this.kycBadgeFor(customer._id, dto.business_type ?? null);
+    /* 业务类型改存 scenario_id（审计 1.2.10）：名称仅作快照，改名不断链 */
+    let scenarioId: Types.ObjectId | null = null;
+    let businessType = dto.business_type ?? null;
+    if (dto.business_scenario_id) {
+      const scenario = await this.scenarioModel.findOne({ _id: dto.business_scenario_id, is_deleted: false }).lean();
+      if (scenario) {
+        scenarioId = scenario._id;
+        businessType = scenario.scenario_name;
+      }
+    }
+    const kyc = await this.kycBadgeFor(customer._id, businessType, scenarioId);
     const pendingKyc = !kyc.ready;
     const now = new Date();
     const actor = this.actorLabel(operator);
@@ -120,7 +133,7 @@ export class OrderService {
         ? {
             at: now,
             title: "合规提示",
-            detail: `「${dto.business_type || "未选业务类型"}」准入状态「${kyc.label}」，本单进入待KYC；该业务类型准入通过后自动进入待客户入款`,
+            detail: `「${businessType || "未选业务类型"}」准入状态「${kyc.label}」，本单进入待KYC；该业务类型准入通过后自动进入待客户入款`,
             actor: "系统",
           }
         : {
@@ -136,8 +149,9 @@ export class OrderService {
       customer_id: customer._id,
       customer_name: customer.name,
       customer_code: customer.customer_code,
-      person_name: null,
-      business_type: dto.business_type ?? null,
+      person_name: dto.person_name?.trim() || null,
+      business_type: businessType,
+      business_scenario_id: scenarioId,
       trade_type: dto.trade_type,
       sell_currency: dto.sell_currency,
       sell_amount: Types.Decimal128.fromString(String(dto.sell_amount)),
@@ -267,7 +281,7 @@ export class OrderService {
 
   async getById(id: string): Promise<TradeOrderVO> {
     const doc = await this.findOrFail(id);
-    const kyc = await this.kycBadgeFor(doc.customer_id, doc.business_type);
+    const kyc = await this.kycBadgeForDoc(doc);
     return this.toVO(doc.toObject(), kyc);
   }
 
@@ -284,9 +298,12 @@ export class OrderService {
     treasury: TreasuryAccountVO[];
   }> {
     const doc = await this.findOrFail(orderId);
+    /* 通道可用余额按订单出款币种查询（审计 1.4.10），无对应账户则前端显示 — */
     const [vaAccounts, treasury] = await Promise.all([
       this.vaModel.find({ customer_id: doc.customer_id, is_deleted: false }).lean(),
-      this.treasuryModel.find({ key: { $in: ["bank-SGB-USD", "bank-SINO-USD"] }, is_deleted: false }).lean(),
+      this.treasuryModel
+        .find({ key: { $in: [`bank-SGB-${doc.buy_currency}`, `bank-SINO-${doc.buy_currency}`] }, is_deleted: false })
+        .lean(),
     ]);
     return {
       va_accounts: vaAccounts.map(item => ({
@@ -315,7 +332,7 @@ export class OrderService {
   async kycSync(id: string, operator: JwtPayload): Promise<TradeOrderVO> {
     const doc = await this.findOrFail(id);
     if (doc.status !== TradeOrderStatus.PENDING_KYC) throw new ConflictException("订单不在待KYC状态");
-    const kyc = await this.kycBadgeFor(doc.customer_id, doc.business_type);
+    const kyc = await this.kycBadgeForDoc(doc);
     if (!kyc.ready) {
       throw new BadRequestException(`KYC 仍未通过（当前「${kyc.label}」），请先在业务准入完成审核`);
     }
@@ -333,7 +350,7 @@ export class OrderService {
     });
     let advanced = 0;
     for (const doc of docs) {
-      const kyc = await this.kycBadgeFor(doc.customer_id, doc.business_type);
+      const kyc = await this.kycBadgeForDoc(doc);
       if (!kyc.ready) continue;
       doc.status = TradeOrderStatus.AWAITING_INFLOW;
       doc.timeline = [
@@ -377,7 +394,7 @@ export class OrderService {
     );
     doc.exception = null;
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   /* ---------------- 钱包节点 ---------------- */
@@ -393,7 +410,7 @@ export class OrderService {
     };
     this.log(doc, "提供公司收 U 地址", `${address.trim()} · 由钱包运营登记`, operator);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   async walletKya(id: string, address: string, operator: JwtPayload): Promise<TradeOrderVO> {
@@ -408,7 +425,7 @@ export class OrderService {
     };
     this.log(doc, "客户地址 KYA 通过", `${address.trim()} · 白名单校验通过，建议先做小额测试`, operator);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   /* ---------------- 入款确认（登记即确认） ---------------- */
@@ -428,11 +445,29 @@ export class OrderService {
       inflowDetail(kind, dto, doc.sell_currency),
       operator,
     );
-    await this.freezeFunds(doc);
+
+    /* 实收 vs 应收校验（审计 1.1.1/1.1.3）：不符则登记实收并自动标记金额不符异常，主线停留待客户入款 */
+    const expected = num(doc.sell_amount);
+    const diff = round2(dto.amount - expected);
+    if (Math.abs(diff) > 0.009) {
+      doc.exception = {
+        kind: "业务异常",
+        reason: "金额不符",
+        detail: `实付 ${doc.sell_currency} ${fmt(dto.amount)} / 应收 ${doc.sell_currency} ${fmt(expected)}，差额 ${diff > 0 ? "+" : ""}${fmt(diff)}`,
+        prev_status: doc.status,
+        escalated: false,
+        since: new Date(),
+      };
+      this.log(doc, "标记异常", `实收与应收不符（${doc.exception.detail}），入款已登记但未确认，等待处理`, operator);
+      await doc.save();
+      return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
+    }
+
+    await this.freezeFunds(doc, operator);
     doc.payment_rejected = null;
-    this.advance(doc, TradeOrderStatus.AWAITING_DISPATCH, operator, "入款登记确认", `冻结 ${doc.buy_currency} ${fmt(num(doc.buy_amount))}，进入待出款排单`);
+    this.advance(doc, TradeOrderStatus.AWAITING_DISPATCH, operator, "入款登记确认", `实收 ${doc.sell_currency} ${fmt(dto.amount)} 与应收一致，冻结 ${doc.buy_currency} ${fmt(num(doc.buy_amount))}，进入待出款排单`);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   /* ---------------- 出款排单 ---------------- */
@@ -454,6 +489,7 @@ export class OrderService {
         currency: va.currency,
       };
     }
+    await this.moveFreezeToChannel(doc, dto.channel, operator);
     const parsed = parseDispatchRaw(text);
     const orderTitle = (text.split("\n").map(line => line.trim()).find(line => line && !/^\*/.test(line)) || `補單:${doc.customer_code || "无编号"}`).slice(0, 42);
     const now = new Date();
@@ -469,7 +505,9 @@ export class OrderService {
       amount: doc.buy_amount,
       order_title: orderTitle,
       final_text: text,
-      payout_account: dto.channel === DispatchChannel.SGB ? `${(doc.person_name || doc.customer_name).toUpperCase()} SGB VA` : "pobo cq開-開",
+      payout_account:
+        dto.payout_account?.trim() ||
+        (dto.channel === DispatchChannel.SGB ? `${(doc.person_name || doc.customer_name).toUpperCase()} SGB VA` : "pobo cq開-開"),
       va_account: vaAccount,
       payee: parsed.payee || doc.person_name || doc.customer_name,
       payee_bank: [parsed.bankName, parsed.accountNumber].filter(Boolean).join(" · ") || "見排单文案",
@@ -483,7 +521,7 @@ export class OrderService {
     doc.dispatch_rejected = null;
     this.advance(doc, TradeOrderStatus.DISPATCH_REVIEW, operator, "排单已提交", `${dispatch.dispatch_no} · ${orderTitle} · ${doc.buy_currency} ${fmt(num(doc.buy_amount))} 进入排单审核`);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   async dispatchApprove(id: string, operator: JwtPayload): Promise<TradeOrderVO> {
@@ -496,7 +534,7 @@ export class OrderService {
     const dispatch = await this.payoutModel.findOne({ _id: doc.dispatch_id }).lean();
     this.advance(doc, TradeOrderStatus.AWAITING_PAYOUT, operator, "排单审核通过", `${dispatch?.dispatch_no ?? ""} 进入待出款执行（执行人：${this.outflowOwnerLabel(doc)}）`);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   async dispatchReturn(id: string, reason: string | undefined, operator: JwtPayload): Promise<TradeOrderVO> {
@@ -508,7 +546,7 @@ export class OrderService {
     doc.dispatch_rejected = { reason: reason || "需重新排单", by: operator.display_name, at: new Date() };
     this.advance(doc, TradeOrderStatus.AWAITING_DISPATCH, operator, "排单被驳回", `${dispatch?.dispatch_no ?? ""} · ${reason || "需重新排单"}，等待交易员重新提交排单`);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   /* ---------------- 出款执行 / 执行退回 ---------------- */
@@ -560,7 +598,7 @@ export class OrderService {
     );
     this.advance(doc, TradeOrderStatus.COMPLETED, operator, "订单完成", `出款已执行、凭证已归档，预计净收益 ${doc.profit.currency} ${fmt(doc.profit.net)}，订单闭环`);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   async outflowReturn(id: string, reason: string | undefined, operator: JwtPayload): Promise<TradeOrderVO> {
@@ -573,7 +611,7 @@ export class OrderService {
     doc.dispatch_rejected = { reason: reason || "执行异常，需重新排单", by: operator.display_name, at: new Date() };
     this.advance(doc, TradeOrderStatus.AWAITING_DISPATCH, operator, "执行异常退回", `${reason || "账户错误 / KYA 失败 / 通道不可用"}，订单回到待出款排单`);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   /* ---------------- 异常（附加标记，不打断主线） ---------------- */
@@ -586,7 +624,7 @@ export class OrderService {
     doc.exception = { kind: dto.kind, reason: dto.reason, detail: dto.detail, prev_status: doc.status, escalated: false, since: new Date() };
     this.log(doc, "标记异常", `${dto.kind} · ${dto.reason}：${dto.detail}（主线状态保持「${doc.status}」）`, operator);
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   async exceptionResolve(id: string, dto: ExceptionResolveDto, operator: JwtPayload): Promise<TradeOrderVO> {
@@ -610,7 +648,7 @@ export class OrderService {
       this.log(doc, "升级合规", "异常升级至合规复核，等待合规结论", operator);
     }
     await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeFor(doc.customer_id, doc.business_type));
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
   /* ---------------- 内部 ---------------- */
@@ -640,6 +678,7 @@ export class OrderService {
 
   private advance(doc: TradeOrderDocument, to: TradeOrderStatus, operator: JwtPayload, title: string, detail: string): void {
     doc.status = to;
+    doc.handler_name = operator.display_name;
     this.log(doc, title, detail, operator);
   }
 
@@ -651,14 +690,29 @@ export class OrderService {
     return ROLE_NAME.get(fundingOwnerRole(shape(doc), "outflow")) ?? "出款员";
   }
 
-  /** 冻结应付资金：账户 available→frozen */
-  private async freezeFunds(doc: TradeOrderDocument): Promise<void> {
+  /**
+   * 冻结应付资金：账户 available→frozen。
+   * 审计 1.4.7/1.4.8：找不到账户或可用余额不足时阻断（不再静默跳过/扣成负数）；
+   * 冻结后跌破账户下限（floor）不阻断但写入时间线警示。
+   */
+  private async freezeFunds(doc: TradeOrderDocument, operator: JwtPayload): Promise<void> {
     const key = await this.payoutAccountKeyFor(doc);
     const account = key ? await this.treasuryModel.findOne({ key, is_deleted: false }) : null;
-    if (!account) return;
+    if (!account) {
+      throw new BadRequestException(
+        `未找到可冻结的 ${doc.buy_currency} 出款账户，请先在资金账户中配置后再确认入款`,
+      );
+    }
     const amount = num(doc.buy_amount);
-    account.available = Types.Decimal128.fromString(String(num(account.available) - amount));
-    account.frozen = Types.Decimal128.fromString(String(num(account.frozen) + amount));
+    const available = num(account.available);
+    if (available < amount) {
+      throw new BadRequestException(
+        `${account.name} 可用余额不足（可用 ${fmt(available)}，需冻结 ${fmt(amount)}），请先补仓或调整账户`,
+      );
+    }
+    const remaining = round2(available - amount);
+    account.available = Types.Decimal128.fromString(String(remaining));
+    account.frozen = Types.Decimal128.fromString(String(round2(num(account.frozen) + amount)));
     await account.save();
     doc.freeze = {
       account_key: account.key,
@@ -667,6 +721,38 @@ export class OrderService {
       amount: doc.buy_amount,
       state: FreezeState.FROZEN,
     };
+    const floor = num(account.floor);
+    if (floor > 0 && remaining < floor) {
+      this.log(doc, "账户余额预警", `${account.name} 冻结后可用 ${fmt(remaining)}，已跌破下限 ${fmt(floor)}，请及时补仓`, operator);
+    }
+  }
+
+  /** 排单时冻结账户跟随所选渠道（审计 1.4.12）：与已冻结账户不一致则迁移冻结 */
+  private async moveFreezeToChannel(doc: TradeOrderDocument, channel: string, operator: JwtPayload): Promise<void> {
+    if (!doc.freeze || doc.freeze.state !== FreezeState.FROZEN) return;
+    if (fundingKindOf(shape(doc), "outflow") !== FundingKind.BANK) return;
+    const targetKey = `bank-${channel}-${doc.buy_currency}`;
+    if (doc.freeze.account_key === targetKey) return;
+    const target = await this.treasuryModel.findOne({ key: targetKey, is_deleted: false });
+    if (!target) return; // 渠道无对应币种账户时维持原冻结账户
+    const amount = num(doc.freeze.amount);
+    if (num(target.available) < amount) {
+      throw new BadRequestException(
+        `${target.name} 可用余额不足（可用 ${fmt(num(target.available))}，需冻结 ${fmt(amount)}），无法切换到 ${channel} 通道`,
+      );
+    }
+    const source = await this.treasuryModel.findOne({ key: doc.freeze.account_key, is_deleted: false });
+    if (source) {
+      source.available = Types.Decimal128.fromString(String(round2(num(source.available) + amount)));
+      source.frozen = Types.Decimal128.fromString(String(Math.max(0, round2(num(source.frozen) - amount))));
+      await source.save();
+    }
+    target.available = Types.Decimal128.fromString(String(round2(num(target.available) - amount)));
+    target.frozen = Types.Decimal128.fromString(String(round2(num(target.frozen) + amount)));
+    await target.save();
+    const fromName = doc.freeze.account_name;
+    doc.freeze = { ...doc.freeze, account_key: target.key, account_name: target.name };
+    this.log(doc, "冻结账户调整", `随 ${channel} 通道由「${fromName}」迁移至「${target.name}」（${doc.buy_currency} ${fmt(amount)}）`, operator);
   }
 
   private async releaseFunds(doc: TradeOrderDocument): Promise<void> {
@@ -707,10 +793,19 @@ export class OrderService {
     return null;
   }
 
-  /** 订单 KYC 徽标：联查 access_applications（客户 + 业务类型），demo 表2/表3 映射 */
-  private async kycBadgeFor(customerId: Types.ObjectId, businessType: string | null): Promise<OrderKycBadge> {
+  private kycBadgeForDoc(doc: { customer_id: Types.ObjectId; business_type: string | null; business_scenario_id?: Types.ObjectId | null }): Promise<OrderKycBadge> {
+    return this.kycBadgeFor(doc.customer_id, doc.business_type, doc.business_scenario_id ?? null);
+  }
+
+  /** 订单 KYC 徽标：联查 access_applications（优先 scenario_id，名称兜底），demo 表2/表3 映射 */
+  private async kycBadgeFor(
+    customerId: Types.ObjectId,
+    businessType: string | null,
+    scenarioId: Types.ObjectId | null = null,
+  ): Promise<OrderKycBadge> {
     const filter: Record<string, unknown> = { customer_id: customerId, is_deleted: false };
-    if (businessType) filter.scenario_name = businessType;
+    if (scenarioId) filter.scenario_id = scenarioId;
+    else if (businessType) filter.scenario_name = businessType;
     const applications = await this.applicationModel.find(filter).select("status").lean();
     if (!applications.length) return KYC_BADGE_NONE;
     const statuses = new Set(applications.map(app => app.status as string));
@@ -718,20 +813,21 @@ export class OrderService {
     return best ? (AccessToKycBadge[best] ?? KYC_BADGE_NONE) : KYC_BADGE_NONE;
   }
 
-  private async kycBadgeMap(items: Array<{ _id: Types.ObjectId; customer_id: Types.ObjectId; business_type: string | null }>): Promise<Map<string, OrderKycBadge>> {
+  private async kycBadgeMap(items: Array<{ _id: Types.ObjectId; customer_id: Types.ObjectId; business_type: string | null; business_scenario_id?: Types.ObjectId | null }>): Promise<Map<string, OrderKycBadge>> {
     const map = new Map<string, OrderKycBadge>();
     const customerIds = [...new Set(items.map(item => String(item.customer_id)))];
     if (!customerIds.length) return map;
     const applications = await this.applicationModel
       .find({ customer_id: { $in: customerIds.map(id => new Types.ObjectId(id)) }, is_deleted: false })
-      .select("customer_id scenario_name status")
+      .select("customer_id scenario_id scenario_name status")
       .lean();
     for (const item of items) {
-      const related = applications.filter(
-        app =>
-          String(app.customer_id) === String(item.customer_id) &&
-          (!item.business_type || app.scenario_name === item.business_type),
-      );
+      const related = applications.filter(app => {
+        if (String(app.customer_id) !== String(item.customer_id)) return false;
+        if (item.business_scenario_id) return String(app.scenario_id) === String(item.business_scenario_id);
+        if (item.business_type) return app.scenario_name === item.business_type;
+        return true;
+      });
       if (!related.length) {
         map.set(String(item._id), KYC_BADGE_NONE);
         continue;
@@ -755,6 +851,7 @@ export class OrderService {
       customer_code: doc.customer_code,
       person_name: doc.person_name,
       business_type: doc.business_type,
+      business_scenario_id: doc.business_scenario_id ? String(doc.business_scenario_id) : null,
       trade_type: doc.trade_type,
       sell_currency: doc.sell_currency,
       sell_amount: num(doc.sell_amount),
@@ -874,14 +971,14 @@ function outflowDetail(kind: FundingKind, dto: FundingActionDto): string {
   return `账户 ${dto.account}${dto.voucher ? ` · 凭证 ${dto.voucher}` : ""}`;
 }
 
-/** demo computeOrderProfit：固定比例（汇差 0.4% / 手续费 0.1% / 渠道成本 0.05% / 佣金 0.35%） */
+/** 收益估算：比例取共享 PROFIT_RATE_CONFIG（demo 口径），界面标注"估算"，待接真实成本配置 */
 function computeProfit(doc: { sell_currency: string; buy_currency: string; sell_amount: unknown; buy_amount: unknown }) {
   const baseAmount = doc.buy_currency === "USDT" ? num(doc.sell_amount) : num(doc.buy_amount);
   const currency = doc.buy_currency === "USDT" ? doc.sell_currency : doc.buy_currency;
-  const spread = Math.round(baseAmount * 0.004);
-  const fee = Math.round(baseAmount * 0.001);
-  const channelCost = Math.round(baseAmount * 0.0005);
-  const commission = Math.round(baseAmount * 0.0035);
+  const spread = Math.round(baseAmount * PROFIT_RATE_CONFIG.spread);
+  const fee = Math.round(baseAmount * PROFIT_RATE_CONFIG.fee);
+  const channelCost = Math.round(baseAmount * PROFIT_RATE_CONFIG.channel_cost);
+  const commission = Math.round(baseAmount * PROFIT_RATE_CONFIG.commission);
   return { currency, spread, fee, channel_cost: channelCost, commission, net: spread + fee - channelCost - commission };
 }
 
@@ -955,6 +1052,10 @@ function toDispatchVO(doc: PayoutOrder & { _id: Types.ObjectId }): PayoutOrderVO
   };
 }
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function fmt(value: number): string {
   return value.toLocaleString("en-US");
 }
@@ -966,3 +1067,4 @@ function fmtTime(value: Date): string {
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+

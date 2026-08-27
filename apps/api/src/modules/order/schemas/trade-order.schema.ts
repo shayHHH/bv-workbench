@@ -28,9 +28,12 @@ export class TradeOrder {
   @Prop({ type: String, default: null })
   person_name: string | null;
 
-  /** 准入业务类型（KYC 场景名），联动订单 KYC 徽标 */
+  /** 准入业务类型（KYC 场景名快照）；联动以 business_scenario_id 为准（审计 1.2.10） */
   @Prop({ type: String, default: null })
   business_type: string | null;
+
+  @Prop({ type: Types.ObjectId, default: null })
+  business_scenario_id: Types.ObjectId | null;
 
   @Prop({ type: String, required: true })
   trade_type: string;

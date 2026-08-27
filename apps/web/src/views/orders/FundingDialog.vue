@@ -22,7 +22,7 @@ const form = reactive({
   voucher: "",
   chain: "TRC20",
   hash: "",
-  confirms: "20",
+  confirms: "",
   place: "",
   handler: "",
   token: "",
@@ -41,6 +41,7 @@ watch(visible, open => {
   form.account = "";
   form.voucher = "";
   form.hash = "";
+  form.confirms = "";
   form.place = "";
   form.handler = "";
   form.token = "";
@@ -59,6 +60,7 @@ const title = computed(() => {
 async function submit() {
   const order = props.order!;
   if (kind.value === FundingKind.CHAIN && !form.hash.trim()) return ElMessage.warning("请填写 Transaction Hash");
+  if (kind.value === FundingKind.CHAIN && !form.confirms.trim()) return ElMessage.warning("请填写链上确认次数（以实际查询为准）");
   if (kind.value === FundingKind.CASH && !form.place.trim()) return ElMessage.warning("请填写交收地点");
   if (kind.value === FundingKind.BANK && props.side === "outflow" && !form.account.trim()) return ElMessage.warning("请填写出款账户");
   submitting.value = true;

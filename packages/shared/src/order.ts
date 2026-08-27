@@ -192,6 +192,17 @@ export const TRADE_TYPE_PRESETS: Record<string, [string, string, string]> = {
 
 export const ORDER_CURRENCIES = ["HKD", "USD", "USDT", "CNY", "EUR", "SGD"] as const;
 
+/**
+ * 收益推导比例（demo 口径的估算值，非真实成本；用户确认先标注估算、比例集中可配，
+ * 待资金模块接入真实成本/佣金规则后替换）。
+ */
+export const PROFIT_RATE_CONFIG = {
+  spread: 0.004,
+  fee: 0.001,
+  channel_cost: 0.0005,
+  commission: 0.0035,
+} as const;
+
 /* ---------------- VO ---------------- */
 
 export interface OrderQuoteRefVO {
@@ -261,6 +272,7 @@ export interface TradeOrderVO {
   customer_code: string | null;
   person_name: string | null;
   business_type: string | null;
+  business_scenario_id: string | null;
   trade_type: string;
   sell_currency: string;
   sell_amount: number;
@@ -370,6 +382,8 @@ export interface OrderListStatsVO {
 export interface CreateOrderInput {
   customer_id: string;
   business_type?: string | null;
+  business_scenario_id?: string | null;
+  person_name?: string | null;
   trade_type: string;
   sell_currency: string;
   sell_amount: number;
@@ -401,4 +415,5 @@ export interface CreateDispatchInput {
   channel: DispatchChannel;
   text: string;
   va_account_id?: string | null;
+  payout_account?: string | null;
 }

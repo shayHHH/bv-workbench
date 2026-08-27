@@ -16,13 +16,20 @@ const emit = defineEmits<{ done: [order: TradeOrderVO] }>();
 const submitting = ref(false);
 const vaAccounts = ref<VaAccountVO[]>([]);
 const treasury = ref<TreasuryAccountVO[]>([]);
-const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, va_account_id: "", text: "" });
+const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, va_account_id: "", payout_account: "", text: "" });
 
-const sgb = computed(() => treasury.value.find(item => item.key === "bank-SGB-USD"));
-const sino = computed(() => treasury.value.find(item => item.key === "bank-SINO-USD"));
+const sgb = computed(() => treasury.value.find(item => item.key.startsWith("bank-SGB-")));
+const sino = computed(() => treasury.value.find(item => item.key.startsWith("bank-SINO-")));
 const selectedVa = computed(() => vaAccounts.value.find(item => item.id === form.va_account_id) ?? null);
 
 /** demo composeDispatchText 模板 */
+function defaultPayoutAccount(): string {
+  const order = props.order!;
+  return form.channel === DispatchChannel.SGB
+    ? `${(order.person_name || order.customer_name).toUpperCase()} SGB VA`
+    : "pobo cq開-開";
+}
+
 function templateText(): string {
   const order = props.order!;
   const amount = order.buy_amount.toLocaleString("en-US", { minimumFractionDigits: 2 });
@@ -30,9 +37,9 @@ function templateText(): string {
   const raw = "（在此粘贴客户提供的收款账户资料，或直接编辑）";
   if (form.channel === DispatchChannel.SGB) {
     const va = selectedVa.value;
-    return `* sgb（渠道2）\n\n${title}\n\n${raw}\n\n金額：${amount} ${order.buy_currency.toLowerCase()}\n出款帳戶：${(order.person_name || order.customer_name).toUpperCase()} SGB VA\nAccount 1：\nVirtual Account Number：${va?.virtual_account_number || "未匹配 VA"}\nIBAN：${va?.iban || "未匹配 VA"}\nCurrency：${va?.currency || order.buy_currency}`;
+    return `* sgb（渠道2）\n\n${title}\n\n${raw}\n\n金額：${amount} ${order.buy_currency.toLowerCase()}\n出款帳戶：${form.payout_account || defaultPayoutAccount()}\nAccount 1：\nVirtual Account Number：${va?.virtual_account_number || "未匹配 VA"}\nIBAN：${va?.iban || "未匹配 VA"}\nCurrency：${va?.currency || order.buy_currency}`;
   }
-  return `* sino(渠道1) pobo\n\n${title}\n${raw}\n\n金額: ${order.buy_currency}${amount}\n出款賬戶: pobo cq開-開`;
+  return `* sino(渠道1) pobo\n\n${title}\n${raw}\n\n金額: ${order.buy_currency}${amount}\n出款賬戶: ${form.payout_account || defaultPayoutAccount()}`;
 }
 
 watch(visible, async open => {
@@ -42,10 +49,18 @@ watch(visible, async open => {
   treasury.value = context.treasury;
   form.channel = vaAccounts.value.length ? DispatchChannel.SGB : DispatchChannel.SINO;
   form.va_account_id = vaAccounts.value[0]?.id ?? "";
+  form.payout_account = defaultPayoutAccount();
   form.text = templateText();
 });
 
-watch(() => [form.channel, form.va_account_id], () => {
+watch(() => form.channel, () => {
+  if (visible.value && props.order) {
+    form.payout_account = defaultPayoutAccount();
+    form.text = templateText();
+  }
+});
+
+watch(() => [form.va_account_id, form.payout_account], () => {
   if (visible.value && props.order) form.text = templateText();
 });
 
@@ -62,6 +77,7 @@ async function submit() {
       channel: form.channel,
       text,
       va_account_id: form.channel === DispatchChannel.SGB ? form.va_account_id || null : null,
+      payout_account: form.payout_account.trim() || null,
     });
     ElMessage.success(`排单已提交，${order.order_no} 进入出款审核中`);
     visible.value = false;
@@ -75,8 +91,8 @@ async function submit() {
 <template>
   <el-dialog v-model="visible" :title="`发起出款排单 · ${order?.order_no ?? ''}`" width="640px" :close-on-click-modal="false">
     <div class="channel-strip">
-      <div><span>SGB 通道可用</span><strong>{{ sgb ? `USD ${sgb.available.toLocaleString("en-US")}` : "—" }}</strong></div>
-      <div><span>SINO 通道可用</span><strong>{{ sino ? `USD ${sino.available.toLocaleString("en-US")}` : "—" }}</strong></div>
+      <div><span>SGB 通道可用</span><strong>{{ sgb ? `${sgb.currency} ${sgb.available.toLocaleString("en-US")}` : "—" }}</strong></div>
+      <div><span>SINO 通道可用</span><strong>{{ sino ? `${sino.currency} ${sino.available.toLocaleString("en-US")}` : "—" }}</strong></div>
       <div><span>应付出款</span><strong>{{ order ? `${order.buy_currency} ${order.buy_amount.toLocaleString("en-US")}` : "—" }}</strong></div>
     </div>
     <el-form label-position="top">
@@ -86,6 +102,9 @@ async function submit() {
             <el-radio-button :value="DispatchChannel.SGB">SGB</el-radio-button>
             <el-radio-button :value="DispatchChannel.SINO">SINO</el-radio-button>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item label="出款账户">
+          <el-input v-model="form.payout_account" maxlength="60" placeholder="出款账户名/描述（写入排单文案）" />
         </el-form-item>
         <el-form-item v-if="form.channel === 'SGB'" label="客户 VA 账户">
           <el-select v-model="form.va_account_id" :placeholder="vaAccounts.length ? '选择 VA' : '该客户没有已登记的 VA 账户'" style="width: 100%">
@@ -131,7 +150,7 @@ async function submit() {
 
 .grid {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr 1fr;
   gap: 0 14px;
 }
 
