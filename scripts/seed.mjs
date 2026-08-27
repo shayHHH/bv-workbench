@@ -339,7 +339,8 @@ await db.collection("quote_records").insertMany([
 ]);
 
 /* ---- KYC 材料清单（demo 原样迁移：21 个业务类型，四层结构 业务类型→渠道→材料模块→材料项；重建） ---- */
-const { demoKycScenarios } = await import("./demo-kyc-data.mjs");
+/* 2026-08-27 起以甲方正式 KYC list（繁體）为准；demo-kyc-data.mjs 仅存档 */
+const { realKycScenarios: demoKycScenarios } = await import("./kyc-list-real.mjs");
 const kycValidityMap = { none: "NONE", "1m": "ONE_MONTH", "3m": "THREE_MONTHS" };
 const kycTypeMap = { file: "FILE", text: "TEXT", bank_account: "BANK_ACCOUNT" };
 await db.collection("kyc_scenarios").deleteMany({});
@@ -429,7 +430,7 @@ await db.collection("va_accounts").insertMany([
 ]);
 
 /* 已通过的准入申请（订单 KYC 徽标联查用；scenario 取 demo 第一个业务类型） */
-const kycScenarioName = "港币/美元/外币私户打款买U";
+const kycScenarioName = "港幣/美元/外幣私戶打款買U";
 /* 按名称查真实 kyc_scenarios 拿 _id 回填，seed 数据同样具备"改场景名不断链"性质（审计 1.2.10） */
 const kycScenarioDoc = await db.collection("kyc_scenarios").findOne({ scenario_name: kycScenarioName, is_deleted: false });
 const kycScenarioId = kycScenarioDoc?._id ?? null;
