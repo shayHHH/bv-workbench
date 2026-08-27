@@ -12,6 +12,7 @@ import {
   RegionLabel,
   RiskLevelLabel,
   type AccessApplicationVO,
+  type ApplicationMaterialVO,
   type AccessStatus,
   type CustomerEventVO,
   type CustomerMaterialVO,
@@ -252,6 +253,13 @@ function docIcon(mime: string): string {
   return t("customer.drawer.docIconFile");
 }
 
+function previewAppMaterial(material: ApplicationMaterialVO) {
+  if (!material.file) return;
+  openFilePreview(material.file).catch(() => {
+    /* 错误提示由 http 拦截器统一处理 */
+  });
+}
+
 async function previewMaterial(material: CustomerMaterialVO, download = false) {
   try {
     await openFilePreview(material.file, download);
@@ -435,7 +443,8 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
                   <h5>{{ t("customer.drawer.appMaterials", { n: appDetailOf(app).materials.length }) }}</h5>
                   <div v-if="appDetailOf(app).materials.length" class="app-material-list">
                     <div v-for="material in appDetailOf(app).materials" :key="material.material_key" class="app-material-row">
-                      <span class="material-name">{{ material.name }}</span>
+                      <a v-if="material.file" class="material-name link" @click.stop="previewAppMaterial(material)">{{ material.name }}</a>
+                      <span v-else class="material-name">{{ material.name }}</span>
                       <el-tag :type="materialStatusTagType[material.status] ?? 'info'" size="small" effect="plain">
                         {{ localizeText(ApplicationMaterialStatusLabel[material.status]) }}
                       </el-tag>
@@ -454,16 +463,15 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
                     </p>
                   </template>
 
-                  <template v-if="appDetailOf(app).timeline.length">
-                    <h5>{{ t("customer.drawer.appTimeline") }}</h5>
-                    <div class="app-timeline">
-                      <div v-for="(entry, index) in [...appDetailOf(app).timeline].reverse()" :key="index" class="app-timeline-row">
-                        <time>{{ formatDateTime(entry.at) }}</time>
-                        <span>{{ entry.action }}{{ entry.by_name ? ` · ${entry.by_name}` : "" }}</span>
-                        <em v-if="entry.note">{{ entry.note }}</em>
-                      </div>
+                  <h5>{{ t("customer.drawer.appTimeline") }}</h5>
+                  <div v-if="appDetailOf(app).timeline.length" class="app-timeline">
+                    <div v-for="(entry, index) in [...appDetailOf(app).timeline].reverse()" :key="index" class="app-timeline-row">
+                      <time>{{ formatDateTime(entry.at) }}</time>
+                      <span>{{ entry.action }}{{ entry.by_name ? ` · ${entry.by_name}` : "" }}</span>
+                      <em v-if="entry.note">{{ entry.note }}</em>
                     </div>
-                  </template>
+                  </div>
+                  <p v-else class="app-empty-line">{{ t("customer.drawer.appNoTimeline") }}</p>
                 </div>
               </div>
             </template>
@@ -782,5 +790,13 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   padding-top: 10px;
   color: #c0c4cc;
   font-size: 12px;
+}
+.app-material-row .material-name.link {
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+.app-material-row .material-name.link:hover {
+  text-decoration: underline;
 }
 </style>

@@ -221,6 +221,7 @@ export default {
       appNoMaterials: "本次申请未附材料",
       appLatestReview: "最近审核结论",
       appTimeline: "处理时间线",
+      appNoTimeline: "暂无处理记录",
     },
   },
   admin: {

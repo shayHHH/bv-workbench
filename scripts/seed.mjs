@@ -440,7 +440,14 @@ const approvedAccess = (no, customerId, name, code) => ({
   channel_code: "SGB", channel_name: "SGB", review_type: "FX",
   form: { customer_cn_name: name, customer_en_name: null, business_note: null },
   materials: [], status: "APPROVED", owner_user_id: null, owner_name: "sinclair",
-  latest_review: null, timeline: [], submitted_at: at(24 * 6), ...base(24 * 7, 24 * 6),
+  latest_review: null,
+  /* 客户详情弹窗要求每条准入记录（含已完结）都展示处理时间线 */
+  timeline: [
+    { at: at(24 * 7), by_name: "sinclair", action: "创建申请", from_status: null, to_status: "DRAFT", note: null },
+    { at: at(24 * 6), by_name: "sinclair", action: "提交合规审核", from_status: "DRAFT", to_status: "PENDING_REVIEW", note: null },
+    { at: at(24 * 6 - 2), by_name: "keen", action: "审核通过", from_status: "PENDING_REVIEW", to_status: "APPROVED", note: null },
+  ],
+  submitted_at: at(24 * 6), ...base(24 * 7, 24 * 6 - 2),
 });
 await db.collection("access_applications").insertMany([
   approvedAccess(bizNo("APP", 24 * 7, "901"), zhengKaiwenId, "郑凯文", "20008"),
