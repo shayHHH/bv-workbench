@@ -52,12 +52,28 @@ function resetSnapshots() {
 const customers = ref<QuoteCustomerOption[]>([]);
 const query = ref("");
 const dropdownOpen = ref(false);
+const highlight = ref(0);
 const selected = ref<QuoteCustomerOption | null>(null);
 const records = ref<QuoteRecordVO[]>([]);
 const recordsLoading = ref(false);
 const searchBoxRef = ref<HTMLElement>();
 
 const matches = computed(() => matchCustomers(customers.value, query.value, 12));
+
+function handleSearchKeydown(event: KeyboardEvent) {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    dropdownOpen.value = true;
+    const count = matches.value.length;
+    if (!count) return;
+    highlight.value = (highlight.value + (event.key === "ArrowDown" ? 1 : count - 1)) % count;
+  } else if (event.key === "Enter") {
+    const target = matches.value[highlight.value] ?? matches.value[0];
+    if (target) void selectCustomer(target);
+  } else if (event.key === "Escape") {
+    dropdownOpen.value = false;
+  }
+}
 
 /* 近 7 日（含今日） */
 const days = computed(() => {
@@ -202,14 +218,17 @@ onMounted(async () => {
                 v-model="query"
                 :placeholder="t('quote.common.customerPlaceholder')"
                 @focus="dropdownOpen = true"
-                @input="dropdownOpen = true"
+                @input="dropdownOpen = true; highlight = 0"
+                @keydown="handleSearchKeydown"
               />
               <div v-if="dropdownOpen" class="dropdown">
                 <button
-                  v-for="option in matches"
+                  v-for="(option, index) in matches"
                   :key="option.id"
                   type="button"
                   class="dropdown-item"
+                  :class="{ active: index === highlight }"
+                  @mouseenter="highlight = index"
                   @click="selectCustomer(option)"
                 >
                   <strong>{{ customerDisplayLabel(option) }}</strong>
@@ -409,7 +428,8 @@ h1 {
   font-size: 13px;
 }
 
-.dropdown-item:hover {
+.dropdown-item:hover,
+.dropdown-item.active {
   background: #fff4ed;
 }
 
