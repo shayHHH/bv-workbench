@@ -21,11 +21,13 @@ docker compose up -d
 # 3. 构建共享包（修改 packages/shared 后需重新执行，或用 npm run watch -w @bv/shared）
 npm run build:shared
 
-# 4. 启动后端（http://127.0.0.1:3000/api，健康检查 /api/healthz）
-npm run dev:api
+# 4. 一键启动前后端（推荐；后端 http://127.0.0.1:3000/api，前端 http://127.0.0.1:5173）
+#    在自己的终端里跑可常驻，不受 AI 会话生命周期影响；Ctrl+C 一并退出
+npm run dev
 
-# 5. 启动前端（http://127.0.0.1:5173，/api 已代理到后端）
-npm run dev:web
+#    也可分开启动：
+#    npm run dev:api   # 仅后端（健康检查 /api/healthz）
+#    npm run dev:web   # 仅前端（/api 已代理到后端）
 
 # 6.（可选）写入演示数据：内置角色、演示账号与演示客户（会重建 customers 集合）
 npm run seed
