@@ -636,20 +636,40 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               :class="{ collapsed: !expanded[item.id] }"
             >
               <template v-if="!expanded[item.id]">
-                <button type="button" class="summary-row" @click="expanded[item.id] = true">
-                  <span class="summary-type">
-                    <i class="dot" />
-                    <strong>{{ item.trade_type || t("quote.quick.itemTitle", { n: index + 1 }) }}</strong>
-                  </span>
-                  <b>{{ item.prefix || "-" }}</b>
-                  <code>{{
-                    item.formula.length
-                      ? item.formula.map(tk => (tk.type === "var" ? tk.label : tk.value)).join(" ")
-                      : t("quote.quick.unconfigured")
-                  }}</code>
-                  <strong class="summary-result">{{ results.get(item.id)?.value ?? "--" }}</strong>
-                  <small>{{ t("quote.quick.updatedAt", { time: formatQuoteTime(item.last_quoted_at) }) }}</small>
-                </button>
+                <div class="summary-row">
+                  <button type="button" class="summary-main" @click="expanded[item.id] = true">
+                    <span class="summary-type">
+                      <i class="dot" />
+                      <strong>{{ item.trade_type || t("quote.quick.itemTitle", { n: index + 1 }) }}</strong>
+                    </span>
+                    <b>{{ item.prefix || "-" }}</b>
+                    <code>{{
+                      item.formula.length
+                        ? item.formula.map(tk => (tk.type === "var" ? tk.label : tk.value)).join(" ")
+                        : t("quote.quick.unconfigured")
+                    }}</code>
+                    <strong class="summary-result">{{ results.get(item.id)?.value ?? "--" }}</strong>
+                  </button>
+                  <div class="summary-actions">
+                    <el-button text size="small" :icon="ArrowUp" :disabled="index === 0" :title="t('quote.quick.moveUp')" @click="moveItem(index, -1)" />
+                    <el-button
+                      text
+                      size="small"
+                      :icon="ArrowDown"
+                      :disabled="index === config.items.length - 1"
+                      :title="t('quote.quick.moveDown')"
+                      @click="moveItem(index, 1)"
+                    />
+                    <el-button
+                      text
+                      size="small"
+                      :icon="Delete"
+                      :disabled="config.items.length <= 1"
+                      :title="t('quote.quick.removeItem')"
+                      @click="removeItem(index)"
+                    />
+                  </div>
+                </div>
               </template>
               <template v-else>
                 <header class="item-head">
@@ -1143,17 +1163,37 @@ h1 {
 }
 
 .summary-row {
-  display: grid;
-  grid-template-columns: 128px 96px minmax(0, 1fr) 140px auto;
+  display: flex;
   align-items: center;
-  gap: 12px;
   width: 100%;
+}
+
+.summary-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 110px 84px minmax(0, 1fr) 120px;
+  align-items: center;
+  gap: 10px;
   border: none;
   background: transparent;
-  padding: 12px 16px;
+  padding: 7px 12px;
   cursor: pointer;
   text-align: left;
-  font-size: 13px;
+  font-size: 12.5px;
+}
+
+.summary-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding-right: 8px;
+  border-left: 1px solid #f0f2f5;
+}
+
+.summary-actions .el-button {
+  margin: 0;
+  padding: 4px 5px;
 }
 
 .summary-row code {
@@ -1167,10 +1207,6 @@ h1 {
 .summary-result {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #d9531e;
-}
-
-.summary-row small {
-  color: #c0c4cc;
 }
 
 .summary-type {
