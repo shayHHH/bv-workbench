@@ -74,6 +74,27 @@ let tempIdSeq = 0;
 
 /* ---------- 右侧面板 ---------- */
 const sideCollapsed = ref(false);
+
+/* 面板级收起/展开（记忆在本浏览器；点标题行切换，收起时标题栏保留并显示条目数） */
+const PANEL_STORE_KEY = "bv-quick-side-panels";
+const panelCollapsed = reactive<{ benchmark: boolean; channel: boolean }>(
+  (() => {
+    try {
+      return { benchmark: false, channel: false, ...JSON.parse(localStorage.getItem(PANEL_STORE_KEY) || "{}") };
+    } catch {
+      return { benchmark: false, channel: false };
+    }
+  })(),
+);
+
+function togglePanel(key: "benchmark" | "channel") {
+  panelCollapsed[key] = !panelCollapsed[key];
+  try {
+    localStorage.setItem(PANEL_STORE_KEY, JSON.stringify(panelCollapsed));
+  } catch {
+    /* 私密窗口等场景忽略 */
+  }
+}
 const benchmark = ref<BenchmarkStateVO | null>(null);
 const benchmarkEditing = ref(false);
 const benchmarkDraft = ref<{ id?: string; label: string; value: string }[]>([]);
@@ -267,6 +288,11 @@ function handleSearchKeydown(event: KeyboardEvent) {
     if (!count) return;
     highlight.value =
       (highlight.value + (event.key === "ArrowDown" ? 1 : count - 1)) % count;
+    void nextTick(() => {
+      searchBoxRef.value
+        ?.querySelector(".dropdown-item.active")
+        ?.scrollIntoView({ block: "nearest" });
+    });
   } else if (event.key === "Enter") {
     const target = matches.value[highlight.value] ?? matches.value[0];
     if (target) void selectCustomer(target);
@@ -383,6 +409,7 @@ function enterBenchmarkEdit() {
     value: item.value,
   }));
   benchmarkEditing.value = true;
+  if (panelCollapsed.benchmark) togglePanel("benchmark");
   ElMessage.info(t("quote.benchmark.editEntered"));
 }
 
@@ -754,9 +781,13 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
         </button>
         <template v-if="!sideCollapsed">
           <el-card shadow="never" class="assist-card">
-            <header class="assist-head">
-              <h3>▥ {{ t("quote.benchmark.title") }}</h3>
-              <div class="assist-actions">
+            <header class="assist-head clickable" @click="togglePanel('benchmark')">
+              <h3>
+                <i class="panel-chevron" :class="{ collapsed: panelCollapsed.benchmark }">⌄</i>
+                ▥ {{ t("quote.benchmark.title") }}
+                <em v-if="panelCollapsed.benchmark" class="panel-count">{{ (benchmark?.items ?? []).length }}</em>
+              </h3>
+              <div class="assist-actions" @click.stop>
                 <template v-if="benchmarkEditing">
                   <el-button size="small" @click="cancelBenchmarkEdit">{{ t("quote.benchmark.cancel") }}</el-button>
                   <el-button size="small" type="primary" @click="saveBenchmarkDraft">
@@ -768,6 +799,8 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
                 </el-button>
               </div>
             </header>
+            <el-collapse-transition>
+            <div v-show="!panelCollapsed.benchmark">
             <p class="assist-meta">
               {{
                 benchmark?.saved_at
@@ -803,15 +836,23 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
                 </div>
               </template>
             </div>
+            </div>
+            </el-collapse-transition>
           </el-card>
 
           <el-card shadow="never" class="assist-card">
-            <header class="assist-head">
-              <h3>⇄ {{ t("quote.channel.title") }}</h3>
-              <el-button size="small" :icon="Refresh" @click="refreshChannels">
+            <header class="assist-head clickable" @click="togglePanel('channel')">
+              <h3>
+                <i class="panel-chevron" :class="{ collapsed: panelCollapsed.channel }">⌄</i>
+                ⇄ {{ t("quote.channel.title") }}
+                <em v-if="panelCollapsed.channel" class="panel-count">{{ channels.length }}</em>
+              </h3>
+              <el-button size="small" :icon="Refresh" @click.stop="refreshChannels">
                 {{ t("quote.channel.refresh") }}
               </el-button>
             </header>
+            <el-collapse-transition>
+            <div v-show="!panelCollapsed.channel">
             <p class="assist-meta">
               {{ t("quote.channel.source") }}
               <span class="online-pill">● {{ t("quote.channel.online") }}</span>
@@ -822,6 +863,8 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
                 <code>{{ rate.value }}</code>
               </div>
             </div>
+            </div>
+            </el-collapse-transition>
           </el-card>
         </template>
       </aside>
@@ -878,6 +921,17 @@ h1 {
   min-width: 0;
 }
 
+/* el-card 默认 overflow:hidden 会裁掉下拉浮层，此卡放开并抬高层级 */
+.customer-card {
+  overflow: visible;
+  position: relative;
+  z-index: 20;
+}
+
+.customer-card :deep(.el-card__body) {
+  overflow: visible;
+}
+
 .customer-row {
   display: flex;
   align-items: center;
@@ -905,7 +959,7 @@ h1 {
   border: 1px solid #ebeef5;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 30;
+  z-index: 100;
   max-height: 320px;
   overflow-y: auto;
   padding: 4px;
@@ -1296,6 +1350,39 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.assist-head.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.assist-head.clickable:hover h3 {
+  color: #ff7a00;
+}
+
+.panel-chevron {
+  display: inline-block;
+  font-style: normal;
+  color: #909399;
+  transition: transform 0.2s ease;
+  margin-right: 2px;
+}
+
+.panel-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.panel-count {
+  font-style: normal;
+  font-weight: normal;
+  font-size: 11px;
+  color: #909399;
+  background: #f0f2f5;
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 .assist-head h3 {
