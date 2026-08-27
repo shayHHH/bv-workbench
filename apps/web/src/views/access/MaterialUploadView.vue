@@ -508,7 +508,7 @@ onMounted(async () => {
       </div>
 
       <div class="field">
-        <label>选择绑定渠道 <em>*</em></label>
+        <label>选择渠道 <em>*</em></label>
         <div v-if="selectedScenario?.channels.length" class="channel-chips">
           <button
             v-for="(channel, index) in selectedScenario.channels"
