@@ -533,8 +533,8 @@ await db.collection("trade_orders").insertMany([
   }),
   orderDoc(bizNo("TO", 10, "102"), mosaicId, "Mosaic Ventures Pte. Ltd.", "20007", "转账换U", "USD", 30000, "USDT", 29940, "1.0020", "银行转账", "AWAITING_INFLOW", {
     createdH: 10, updatedH: 10,
-    quote: { quote_record_id: mosaicQuoteId.toString(), deal_rate: "1.0020", cost_rate: "0.9990", source: "快速报价", quoted_at: at(11), quoted_by: "sinclair", fee: "USD 30" },
-    timeline: [tl(10, "关联报价", "成交价 1.0020 · 成本价 0.9990 · 手续费 USD 30", "初级交易员 sinclair"), tl(10, "订单创建", "转账换U · 卖出 USD 30,000 买入 USDT 29,940 · 创建人 sinclair", "初级交易员 sinclair")],
+    quote: { quote_record_id: mosaicQuoteId.toString(), deal_rate: "1.0020", cost_rate: "0.9990", source: "快速报价", quoted_at: at(11), quoted_by: "sinclair", fee: null },
+    timeline: [tl(10, "关联报价", "成交价 1.0020 · 成本价 0.9990", "初级交易员 sinclair"), tl(10, "订单创建", "转账换U · 卖出 USD 30,000 买入 USDT 29,940 · 创建人 sinclair", "初级交易员 sinclair")],
   }),
   orderDoc(bizNo("TO", 26, "103"), zhengKaiwenId, "郑凯文", "20008", "现金换U", "HKD", 156400, "USDT", 20000, "7.8200", "现金", "AWAITING_INFLOW", {
     createdH: 26, updatedH: 20, handler: "sinclair",

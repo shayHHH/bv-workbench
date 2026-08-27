@@ -522,8 +522,6 @@ async function doDispatchReturn() {
             <code class="mono">{{ order.quote.deal_rate }}</code>
             <em>{{ localizeText(order.quote.source) }}</em>
             <em v-if="order.quote.quoted_by">{{ order.quote.quoted_by }}{{ order.quote.quoted_at ? ` · ${formatDateTime(order.quote.quoted_at)}` : "" }}</em>
-            <em v-if="order.quote.cost_rate">{{ t("orders.panel.quoteCost", { rate: order.quote.cost_rate }) }}</em>
-            <em v-if="order.quote.fee">{{ t("orders.panel.quoteFee", { fee: order.quote.fee }) }}</em>
             <em v-if="Number(order.quote.deal_rate) !== Number(order.rate)" class="quote-mismatch">
               {{ t("orders.panel.quoteMismatch", { rate: order.rate }) }}
             </em>

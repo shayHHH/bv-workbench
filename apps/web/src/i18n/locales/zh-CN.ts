@@ -795,8 +795,6 @@ export default {
       bizUnset: "未指定（按客户整体准入）",
       remarkEmpty: "创建订单时未填写说明",
       quoteLinked: "关联报价",
-      quoteCost: "成本 {rate}",
-      quoteFee: "手续费 {fee}",
       quoteMismatch: "⚠ 与执行汇率 {rate} 不一致",
       cancelledTag: "已取消",
       cancelledNote: "订单已取消，未走完主线流程；历史操作见「活动」。",
