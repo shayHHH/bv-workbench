@@ -488,7 +488,6 @@ async function doDispatchReturn() {
           <el-tag v-if="order.dispatch_rejected" type="danger" size="small" effect="light">{{ t("orders.common.dispatchRejectedFlag") }}</el-tag>
         </div>
         <p class="hint">
-          {{ statusHint }}
           <time>{{ t("orders.common.createdAt", { time: formatDateTime(order.created_at) }) }}{{ order.handler_name ? ` · ${order.handler_name}` : "" }}</time>
         </p>
 
@@ -722,9 +721,6 @@ async function doDispatchReturn() {
   color: #909399;
   font-size: 12px;
   margin: 6px 0 12px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .trade-hero {
