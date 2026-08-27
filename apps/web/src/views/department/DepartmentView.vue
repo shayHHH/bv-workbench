@@ -6,6 +6,8 @@ import {
   LeaveType,
   LeaveTypeLabel,
   ROLE_FOCUS,
+  DONE_PERIODS,
+  type DonePeriod,
   type DepartmentMemberVO,
   type LeaveRecordVO,
 } from "@bv/shared";
@@ -25,6 +27,8 @@ const loading = ref(false);
 const members = ref<DepartmentMemberVO[]>([]);
 const leaves = ref<LeaveRecordVO[]>([]);
 const tab = ref<"overview" | "calendar" | "handoff">("calendar");
+/** 员工概览「已处理」列统计范围 */
+const donePeriod = ref<DonePeriod>("today");
 const weekOffset = ref(0);
 
 /* ---- 日期工具（本地时区，按 YYYY-MM-DD 字符串比对，口径与后端一致） ---- */
@@ -66,7 +70,7 @@ async function load() {
     const start = weekDays.value[0].iso < todayIso ? weekDays.value[0].iso : todayIso;
     const endCandidate = isoDate(future);
     const end = weekDays.value[6].iso > endCandidate ? weekDays.value[6].iso : endCandidate;
-    const data = await fetchDepartmentOverview(start, end);
+    const data = await fetchDepartmentOverview(start, end, donePeriod.value);
     members.value = data.members;
     leaves.value = data.leaves;
   } finally {
@@ -75,6 +79,7 @@ async function load() {
 }
 
 watch(weekOffset, load);
+watch(donePeriod, load);
 onMounted(load);
 
 /* ---- 出勤状态与调度建议（对齐 demo 部门管理逻辑） ---- */
@@ -225,6 +230,11 @@ const weekLeaves = computed(() =>
         <button type="button" :class="{ active: tab === 'handoff' }" @click="tab = 'handoff'">
           {{ t("department.view.tabHandoff") }}<em v-if="activeLeaves.length">{{ activeLeaves.length }}</em>
         </button>
+        <el-radio-group v-if="tab === 'overview'" v-model="donePeriod" size="small" class="period-picker">
+          <el-radio-button v-for="p in DONE_PERIODS" :key="p" :value="p">
+            {{ t(`department.view.donePeriodOpt.${p}`) }}
+          </el-radio-button>
+        </el-radio-group>
       </div>
 
       <!-- 员工概览 -->
@@ -244,8 +254,8 @@ const weekLeaves = computed(() =>
               <el-tag :type="memberStatus(row).tone" size="small" effect="light">{{ memberStatus(row).label }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('department.common.todayDone')" width="100" align="center">
-            <template #default="{ row }"><strong>{{ row.today_done }}</strong></template>
+          <el-table-column :label="t(`department.view.donePeriodCol.${donePeriod}`)" width="110" align="center">
+            <template #default="{ row }"><strong>{{ row.period_done }}</strong></template>
           </el-table-column>
           <el-table-column :label="t('department.view.colPending')" width="90" align="center">
             <template #default="{ row }">{{ row.pending }}</template>
@@ -485,7 +495,12 @@ h1 {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
   margin-bottom: 12px;
+}
+
+.period-picker {
+  margin-left: auto;
 }
 
 .todo-tabs button {

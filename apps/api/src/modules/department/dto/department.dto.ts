@@ -1,4 +1,4 @@
-import { LeavePart, LeaveType } from "@bv/shared";
+import { DONE_PERIODS, LeavePart, LeaveType, type DonePeriod } from "@bv/shared";
 import { IsBoolean, IsIn, IsMongoId, IsOptional, IsString, Matches, MaxLength } from "class-validator";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -13,6 +13,11 @@ export class OverviewQueryDto {
   @IsOptional()
   @Matches(DATE_RE)
   end?: string;
+
+  /** 员工概览「已处理」统计范围，默认今日 */
+  @IsOptional()
+  @IsIn(DONE_PERIODS)
+  done_period?: DonePeriod;
 }
 
 export class CreateLeaveDto {

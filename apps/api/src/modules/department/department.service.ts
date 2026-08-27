@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { InjectModel } from "@nestjs/mongoose";
 import {
   AccessStatus,
+  DonePeriod,
   DepartmentMemberVO,
   DepartmentOverviewVO,
   DispatchStatus,
@@ -39,6 +40,21 @@ function dayRange(date = new Date()): { from: Date; to: Date } {
   return { from, to };
 }
 
+/** 「已处理」统计窗（本地时区）：今日 / 本周（周一起） / 本月 / 本季 / 今年，至今日 24 点 */
+function periodRange(period: DonePeriod): { from: Date; to: Date } {
+  const { from, to } = dayRange();
+  if (period === "week") from.setDate(from.getDate() - ((from.getDay() + 6) % 7));
+  else if (period === "month") from.setDate(1);
+  else if (period === "quarter") from.setMonth(Math.floor(from.getMonth() / 3) * 3, 1);
+  else if (period === "year") from.setMonth(0, 1);
+  return { from, to };
+}
+
+const rowsById = (rows: Array<{ _id: Types.ObjectId; count: number }>) =>
+  new Map(rows.map(row => [String(row._id), row.count]));
+const rowsByName = (rows: Array<{ _id: string; count: number }>) =>
+  new Map(rows.map(row => [row._id, row.count]));
+
 /**
  * 部门管理（运营经理）：员工名单来自系统用户，任务统计从各业务集合实时聚合；
  * 请假记录手工登记落库。SLA/到期时间目前无数据来源，不做超时统计。
@@ -58,7 +74,7 @@ export class DepartmentService {
     private readonly assignmentModel: Model<ReviewAssignmentDocument>,
   ) {}
 
-  async overview(start?: string, end?: string): Promise<DepartmentOverviewVO> {
+  async overview(start?: string, end?: string, donePeriod: DonePeriod = "today"): Promise<DepartmentOverviewVO> {
     const today = isoDate();
     const rangeStart = start ?? today;
     const rangeEnd = end ?? today;
@@ -159,6 +175,9 @@ export class DepartmentService {
       { $group: { _id: "$reviewed_by", count: { $sum: 1 } } },
     ]);
 
+    const { from: periodFrom, to: periodTo } = periodRange(donePeriod);
+    const periodStats = donePeriod === "today" ? null : await this.doneStats(periodFrom, periodTo);
+
     const byId = (rows: Array<{ _id: Types.ObjectId; count: number }>) =>
       new Map(rows.map(row => [String(row._id), row.count]));
     const byName = (rows: Array<{ _id: string; count: number }>) =>
@@ -195,6 +214,12 @@ export class DepartmentService {
         (caseDoneMap.get(id) ?? 0) +
         (paidDoneMap.get(user.display_name) ?? 0) +
         (reviewDoneMap.get(user.display_name) ?? 0);
+      const periodDone = periodStats
+        ? (periodStats.orders.get(id) ?? 0) +
+          (periodStats.cases.get(id) ?? 0) +
+          (periodStats.paid.get(user.display_name) ?? 0) +
+          (periodStats.reviewed.get(user.display_name) ?? 0)
+        : todayDone;
       return {
         user_id: id,
         username: user.username,
@@ -203,12 +228,45 @@ export class DepartmentService {
         role_code: roleCode,
         role_name: role?.role_name ?? roleCode,
         today_done: todayDone,
+        period_done: periodDone,
         pending,
         last_login_at: user.last_login_at ? user.last_login_at.toISOString() : null,
       };
     });
 
     return { members: memberVOs, leaves: leaves.map(doc => this.toLeaveVO(doc)) };
+  }
+
+  /** 指定时间窗内的「已处理」四路聚合：完成订单 / 合规结论 / 出款执行 / 排单审核 */
+  private async doneStats(from: Date, to: Date) {
+    const [orders, cases, paid, reviewed] = await Promise.all([
+      this.orderModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            is_deleted: false,
+            status: TradeOrderStatus.COMPLETED,
+            updated_at: { $gte: from, $lte: to },
+            owner_user_id: { $ne: null },
+          },
+        },
+        { $group: { _id: "$owner_user_id", count: { $sum: 1 } } },
+      ]),
+      this.reviewCaseModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: { is_deleted: false, reviewer_id: { $ne: null }, reviewed_at: { $gte: from, $lte: to } },
+        },
+        { $group: { _id: "$reviewer_id", count: { $sum: 1 } } },
+      ]),
+      this.payoutModel.aggregate<{ _id: string; count: number }>([
+        { $match: { is_deleted: false, paid_by: { $ne: null }, paid_at: { $gte: from, $lte: to } } },
+        { $group: { _id: "$paid_by", count: { $sum: 1 } } },
+      ]),
+      this.payoutModel.aggregate<{ _id: string; count: number }>([
+        { $match: { is_deleted: false, reviewed_by: { $ne: null }, reviewed_at: { $gte: from, $lte: to } } },
+        { $group: { _id: "$reviewed_by", count: { $sum: 1 } } },
+      ]),
+    ]);
+    return { orders: rowsById(orders), cases: rowsById(cases), paid: rowsByName(paid), reviewed: rowsByName(reviewed) };
   }
 
   async createLeave(dto: CreateLeaveDto, operator: JwtPayload): Promise<LeaveRecordVO> {

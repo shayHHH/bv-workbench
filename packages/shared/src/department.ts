@@ -61,6 +61,10 @@ export const ROLE_FOCUS: Record<string, string> = {
   MANAGER: "运营调度、异常监控",
 };
 
+/** 「已处理」统计范围（员工概览列可切换） */
+export const DONE_PERIODS = ["today", "week", "month", "quarter", "year"] as const;
+export type DonePeriod = (typeof DONE_PERIODS)[number];
+
 /** 部门成员（来自系统用户，附实时任务统计） */
 export interface DepartmentMemberVO {
   user_id: string;
@@ -71,6 +75,8 @@ export interface DepartmentMemberVO {
   role_name: string;
   /** 今日已处理：完成订单 + 出具合规结论 + 出款/审核登记 */
   today_done: number;
+  /** 所选统计范围内已处理（done_period=today 时等于 today_done） */
+  period_done: number;
   /** 待处理：名下进行中订单 + 待补件/草稿申请 + 分配到的待审核案件等 */
   pending: number;
   last_login_at: string | null;

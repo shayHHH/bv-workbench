@@ -12,7 +12,7 @@ export class DepartmentController {
 
   @Get("overview")
   overview(@Query() query: OverviewQueryDto) {
-    return this.departmentService.overview(query.start, query.end);
+    return this.departmentService.overview(query.start, query.end, query.done_period);
   }
 
   @Post("leaves")

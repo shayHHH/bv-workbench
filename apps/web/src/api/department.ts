@@ -1,8 +1,14 @@
-import type { CreateLeaveInput, DepartmentOverviewVO, LeaveRecordVO } from "@bv/shared";
+import type { CreateLeaveInput, DepartmentOverviewVO, DonePeriod, LeaveRecordVO } from "@bv/shared";
 import { http } from "./http";
 
-export async function fetchDepartmentOverview(start: string, end: string): Promise<DepartmentOverviewVO> {
-  const { data } = await http.get<DepartmentOverviewVO>("/department/overview", { params: { start, end } });
+export async function fetchDepartmentOverview(
+  start: string,
+  end: string,
+  donePeriod: DonePeriod = "today",
+): Promise<DepartmentOverviewVO> {
+  const { data } = await http.get<DepartmentOverviewVO>("/department/overview", {
+    params: { start, end, done_period: donePeriod },
+  });
   return data;
 }
 
