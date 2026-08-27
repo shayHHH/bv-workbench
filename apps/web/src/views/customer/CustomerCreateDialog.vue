@@ -276,6 +276,11 @@ async function submit() {
   gap: 12px;
 }
 
+/* 复选框默认 32px 高会撑高左列 label，压回标准行高使两列 label 与输入框对齐 */
+.code-label :deep(.el-checkbox) {
+  height: 22px;
+}
+
 .hint {
   font-size: 12px;
   color: #909399;
