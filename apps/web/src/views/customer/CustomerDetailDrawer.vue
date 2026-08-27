@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import {
   AccessStatusLabel,
+  ApplicationMaterialStatusLabel,
+  ReviewDecisionActionLabel,
+  ReviewTypeLabel,
   CustomerKind,
   CustomerKindLabel,
   CustomerStatus,
@@ -18,7 +21,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
-import { fetchApplications, fetchCustomerMaterials, openFilePreview } from "@/api/access";
+import { fetchApplication, fetchApplications, fetchCustomerMaterials, openFilePreview } from "@/api/access";
 import { fetchCustomer, fetchCustomerEvents, updateCustomer } from "@/api/customer";
 import { formatDateTime, formatRelative } from "@/utils/format";
 
@@ -101,6 +104,8 @@ function resetTabData() {
   materialsLoaded.value = false;
   applications.value = [];
   applicationsLoaded.value = false;
+  expandedApps.value = new Set();
+  appDetails.value = new Map();
 }
 
 /** 切换抽屉主体（查看下级客户 / 上级中介） */
@@ -191,6 +196,41 @@ const accessStatusTagType: Record<AccessStatus, "primary" | "success" | "warning
   EXPIRED: "info",
   SUSPENDED: "info",
   CANCELLED: "info",
+};
+
+/* 准入记录卡片点击展开：详情按需拉取并缓存（材料清单/结论/时间线） */
+const expandedApps = ref(new Set<string>());
+const appDetails = ref(new Map<string, AccessApplicationVO>());
+const appDetailLoading = ref<string | null>(null);
+
+async function toggleApplication(app: AccessApplicationVO) {
+  const next = new Set(expandedApps.value);
+  if (next.has(app.id)) {
+    next.delete(app.id);
+    expandedApps.value = next;
+    return;
+  }
+  next.add(app.id);
+  expandedApps.value = next;
+  if (!appDetails.value.has(app.id)) {
+    appDetailLoading.value = app.id;
+    try {
+      const detail = await fetchApplication(app.id);
+      const map = new Map(appDetails.value);
+      map.set(app.id, detail);
+      appDetails.value = map;
+    } finally {
+      appDetailLoading.value = null;
+    }
+  }
+}
+
+const appDetailOf = (app: AccessApplicationVO) => appDetails.value.get(app.id) ?? app;
+
+const materialStatusTagType: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
+  PENDING: "info",
+  APPROVED: "success",
+  RETURNED: "danger",
 };
 
 function fileSizeText(size: number): string {
@@ -350,12 +390,19 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
         <el-tab-pane :label="t('customer.drawer.tabApplications')" name="applications">
           <div v-loading="applicationsLoading" class="tab-pane-body">
             <template v-if="applications.length">
-              <div v-for="app in applications" :key="app.id" class="app-card">
+              <div
+                v-for="app in applications"
+                :key="app.id"
+                class="app-card clickable"
+                :class="{ expanded: expandedApps.has(app.id) }"
+                @click="toggleApplication(app)"
+              >
                 <div class="app-head">
                   <strong>{{ app.application_no }}</strong>
                   <el-tag :type="accessStatusTagType[app.status]" effect="light" size="small">
                     {{ localizeText(AccessStatusLabel[app.status]) }}
                   </el-tag>
+                  <span class="app-toggle">{{ expandedApps.has(app.id) ? "⌃" : "⌄" }}</span>
                 </div>
                 <small class="app-meta">
                   {{ app.scenario_name || t("customer.drawer.noScenario") }}
@@ -364,9 +411,58 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
                   {{ app.owner_name ? ` · ${app.owner_name}` : "" }}
                   · {{ formatRelative(app.submitted_at || app.updated_at) }}
                 </small>
-                <p v-if="app.latest_review?.reason" class="app-reason">
+                <p v-if="app.latest_review?.reason && !expandedApps.has(app.id)" class="app-reason">
                   {{ t("customer.drawer.latestConclusion", { reason: app.latest_review.reason }) }}
                 </p>
+
+                <div
+                  v-if="expandedApps.has(app.id)"
+                  v-loading="appDetailLoading === app.id"
+                  class="app-detail"
+                  @click.stop
+                >
+                  <div class="app-info-grid">
+                    <div><span>{{ t("customer.drawer.appScenario") }}</span><b>{{ appDetailOf(app).scenario_name || t("customer.drawer.noScenario") }}</b></div>
+                    <div><span>{{ t("customer.drawer.appChannel") }}</span><b>{{ appDetailOf(app).channel_name || appDetailOf(app).channel_code || "-" }}</b></div>
+                    <div><span>{{ t("customer.drawer.appReviewType") }}</span><b>{{ appDetailOf(app).review_type ? localizeText(ReviewTypeLabel[appDetailOf(app).review_type!]) : "-" }}</b></div>
+                    <div><span>{{ t("customer.drawer.appOwner") }}</span><b>{{ appDetailOf(app).owner_name || "-" }}</b></div>
+                    <div><span>{{ t("customer.drawer.appSubmittedAt") }}</span><b>{{ appDetailOf(app).submitted_at ? formatDateTime(appDetailOf(app).submitted_at) : t("customer.drawer.appNotSubmitted") }}</b></div>
+                    <div><span>{{ t("customer.drawer.appCreatedAt") }}</span><b>{{ formatDateTime(appDetailOf(app).created_at) }}</b></div>
+                  </div>
+
+                  <h5>{{ t("customer.drawer.appMaterials", { n: appDetailOf(app).materials.length }) }}</h5>
+                  <div v-if="appDetailOf(app).materials.length" class="app-material-list">
+                    <div v-for="material in appDetailOf(app).materials" :key="material.material_key" class="app-material-row">
+                      <span class="material-name">{{ material.name }}</span>
+                      <el-tag :type="materialStatusTagType[material.status] ?? 'info'" size="small" effect="plain">
+                        {{ localizeText(ApplicationMaterialStatusLabel[material.status]) }}
+                      </el-tag>
+                      <em v-if="material.return_reason" class="material-reason">{{ material.return_reason }}</em>
+                    </div>
+                  </div>
+                  <p v-else class="app-empty-line">{{ t("customer.drawer.appNoMaterials") }}</p>
+
+                  <template v-if="appDetailOf(app).latest_review">
+                    <h5>{{ t("customer.drawer.appLatestReview") }}</h5>
+                    <p class="app-review-line">
+                      {{ localizeText(ReviewDecisionActionLabel[appDetailOf(app).latest_review!.action] ?? appDetailOf(app).latest_review!.action) }}
+                      · {{ appDetailOf(app).latest_review!.reviewer_name || "-" }}
+                      · {{ formatDateTime(appDetailOf(app).latest_review!.reviewed_at) }}
+                      <em v-if="appDetailOf(app).latest_review!.reason">「{{ appDetailOf(app).latest_review!.reason }}」</em>
+                    </p>
+                  </template>
+
+                  <template v-if="appDetailOf(app).timeline.length">
+                    <h5>{{ t("customer.drawer.appTimeline") }}</h5>
+                    <div class="app-timeline">
+                      <div v-for="(entry, index) in [...appDetailOf(app).timeline].reverse()" :key="index" class="app-timeline-row">
+                        <time>{{ formatDateTime(entry.at) }}</time>
+                        <span>{{ entry.action }}{{ entry.by_name ? ` · ${entry.by_name}` : "" }}</span>
+                        <em v-if="entry.note">{{ entry.note }}</em>
+                      </div>
+                    </div>
+                  </template>
+                </div>
               </div>
             </template>
             <el-empty v-else-if="!applicationsLoading" :description="t('customer.drawer.emptyApplications')" />
@@ -545,6 +641,108 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 
 .doc-main small {
   color: #909399;
+}
+
+.app-card.clickable {
+  cursor: pointer;
+}
+
+.app-card.clickable:hover {
+  border-color: #f6b895;
+}
+
+.app-toggle {
+  margin-left: auto;
+  color: #c0c4cc;
+}
+
+.app-detail {
+  margin-top: 10px;
+  border-top: 1px dashed #ebeef5;
+  padding-top: 10px;
+  cursor: default;
+}
+
+.app-detail h5 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  color: #303133;
+}
+
+.app-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.app-info-grid span {
+  display: block;
+  color: #909399;
+  font-size: 11px;
+}
+
+.app-info-grid b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-material-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-material-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.material-name {
+  color: #303133;
+}
+
+.material-reason {
+  color: #f56c6c;
+  font-style: normal;
+  font-size: 11px;
+}
+
+.app-empty-line,
+.app-review-line {
+  font-size: 12px;
+  color: #606266;
+  margin: 0;
+}
+
+.app-review-line em {
+  font-style: normal;
+  color: #e6a23c;
+}
+
+.app-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-timeline-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: #606266;
+}
+
+.app-timeline-row time {
+  color: #909399;
+  white-space: nowrap;
+}
+
+.app-timeline-row em {
+  color: #909399;
+  font-style: normal;
 }
 
 .app-card {
