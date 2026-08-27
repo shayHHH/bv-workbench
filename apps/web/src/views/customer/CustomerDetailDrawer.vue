@@ -203,6 +203,13 @@ const expandedApps = ref(new Set<string>());
 const appDetails = ref(new Map<string, AccessApplicationVO>());
 const appDetailLoading = ref<string | null>(null);
 
+/** 完成时间：终态申请取最近结论时间（取消/过期等无结论时取最后更新），进行中返回 null */
+const FINAL_ACCESS_STATUSES = new Set(["APPROVED", "REJECTED", "CANCELLED", "EXPIRED", "SUSPENDED"]);
+function appDoneAt(app: AccessApplicationVO): string | null {
+  if (!FINAL_ACCESS_STATUSES.has(app.status)) return null;
+  return app.latest_review?.reviewed_at ?? app.updated_at;
+}
+
 async function toggleApplication(app: AccessApplicationVO) {
   const next = new Set(expandedApps.value);
   if (next.has(app.id)) {
@@ -398,18 +405,15 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
                 @click="toggleApplication(app)"
               >
                 <div class="app-head">
-                  <strong>{{ app.application_no }}</strong>
+                  <strong>{{ app.scenario_name || t("customer.drawer.noScenario") }}</strong>
                   <el-tag :type="accessStatusTagType[app.status]" effect="light" size="small">
                     {{ localizeText(AccessStatusLabel[app.status]) }}
                   </el-tag>
                   <span class="app-toggle">{{ expandedApps.has(app.id) ? "⌃" : "⌄" }}</span>
                 </div>
                 <small class="app-meta">
-                  {{ app.scenario_name || t("customer.drawer.noScenario") }}
-                  {{ app.channel_code ? ` · ${app.channel_code}` : "" }}
-                  · {{ t("customer.drawer.requiredMaterials", { done: app.completeness.done, total: app.completeness.total }) }}
-                  {{ app.owner_name ? ` · ${app.owner_name}` : "" }}
-                  · {{ formatRelative(app.submitted_at || app.updated_at) }}
+                  {{ app.channel_name || app.channel_code || "-" }}
+                  · {{ formatRelative(appDoneAt(app) || app.submitted_at || app.updated_at) }}
                 </small>
                 <p v-if="app.latest_review?.reason && !expandedApps.has(app.id)" class="app-reason">
                   {{ t("customer.drawer.latestConclusion", { reason: app.latest_review.reason }) }}
@@ -422,12 +426,10 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
                   @click.stop
                 >
                   <div class="app-info-grid">
-                    <div><span>{{ t("customer.drawer.appScenario") }}</span><b>{{ appDetailOf(app).scenario_name || t("customer.drawer.noScenario") }}</b></div>
-                    <div><span>{{ t("customer.drawer.appChannel") }}</span><b>{{ appDetailOf(app).channel_name || appDetailOf(app).channel_code || "-" }}</b></div>
                     <div><span>{{ t("customer.drawer.appReviewType") }}</span><b>{{ appDetailOf(app).review_type ? localizeText(ReviewTypeLabel[appDetailOf(app).review_type!]) : "-" }}</b></div>
                     <div><span>{{ t("customer.drawer.appOwner") }}</span><b>{{ appDetailOf(app).owner_name || "-" }}</b></div>
                     <div><span>{{ t("customer.drawer.appSubmittedAt") }}</span><b>{{ appDetailOf(app).submitted_at ? formatDateTime(appDetailOf(app).submitted_at) : t("customer.drawer.appNotSubmitted") }}</b></div>
-                    <div><span>{{ t("customer.drawer.appCreatedAt") }}</span><b>{{ formatDateTime(appDetailOf(app).created_at) }}</b></div>
+                    <div><span>{{ t("customer.drawer.appFinishedAt") }}</span><b>{{ appDoneAt(appDetailOf(app)) ? formatDateTime(appDoneAt(appDetailOf(app))) : t("customer.drawer.appNotFinished") }}</b></div>
                   </div>
 
                   <h5>{{ t("customer.drawer.appMaterials", { n: appDetailOf(app).materials.length }) }}</h5>
