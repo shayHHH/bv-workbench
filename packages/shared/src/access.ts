@@ -424,6 +424,28 @@ export interface ReviewCaseVO {
   submitted_at: string;
   reviewer_name: string | null;
   reviewed_at: string | null;
+  /** 详情接口附带：渠道材料清单要求 + 驳回历史版本（列表不返回） */
+  requirements?: ReviewRequirementVO[];
+  material_history?: ReviewMaterialHistoryVO[];
+}
+
+/** 审核详情：本渠道适用的材料清单项（含未提交项，编号展示） */
+export interface ReviewRequirementVO {
+  item_id: string;
+  name: string;
+  description: string | null;
+  required: boolean;
+}
+
+/** 审核详情：此前审核轮次中被驳回的历史材料版本 */
+export interface ReviewMaterialHistoryVO {
+  case_no: string;
+  reviewed_at: string | null;
+  requirement_item_id: string | null;
+  material_key: string;
+  name: string;
+  file: FileRef | null;
+  uploaded_at: string;
 }
 
 /** 合规官工作台指标（demo 合规 dashboard 指标条的真实数据口径） */

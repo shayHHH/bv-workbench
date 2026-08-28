@@ -140,6 +140,8 @@ export interface ReviewListQuery {
   decision_action?: "APPROVE" | "REJECT" | "TERMINATE";
   submitted_from?: number;
   submitted_to?: number;
+  sort_by?: "submitted_at" | "reviewed_at";
+  sort_order?: "asc" | "desc";
   page?: number;
   page_size?: number;
 }

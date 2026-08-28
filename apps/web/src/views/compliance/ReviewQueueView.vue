@@ -3,19 +3,17 @@ import {
   ReviewAuditTypeLabel,
   ReviewFinalResultLabel,
   ReviewTypeLabel,
-  RiskLevelLabel,
   type ReviewAuditType,
   type ReviewCaseVO,
   type ReviewFinalResult,
   type ReviewType,
-  type RiskLevel,
 } from "@bv/shared";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { fetchReviewCases } from "@/api/access";
 import { localizeText } from "@/i18n";
-import { formatDateTime, formatRelative } from "@/utils/format";
+import { formatDateTime } from "@/utils/format";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -29,6 +27,8 @@ const query = reactive({
   final_result: "" as "" | ReviewFinalResult,
   decision_action: "" as "" | "APPROVE" | "REJECT" | "TERMINATE",
   range: null as [Date, Date] | null,
+  sort_by: "submitted_at" as "submitted_at" | "reviewed_at",
+  sort_order: "desc" as "asc" | "desc",
   page: 1,
   page_size: 10,
   total: 0,
@@ -54,6 +54,8 @@ async function load() {
         tab.value === "PROCESSED" && query.decision_action ? query.decision_action : undefined,
       submitted_from: query.range?.[0]?.getTime(),
       submitted_to: query.range ? query.range[1].getTime() + 86_399_999 : undefined,
+      sort_by: query.sort_by,
+      sort_order: query.sort_order,
       page: query.page,
       page_size: query.page_size,
     });
@@ -70,16 +72,23 @@ function search() {
 }
 
 function resetFilters() {
-  Object.assign(query, { keyword: "", audit_type: "", review_type: "", final_result: "", decision_action: "", range: null, page: 1 });
+  Object.assign(query, {
+    keyword: "", audit_type: "", review_type: "", final_result: "", decision_action: "",
+    range: null, sort_by: tab.value === "PENDING" ? "submitted_at" : "reviewed_at", sort_order: "desc", page: 1,
+  });
+  load();
+}
+
+/** el-table sortable="custom" → 服务端排序 */
+function onSortChange({ prop, order }: { prop: string; order: "ascending" | "descending" | null }) {
+  if (prop === "submitted_at" || prop === "reviewed_at") query.sort_by = prop;
+  query.sort_order = order === "ascending" ? "asc" : "desc";
+  query.page = 1;
   load();
 }
 
 function openDetail(row: ReviewCaseVO) {
   router.push(`/compliance/review/${row.id}`);
-}
-
-function viewCustomer(row: ReviewCaseVO) {
-  router.push({ path: "/customers", query: { kw: row.customer_code || row.customer_name } });
 }
 
 /** demo 已处理表格的"我的结论"（decision.action → 展示文案） */
@@ -99,6 +108,8 @@ const finalText = (row: ReviewCaseVO) =>
 
 watch(tab, () => {
   query.page = 1;
+  query.sort_by = tab.value === "PENDING" ? "submitted_at" : "reviewed_at";
+  query.sort_order = "desc";
   load();
 });
 
@@ -128,6 +139,8 @@ onMounted(load);
           @keyup.enter="search"
           @clear="search"
         />
+        <el-button type="primary" @click="search">{{ t("compliance.queue.searchBtn") }}</el-button>
+        <span class="filter-spacer"></span>
         <el-select
           v-if="tab === 'PENDING'"
           v-model="query.audit_type"
@@ -172,42 +185,45 @@ onMounted(load);
         <el-button @click="resetFilters">{{ t("compliance.queue.reset") }}</el-button>
       </div>
 
-      <!-- 待处理：请求卡片列表（demo 口径） -->
-      <div v-if="tab === 'PENDING'" v-loading="loading" class="card-list">
-        <article v-for="row in list" :key="row.id" class="request-card">
-          <div class="card-main">
-            <div class="card-title">
-              <strong>{{ row.customer_name }}</strong>
-              <el-tag :type="row.audit_type === 'RESUBMIT' ? 'warning' : 'info'" size="small" effect="plain">
-                {{ localizeText(ReviewAuditTypeLabel[row.audit_type]) }}
+      <!-- 待处理：表格（参考运营交易系统合规初审列表） -->
+      <template v-if="tab === 'PENDING'">
+        <el-table v-loading="loading" :data="list" :default-sort="{ prop: 'submitted_at', order: 'descending' }" @sort-change="onSortChange">
+          <el-table-column :label="t('compliance.queue.colCustomerName')" min-width="160">
+            <template #default="{ row }"><strong>{{ row.customer_name }}</strong></template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colCustomerCode')" width="110">
+            <template #default="{ row }">{{ row.customer_code || t("customer.common.noCode") }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colAuditType')" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.audit_type === 'RESUBMIT' ? 'warning' : 'primary'" size="small" effect="light">
+                {{ localizeText(ReviewAuditTypeLabel[row.audit_type as ReviewAuditType]) }}
               </el-tag>
-              <el-tag v-if="row.review_type" size="small" effect="plain">
-                {{ localizeText(ReviewTypeLabel[row.review_type]) }}
-              </el-tag>
-              <el-tag type="warning" size="small" effect="light">{{ t("compliance.queue.statusPending") }}</el-tag>
-            </div>
-            <small class="card-sub">
-              {{ row.customer_code || t("customer.common.noCode") }} · {{ row.scenario_name || t("compliance.queue.noScenario") }}
-              {{ row.channel_name ? ` · ${row.channel_name}` : "" }}
-              {{ row.risk_level ? ` · ${localizeText(RiskLevelLabel[row.risk_level as RiskLevel] ?? row.risk_level)}` : "" }}
-              · {{ t("compliance.queue.materials", { done: row.completeness.done, total: row.completeness.total }) }}
-              · {{ t("compliance.queue.submittedAt", { time: formatRelative(row.submitted_at) }) }}{{ row.submitted_by_name ? t("compliance.queue.byName", { name: row.submitted_by_name }) : "" }}
-            </small>
-          </div>
-          <div class="card-actions">
-            <el-button type="primary" size="small" @click="openDetail(row)">{{ t("compliance.queue.goReview") }}</el-button>
-            <el-button size="small" @click="viewCustomer(row)">{{ t("compliance.queue.viewCustomer") }}</el-button>
-          </div>
-        </article>
-        <el-empty
-          v-if="!loading && !list.length"
-:description="t('compliance.queue.emptyPending')"
-        />
-      </div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colReviewType')" width="100">
+            <template #default="{ row }">{{ row.review_type ? localizeText(ReviewTypeLabel[row.review_type as ReviewType]) : "--" }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colStatus')" width="110">
+            <template #default>
+              <span class="status-dot"><i></i>{{ t("compliance.queue.statusPending") }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="submitted_at" :label="t('compliance.queue.colSubmittedTime')" width="180" sortable="custom">
+            <template #default="{ row }">{{ formatDateTime(row.submitted_at) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colActions')" width="100" align="right">
+            <template #default="{ row }">
+              <el-button size="small" type="primary" link @click="openDetail(row)">{{ t("compliance.queue.goReview") }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!loading && !list.length" :description="t('compliance.queue.emptyPending')" />
+      </template>
 
       <!-- 已处理：表格（demo 7 列口径） -->
       <template v-else>
-        <el-table v-loading="loading" :data="list">
+        <el-table v-loading="loading" :data="list" :default-sort="{ prop: 'reviewed_at', order: 'descending' }" @sort-change="onSortChange">
           <el-table-column :label="t('compliance.queue.colCustomerName')" min-width="140">
             <template #default="{ row }"><strong>{{ row.customer_name }}</strong></template>
           </el-table-column>
@@ -217,14 +233,15 @@ onMounted(load);
           <el-table-column :label="t('compliance.queue.colMyConclusion')" width="100">
             <template #default="{ row }">{{ myConclusion(row) }}</template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colReviewedAt')" width="160">
+          <el-table-column prop="reviewed_at" :label="t('compliance.queue.colReviewedAt')" width="175" sortable="custom">
             <template #default="{ row }">{{ row.reviewed_at ? formatDateTime(row.reviewed_at) : "--" }}</template>
           </el-table-column>
           <el-table-column :label="t('compliance.queue.colFinal')" width="110">
             <template #default="{ row }">
-              <el-tag :type="FINAL_TAG[row.final_result ?? ''] || 'info'" size="small" effect="light">
+              <el-tag v-if="row.final_result" :type="FINAL_TAG[row.final_result] || 'info'" size="small" effect="light">
                 {{ finalText(row) }}
               </el-tag>
+              <span v-else class="muted">--</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('compliance.queue.colFinalizedAt')" width="160">
@@ -291,38 +308,26 @@ h1 {
   width: 140px;
 }
 
-.card-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 120px;
+.filter-spacer {
+  flex: 1;
 }
 
-.request-card {
-  display: flex;
+.status-dot {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 14px 16px;
+  gap: 6px;
+  color: #67c23a;
 }
 
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+.status-dot i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #67c23a;
 }
 
-.card-sub {
-  color: #909399;
-}
-
-.card-actions {
-  flex: none;
-  display: flex;
-  gap: 8px;
+.muted {
+  color: #c0c4cc;
 }
 
 .pager {

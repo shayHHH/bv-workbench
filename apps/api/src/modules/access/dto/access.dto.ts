@@ -211,6 +211,15 @@ export class QueryReviewDto {
   @IsNumber()
   submitted_to?: number;
 
+  /** 排序（待处理按提交时间 / 已处理按审核时间），默认倒序 */
+  @IsOptional()
+  @IsIn(["submitted_at", "reviewed_at"])
+  sort_by?: "submitted_at" | "reviewed_at";
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  sort_order?: "asc" | "desc";
+
   @IsOptional()
   @IsInt()
   @Min(1)

@@ -7,7 +7,9 @@ import {
   ReviewAuditTypeLabel,
   ReviewDecisionAction,
   ReviewFinalResultLabel,
+  type ApplicationMaterialVO,
   type ReviewCaseVO,
+  type ReviewMaterialHistoryVO,
   type ReviewMaterialVerdict,
 } from "@bv/shared";
 import type { CustomerEventVO } from "@bv/shared";
@@ -19,7 +21,7 @@ import { useRoute, useRouter } from "vue-router";
 import { decideReviewCase, fetchReviewCase, openFilePreview } from "@/api/access";
 import { fetchCustomerEvents } from "@/api/customer";
 import { localizeText } from "@/i18n";
-import { formatRelative } from "@/utils/format";
+import { formatDateTime, formatRelative } from "@/utils/format";
 
 const { t } = useI18n();
 
@@ -156,6 +158,96 @@ const DIALOG_HINT = computed<Record<string, string>>(() => ({
   TERMINATE: t("compliance.detail.terminateHint"),
 }));
 
+/* ---- 审核材料表（参考运营交易系统：材料清单为主轴，可展开历史驳回版本） ---- */
+
+interface MaterialRow {
+  rowKey: string;
+  kind: "current" | "history";
+  index: number | null;
+  hasHistory: boolean;
+  reqKey: string;
+  name: string;
+  description: string | null;
+  material: ApplicationMaterialVO | null;
+  history: ReviewMaterialHistoryVO | null;
+}
+
+const expandedReqs = ref(new Set<string>());
+
+function toggleHistory(reqKey: string) {
+  const next = new Set(expandedReqs.value);
+  if (next.has(reqKey)) next.delete(reqKey);
+  else next.add(reqKey);
+  expandedReqs.value = next;
+}
+
+const materialRows = computed<MaterialRow[]>(() => {
+  const rc = reviewCase.value;
+  if (!rc) return [];
+  const requirements = rc.requirements ?? [];
+  const materials = rc.materials_snapshot ?? [];
+  const historyAll = rc.material_history ?? [];
+  const usedMaterial = new Set<string>();
+  const usedHistory = new Set<string>();
+  const rows: MaterialRow[] = [];
+  let index = 0;
+  const histKey = (h: ReviewMaterialHistoryVO) => `${h.case_no}:${h.material_key}`;
+
+  const pushGroup = (
+    reqKey: string,
+    name: string,
+    description: string | null,
+    mats: ApplicationMaterialVO[],
+    hist: ReviewMaterialHistoryVO[],
+  ) => {
+    index += 1;
+    const expanded = expandedReqs.value.has(reqKey);
+    rows.push({
+      rowKey: reqKey, kind: "current", index, hasHistory: hist.length > 0,
+      reqKey, name, description, material: mats[0] ?? null, history: null,
+    });
+    mats.slice(1).forEach((m, i) => rows.push({
+      rowKey: `${reqKey}-m${i}`, kind: "current", index: null, hasHistory: false,
+      reqKey, name: m.name, description: null, material: m, history: null,
+    }));
+    if (expanded) {
+      hist.forEach((h, i) => rows.push({
+        rowKey: `${reqKey}-h${i}`, kind: "history", index: null, hasHistory: false,
+        reqKey, name: h.name, description: null, material: null, history: h,
+      }));
+    }
+  };
+
+  for (const req of requirements) {
+    const mats = materials.filter(m => m.requirement_item_id === req.item_id);
+    mats.forEach(m => usedMaterial.add(m.material_key));
+    const hist = historyAll.filter(
+      h => h.requirement_item_id === req.item_id || (!h.requirement_item_id && mats.some(m => m.name === h.name)),
+    );
+    hist.forEach(h => usedHistory.add(histKey(h)));
+    pushGroup(req.item_id, req.name, req.description, mats, hist);
+  }
+  for (const m of materials) {
+    if (usedMaterial.has(m.material_key)) continue;
+    const hist = historyAll.filter(
+      h => !usedHistory.has(histKey(h)) && (h.material_key === m.material_key || h.name === m.name),
+    );
+    hist.forEach(h => usedHistory.add(histKey(h)));
+    pushGroup(`extra-${m.material_key}`, m.name, null, [m], hist);
+  }
+  const orphan = historyAll.filter(h => !usedHistory.has(histKey(h)));
+  if (orphan.length) pushGroup("orphan-history", t("compliance.detail.orphanHistory"), null, [], orphan);
+  return rows;
+});
+
+function sizeText(size: number | null | undefined): string {
+  if (!size) return "—";
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)}MB`;
+  return `${Math.max(1, Math.round(size / 1024))}KB`;
+}
+
+const materialRowClass = ({ row }: { row: MaterialRow }) => (row.kind === "history" ? "history-row" : "");
+
 const MATERIAL_TAG: Record<string, string> = {
   PENDING: "info",
   ACCEPTED: "success",
@@ -215,39 +307,76 @@ onMounted(load);
 
           <el-card shadow="never" class="block">
             <h4 class="block-title">{{ t("compliance.detail.materialsTitle") }}</h4>
-            <el-table :data="reviewCase.materials_snapshot">
-              <el-table-column :label="t('compliance.detail.colMaterial')" min-width="200">
+            <el-table :data="materialRows" row-key="rowKey" :row-class-name="materialRowClass">
+              <el-table-column label="#" width="64">
                 <template #default="{ row }">
-                  <strong>{{ row.name }}</strong>
-                  <div class="muted small">
-                    {{ localizeText(MaterialSourceLabel[row.source as MaterialSource]) }}
-                    <template v-if="row.file"> · {{ row.file.mime_type }}</template>
-                  </div>
+                  <button v-if="row.hasHistory" type="button" class="idx-toggle" @click="toggleHistory(row.reqKey)">
+                    {{ row.index }}<span class="chev">{{ expandedReqs.has(row.reqKey) ? "⌃" : "⌄" }}</span>
+                  </button>
+                  <em v-else-if="row.kind === 'history'" class="history-flag">{{ t("compliance.detail.historyTag") }}</em>
+                  <span v-else>{{ row.index ?? "" }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('compliance.detail.colMaterial')" min-width="260">
+                <template #default="{ row }">
+                  <template v-if="row.kind === 'history'">
+                    <em class="history-name">{{ row.name }}{{ t("compliance.detail.historySuffix") }}</em>
+                  </template>
+                  <template v-else>
+                    <strong>{{ row.name }}</strong>
+                    <div v-if="row.description" class="muted small">{{ row.description }}</div>
+                    <div v-else-if="row.material" class="muted small">
+                      {{ localizeText(MaterialSourceLabel[row.material.source as MaterialSource]) }} · {{ row.material.file?.mime_type || "—" }}
+                    </div>
+                  </template>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('compliance.detail.colFile')" min-width="180">
+                <template #default="{ row }">
+                  <a
+                    v-if="(row.material ?? row.history)?.file"
+                    class="file-link"
+                    @click="openFilePreview((row.material ?? row.history)!.file!)"
+                  >{{ (row.material ?? row.history)!.file!.original_name }}</a>
+                  <span v-else class="muted">—</span>
                 </template>
               </el-table-column>
               <el-table-column :label="t('compliance.detail.colStatus')" width="100">
                 <template #default="{ row }">
-                  <el-tag :type="MATERIAL_TAG[row.status]" size="small">
-                    {{ localizeText(ApplicationMaterialStatusLabel[row.status as ApplicationMaterialStatus]) }}
+                  <el-tag v-if="row.kind === 'history'" type="danger" size="small" effect="light">
+                    {{ t("compliance.detail.rejectedTag") }}
                   </el-tag>
+                  <el-tag v-else-if="row.material" :type="MATERIAL_TAG[row.material.status]" size="small">
+                    {{ localizeText(ApplicationMaterialStatusLabel[row.material.status as ApplicationMaterialStatus]) }}
+                  </el-tag>
+                  <span v-else class="muted">—</span>
                 </template>
               </el-table-column>
-              <el-table-column v-if="pending" :label="t('compliance.detail.colVerdict')" width="110">
+              <el-table-column :label="t('compliance.detail.colUploadedAt')" width="150">
+                <template #default="{ row }">
+                  {{ (row.material ?? row.history)?.uploaded_at ? formatDateTime((row.material ?? row.history)!.uploaded_at) : "—" }}
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('compliance.detail.colSize')" width="90">
+                <template #default="{ row }">{{ sizeText((row.material ?? row.history)?.file?.size) }}</template>
+              </el-table-column>
+              <el-table-column v-if="pending" :label="t('compliance.detail.colVerdict')" width="100">
                 <template #default="{ row }">
                   <el-button
+                    v-if="row.material"
                     size="small"
-                    :type="verdictOf(row.material_key)?.verdict === 'ACCEPTED' ? 'success' : 'default'"
-                    @click="toggleAccept(row.material_key)"
+                    :type="verdictOf(row.material.material_key)?.verdict === 'ACCEPTED' ? 'success' : 'default'"
+                    @click="toggleAccept(row.material.material_key)"
                   >
-                    {{ verdictOf(row.material_key)?.verdict === "ACCEPTED" ? t("compliance.detail.accepted") : t("compliance.detail.accept") }}
+                    {{ verdictOf(row.material.material_key)?.verdict === "ACCEPTED" ? t("compliance.detail.accepted") : t("compliance.detail.accept") }}
                   </el-button>
                 </template>
               </el-table-column>
-              <el-table-column :label="t('compliance.detail.colActions')" width="130" fixed="right">
+              <el-table-column :label="t('compliance.detail.colActions')" width="120" fixed="right">
                 <template #default="{ row }">
-                  <template v-if="row.file">
-                    <el-button size="small" link type="primary" @click="openFilePreview(row.file)">{{ t("compliance.detail.preview") }}</el-button>
-                    <el-button size="small" link @click="openFilePreview(row.file, true)">{{ t("compliance.detail.download") }}</el-button>
+                  <template v-if="(row.material ?? row.history)?.file">
+                    <el-button size="small" link type="primary" @click="openFilePreview((row.material ?? row.history)!.file!)">{{ t("compliance.detail.preview") }}</el-button>
+                    <el-button size="small" link @click="openFilePreview((row.material ?? row.history)!.file!, true)">{{ t("compliance.detail.download") }}</el-button>
                   </template>
                   <span v-else class="muted small">{{ t("compliance.detail.noFile") }}</span>
                 </template>
@@ -476,5 +605,45 @@ h1 {
   .detail-layout {
     grid-template-columns: 1fr;
   }
+}
+.idx-toggle {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: #303133;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.idx-toggle .chev {
+  color: #909399;
+  font-size: 12px;
+}
+
+.history-flag,
+.history-name {
+  color: #909399;
+  font-style: italic;
+}
+
+.file-link {
+  color: var(--el-color-primary);
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.file-link:hover {
+  text-decoration: underline;
+}
+
+:deep(.history-row) {
+  background: #fafafa;
+}
+
+:deep(.history-row td) {
+  color: #909399;
 }
 </style>

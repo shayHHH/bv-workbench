@@ -16,10 +16,13 @@ import {
   ReviewDecisionAction,
   ReviewFinalResult,
   ReviewStatsVO,
+  ReviewMaterialHistoryVO,
+  ReviewRequirementVO,
 } from "@bv/shared";
 import { Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
 import { AssignmentService } from "../assignment/assignment.service";
+import { KycScenario, KycScenarioDocument } from "../kyc/kyc-scenario.schema";
 import { CustomerService } from "../customer/customer.service";
 import { OrderService } from "../order/order.service";
 import { AccessApplication, AccessApplicationDocument } from "./access-application.schema";
@@ -56,6 +59,8 @@ export class ReviewService {
     private readonly caseModel: Model<ReviewCaseDocument>,
     @InjectModel(AccessApplication.name)
     private readonly applicationModel: Model<AccessApplicationDocument>,
+    @InjectModel(KycScenario.name)
+    private readonly scenarioModel: Model<KycScenarioDocument>,
     private readonly customerService: CustomerService,
     private readonly assignmentService: AssignmentService,
     private readonly orderService: OrderService,
@@ -88,7 +93,7 @@ export class ReviewService {
     const [items, total] = await Promise.all([
       this.caseModel
         .find(filter)
-        .sort({ submitted_at: -1 })
+        .sort({ [query.sort_by ?? "submitted_at"]: query.sort_order === "asc" ? 1 : -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean(),
@@ -135,7 +140,72 @@ export class ReviewService {
 
   async getById(id: string): Promise<ReviewCaseVO> {
     const doc = await this.findOrFail(id);
-    return toVO(doc.toObject());
+    const vo = toVO(doc.toObject());
+    const [requirements, history] = await Promise.all([
+      this.requirementsOf(doc),
+      this.materialHistoryOf(doc),
+    ]);
+    vo.requirements = requirements;
+    vo.material_history = history;
+    return vo;
+  }
+
+  /** 本渠道适用的材料清单项（按申请的 scenario_id + 工单渠道解析；场景被删则返回空） */
+  private async requirementsOf(caseDoc: ReviewCaseDocument): Promise<ReviewRequirementVO[]> {
+    const application = await this.applicationModel
+      .findOne({ _id: caseDoc.application_id })
+      .select("scenario_id")
+      .lean();
+    if (!application?.scenario_id) return [];
+    const scenario = await this.scenarioModel
+      .findOne({ _id: application.scenario_id, is_deleted: false })
+      .lean();
+    const channel = scenario?.channels?.find(
+      ch => ch.channel_code === caseDoc.channel_code || ch.channel_name === caseDoc.channel_name,
+    );
+    if (!channel) return [];
+    return channel.sections.flatMap(section =>
+      section.items.map(item => ({
+        item_id: item.item_id,
+        name: item.item_name,
+        description: item.item_description ?? null,
+        required: item.required !== false,
+      })),
+    );
+  }
+
+  /** 同一申请此前审核轮次中被驳回的材料版本（驳回重审工单展开可见） */
+  private async materialHistoryOf(caseDoc: ReviewCaseDocument): Promise<ReviewMaterialHistoryVO[]> {
+    const priorCases = await this.caseModel
+      .find({
+        is_deleted: false,
+        application_id: caseDoc.application_id,
+        _id: { $ne: caseDoc._id },
+        submitted_at: { $lt: caseDoc.submitted_at },
+      })
+      .sort({ submitted_at: -1 })
+      .lean();
+    const history: ReviewMaterialHistoryVO[] = [];
+    for (const prior of priorCases) {
+      const returnedKeys = new Set(
+        (prior.material_verdicts ?? [])
+          .filter(v => v.verdict === "RETURNED")
+          .map(v => v.material_key),
+      );
+      for (const material of prior.materials_snapshot ?? []) {
+        if (!returnedKeys.has(material.material_key)) continue;
+        history.push({
+          case_no: prior.case_no,
+          reviewed_at: prior.reviewed_at ? prior.reviewed_at.toISOString() : null,
+          requirement_item_id: material.requirement_item_id ?? null,
+          material_key: material.material_key,
+          name: material.name,
+          file: material.file ?? null,
+          uploaded_at: material.uploaded_at ? new Date(material.uploaded_at).toISOString() : "",
+        });
+      }
+    }
+    return history;
   }
 
   /** 出具结论：更新工单 + 联动申请状态与材料判定（PRD §4.9） */
