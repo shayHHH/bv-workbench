@@ -185,7 +185,7 @@ async function submit() {
             <el-input v-model="form.confirms" />
           </el-form-item>
         </div>
-        <el-form-item label="Transaction Hash" required :error="hashError || undefined">
+        <el-form-item :label="t('orders.funding.txHash')" required :error="hashError || undefined">
           <el-input v-model="form.hash" :placeholder="t('orders.funding.hashPlaceholder')" />
         </el-form-item>
       </template>

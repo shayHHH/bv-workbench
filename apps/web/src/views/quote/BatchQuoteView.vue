@@ -6,7 +6,7 @@
 import { Close, Download, MoreFilled, Plus, Refresh, Search } from "@element-plus/icons-vue";
 import type { QuoteGroupBoardVO, QuoteGroupVO } from "@bv/shared";
 import { ElMessage } from "element-plus";
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   addQuoteGroupMembers,
@@ -33,6 +33,7 @@ const currentGroupId = ref<string | null>(null);
 const board = ref<QuoteGroupBoardVO | null>(null);
 const boardLoading = ref(false);
 const allCustomers = ref<QuoteCustomerOption[]>([]);
+const focusedMemberId = ref<string | null>(null);
 
 /* 勾选：key = `${customerId}::${itemId}` */
 const selectedKeys = ref(new Set<string>());
@@ -76,6 +77,7 @@ async function loadGroups(selectId?: string) {
 
 async function loadBoard() {
   selectedKeys.value = new Set();
+  focusedMemberId.value = null;
   if (!currentGroupId.value) {
     board.value = null;
     return;
@@ -180,6 +182,15 @@ async function removeMember(customerId: string, name: string) {
   ElMessage.success(t("quote.batch.removed", { name, group: currentGroup.value?.name ?? "" }));
 }
 
+async function focusMember(customerId: string) {
+  focusedMemberId.value = customerId;
+  await nextTick();
+  document.getElementById(`batch-result-${customerId}`)?.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+}
+
 /* ---------- 勾选 / 复制 ---------- */
 function quoteKey(customerId: string, itemId: string) {
   return `${customerId}::${itemId}`;
@@ -267,7 +278,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <div class="batch-page">
     <header class="page-header">
       <p class="eyebrow">{{ t("quote.common.eyebrow") }}</p>
       <h1>{{ t("quote.batch.title") }}</h1>
@@ -331,7 +342,13 @@ onMounted(async () => {
             <p>{{ t("quote.batch.emptyMemberList") }}</p>
             <small>{{ t("quote.batch.emptyMemberListHint") }}</small>
           </div>
-          <div v-for="member in board?.members ?? []" :key="member.customer_id" class="member-item">
+          <div
+            v-for="member in board?.members ?? []"
+            :key="member.customer_id"
+            class="member-item"
+            :class="{ active: member.customer_id === focusedMemberId }"
+            @click="focusMember(member.customer_id)"
+          >
             <div class="member-meta">
               <span class="member-name">{{ member.name }}</span>
               <span class="member-tag">#{{ member.customer_code ?? t("quote.common.noCode") }}</span>
@@ -341,7 +358,7 @@ onMounted(async () => {
               size="small"
               :icon="Close"
               :title="t('quote.batch.removeFromGroup')"
-              @click="removeMember(member.customer_id, member.name)"
+              @click.stop="removeMember(member.customer_id, member.name)"
             />
           </div>
         </div>
@@ -373,7 +390,13 @@ onMounted(async () => {
           <div v-if="!board?.members.length" class="column-empty tall">
             <p>{{ currentGroup ? t("quote.batch.emptyNoCustomer") : t("quote.batch.emptyNoGroup") }}</p>
           </div>
-          <article v-for="member in board?.members ?? []" :key="member.customer_id" class="result-card">
+          <article
+            v-for="member in board?.members ?? []"
+            :id="`batch-result-${member.customer_id}`"
+            :key="member.customer_id"
+            class="result-card"
+            :class="{ focused: member.customer_id === focusedMemberId }"
+          >
             <header class="card-head">
               <el-checkbox
                 :model-value="memberCheckState(member.customer_id).all"
@@ -536,6 +559,10 @@ h1 {
   margin: 0;
 }
 
+.batch-page {
+  padding-bottom: 24px;
+}
+
 .batch-shell {
   display: grid;
   grid-template-columns: 220px 240px minmax(0, 1fr);
@@ -544,8 +571,7 @@ h1 {
   border: 1px solid #e4e7ed;
   border-radius: 12px;
   overflow: hidden;
-  height: calc(100vh - 210px);
-  min-height: 480px;
+  height: max(640px, calc(100vh - 210px));
 }
 
 .column {
@@ -553,6 +579,7 @@ h1 {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .column-head {
@@ -567,6 +594,7 @@ h1 {
 
 .column-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
 }
@@ -633,10 +661,18 @@ h1 {
   align-items: center;
   padding: 7px 10px;
   border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
 }
 
 .member-item:hover {
   background: #f7f8fa;
+}
+
+.member-item.active {
+  background: #fff4ed;
+  border-color: #ffd4b8;
+  color: #d9531e;
 }
 
 .member-meta {
@@ -666,6 +702,17 @@ h1 {
   border: 1px solid #ebeef5;
   border-radius: 10px;
   padding: 10px 14px;
+  scroll-margin: 18px;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.result-card.focused {
+  background: #fffaf5;
+  border-color: #ffb980;
+  box-shadow: 0 0 0 2px rgba(255, 122, 0, 0.12);
 }
 
 .card-head {

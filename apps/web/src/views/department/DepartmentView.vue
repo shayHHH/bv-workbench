@@ -26,6 +26,7 @@ const { t } = useI18n();
 const loading = ref(false);
 const members = ref<DepartmentMemberVO[]>([]);
 const leaves = ref<LeaveRecordVO[]>([]);
+const initialLoading = computed(() => loading.value && !members.value.length && !leaves.value.length);
 const tab = ref<"overview" | "calendar" | "handoff">("calendar");
 /** 员工概览「已处理」列统计范围 */
 const donePeriod = ref<DonePeriod>("today");
@@ -61,7 +62,9 @@ const weekDays = computed(() => {
   });
 });
 
+let loadSeq = 0;
 async function load() {
+  const seq = ++loadSeq;
   loading.value = true;
   try {
     // 范围取「展示周 ∪ 今天起 60 天」：日历用展示周，任务交接需要今天之后的请假
@@ -71,10 +74,11 @@ async function load() {
     const endCandidate = isoDate(future);
     const end = weekDays.value[6].iso > endCandidate ? weekDays.value[6].iso : endCandidate;
     const data = await fetchDepartmentOverview(start, end, donePeriod.value);
+    if (seq !== loadSeq) return;
     members.value = data.members;
     leaves.value = data.leaves;
   } finally {
-    loading.value = false;
+    if (seq === loadSeq) loading.value = false;
   }
 }
 
@@ -138,6 +142,12 @@ const handoffPending = computed(() =>
 const activeLeaves = computed(() => leaves.value.filter(leave => leave.end_date >= todayIso));
 
 const memberById = (id: string) => members.value.find(m => m.user_id === id) ?? null;
+const leavePendingCount = (leave: LeaveRecordVO) => memberById(leave.user_id)?.pending ?? 0;
+const leaveRecommendedHandoff = (leave: LeaveRecordVO) => {
+  const member = memberById(leave.user_id);
+  return member ? recommendedHandoff(member) : null;
+};
+const detailTarget = computed(() => detailLeave.value ? leaveRecommendedHandoff(detailLeave.value) : null);
 
 const handoffSubmitting = ref("");
 async function markHandoff(leave: LeaveRecordVO) {
@@ -223,7 +233,7 @@ const weekLeaves = computed(() =>
       </div>
     </div>
 
-    <el-card shadow="never" v-loading="loading">
+    <el-card shadow="never" v-loading="initialLoading">
       <div class="todo-tabs">
         <button type="button" :class="{ active: tab === 'overview' }" @click="tab = 'overview'">{{ t("department.view.tabOverview") }}</button>
         <button type="button" :class="{ active: tab === 'calendar' }" @click="tab = 'calendar'">{{ t("department.view.tabCalendar") }}</button>
@@ -341,12 +351,12 @@ const weekLeaves = computed(() =>
               </header>
               <p>{{ leave.note || t("department.view.noNote") }}</p>
               <footer>
-                <span>{{ t("department.view.pendingHandoffCount", { count: memberById(leave.user_id)?.pending ?? 0 }) }}</span>
+                <span>{{ t("department.view.pendingHandoffCount", { count: leavePendingCount(leave) }) }}</span>
                 <b>{{
                   leave.handoff_done
                     ? (leave.handoff_target ? t("department.view.handoffDoneTo", { name: leave.handoff_target }) : t("department.common.handoffDone"))
-                    : recommendedHandoff(memberById(leave.user_id) ?? ({} as DepartmentMemberVO))
-                      ? t("department.view.suggestName", { name: recommendedHandoff(memberById(leave.user_id)!)!.display_name })
+                    : leaveRecommendedHandoff(leave)
+                      ? t("department.view.suggestName", { name: leaveRecommendedHandoff(leave)!.display_name })
                       : t("department.view.pendingAssign")
                 }}</b>
               </footer>
@@ -381,11 +391,11 @@ const weekLeaves = computed(() =>
                 <strong>{{ row.handoff_target || t("department.common.arranged") }}</strong>
                 <div class="muted">{{ t("department.view.handoffAtDone", { time: formatRelative(row.handoff_at) }) }}</div>
               </template>
-              <template v-else-if="memberById(row.user_id) && recommendedHandoff(memberById(row.user_id)!)">
-                <strong>{{ recommendedHandoff(memberById(row.user_id)!)!.display_name }}</strong>
+              <template v-else-if="leaveRecommendedHandoff(row)">
+                <strong>{{ leaveRecommendedHandoff(row)!.display_name }}</strong>
                 <div class="muted">
-                  {{ recommendedHandoff(memberById(row.user_id)!)!.role_name }} ·
-                  {{ t("department.common.currentPending", { count: recommendedHandoff(memberById(row.user_id)!)!.pending }) }}
+                  {{ leaveRecommendedHandoff(row)!.role_name }} ·
+                  {{ t("department.common.currentPending", { count: leaveRecommendedHandoff(row)!.pending }) }}
                 </div>
               </template>
               <span v-else class="muted">{{ t("department.view.pendingShort") }}</span>
@@ -419,7 +429,7 @@ const weekLeaves = computed(() =>
     <LeaveDetailDrawer
       :leave="detailLeave"
       :member="detailLeave ? memberById(detailLeave.user_id) : null"
-      :target="detailLeave && memberById(detailLeave.user_id) ? recommendedHandoff(memberById(detailLeave.user_id)!) : null"
+      :target="detailTarget"
       @close="detailLeaveId = ''"
       @changed="load"
       @go-handoff="tab = 'handoff'; detailLeaveId = ''"

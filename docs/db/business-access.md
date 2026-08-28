@@ -115,7 +115,7 @@
 用户确认业务准入以 demo（bv-workbench-go/index.html + app.js）为验收标准后的结构调整：
 
 - **kyc_scenarios 改为四层**：业务类型 → 渠道（含 theme/restrictions[]）→ 材料模块 sections[] → 材料项；材料清单挂在渠道下（原 scenario.sections + item.channel_codes 结构废弃）。材料项字段改为 `validity`（NONE/ONE_MONTH/THREE_MONTHS 枚举），移除 max_count/validity_note。seed 为 demo 原样迁移的 21 个业务类型（scripts/demo-kyc-data.mjs）。
-- **合规结论语义对齐 demo**：REJECT（驳回）→ SUPPLEMENT_REQUIRED（待补件，补件回路）；TERMINATE（终止）→ REJECTED（审核拒绝，可通过 reopen 重新发起）。SUPPLEMENT_REQUIRED 恢复为活跃状态。
+- **合规结论语义对齐 demo**：REJECT（驳回）→ SUPPLEMENT_REQUIRED（被驳回，补件回路）；TERMINATE（终止）→ REJECTED（审核拒绝，可通过 reopen 重新发起）。SUPPLEMENT_REQUIRED 恢复为活跃状态。
 - **新增字段**：applications/review_cases 增加 `channel_name` 冗余快照与 `review_type`（FX 找换 / USDT U相关，demo 提交坞选择）；review_cases 查询支持 review_type/final_result 筛选。
 - **新增接口**：`POST /access/applications/:id/reopen`（审核拒绝/已过期/已取消 → 重开草稿）；submit 需携带 `review_type`。
 - **提交校验放宽**：完整度仅 KYC 助手动态提示，不做提交硬拦截（至少 1 份材料；被退回材料未替换仍拦截）。

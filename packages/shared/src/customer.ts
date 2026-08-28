@@ -15,7 +15,7 @@ export type CustomerKind = (typeof CustomerKind)[keyof typeof CustomerKind];
 export const CustomerKindLabel: Record<CustomerKind, string> = {
   DIRECT: "直客",
   INTERMEDIARY: "中介",
-  SUB_CUSTOMER: "中介下级客户",
+  SUB_CUSTOMER: "中介推荐商户",
 };
 
 /** 客户生命周期状态（对齐原型：新客户/活跃/沉睡/暂停合作；准入审核后续用独立的 audit_status） */

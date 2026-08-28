@@ -37,6 +37,14 @@ export class ReviewCase {
   @Prop({ type: String, default: null })
   customer_code: string | null;
 
+  /** 发起申请时的客户管理客户类型快照 */
+  @Prop({ type: String, default: null })
+  customer_kind: string | null;
+
+  /** 发起申请时的主体类型快照 */
+  @Prop({ type: String, default: null })
+  customer_sub_type: string | null;
+
   @Prop({ type: String, default: null })
   scenario_name: string | null;
 

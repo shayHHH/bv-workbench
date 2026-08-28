@@ -40,7 +40,7 @@ import {
 } from "./dto/access.dto";
 
 /**
- * demo 状态语义：草稿/待补件可直接编辑提交；审核拒绝、已过期、已取消需先「重新提交」
+ * demo 状态语义：草稿/被驳回可直接编辑提交；审核拒绝、已过期、已取消需先「重新提交」
  * 回到草稿（reopen）再走工作台。
  */
 const EDITABLE_STATUSES: AccessStatus[] = [AccessStatus.DRAFT, AccessStatus.SUPPLEMENT_REQUIRED];
@@ -93,6 +93,7 @@ export class AccessService {
         name: customer.name,
         customer_code: customer.customer_code,
         customer_kind: customer.customer_kind,
+        customer_sub_type: customer.sub_type ?? null,
       },
       status: AccessStatus.DRAFT,
       owner_user_id: new Types.ObjectId(operator.sub),
@@ -283,6 +284,8 @@ export class AccessService {
       customer_id: doc.customer_id,
       customer_name: doc.customer_snapshot.name,
       customer_code: doc.customer_snapshot.customer_code,
+      customer_kind: doc.customer_snapshot.customer_kind,
+      customer_sub_type: doc.customer_snapshot.customer_sub_type ?? null,
       scenario_name: doc.scenario_name,
       channel_code: doc.channel_code,
       channel_name: doc.channel_name,
@@ -465,7 +468,10 @@ export class AccessService {
       id: String(doc._id),
       application_no: doc.application_no,
       customer_id: String(doc.customer_id),
-      customer_snapshot: doc.customer_snapshot,
+      customer_snapshot: {
+        ...doc.customer_snapshot,
+        customer_sub_type: doc.customer_snapshot.customer_sub_type ?? null,
+      },
       scenario_id: doc.scenario_id ? String(doc.scenario_id) : null,
       scenario_code: doc.scenario_code,
       scenario_name: doc.scenario_name,

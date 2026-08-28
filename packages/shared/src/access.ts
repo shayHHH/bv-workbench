@@ -134,13 +134,13 @@ export const AccessStatus = {
 export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
 
 /**
- * demo 八态与结论语义：合规「驳回」→ 待补件（补件回路）；合规「终止」→ 审核拒绝（可重新发起）；
+ * demo 八态与结论语义：合规「驳回」→ 被驳回（补件回路）；合规「终止」→ 审核拒绝（可重新发起）；
  * 已过期/已暂停沿用 demo：仅展示，无自动引擎。
  */
 export const AccessStatusLabel: Record<AccessStatus, string> = {
   DRAFT: "草稿",
   PENDING_REVIEW: "待审核",
-  SUPPLEMENT_REQUIRED: "待补件",
+  SUPPLEMENT_REQUIRED: "被驳回",
   REJECTED: "审核拒绝",
   APPROVED: "审核通过",
   EXPIRED: "已过期",
@@ -152,7 +152,7 @@ export const AccessStatusLabel: Record<AccessStatus, string> = {
 export const AccessStatusDesc: Record<AccessStatus, string> = {
   DRAFT: "草稿已保存，还未提交审核",
   PENDING_REVIEW: "材料已提交，等待合规官审核",
-  SUPPLEMENT_REQUIRED: "合规要求补充/修改材料，需重新上传",
+  SUPPLEMENT_REQUIRED: "审核被驳回，需补充/修改材料后重新上传",
   REJECTED: "合规明确拒绝该业务准入",
   APPROVED: "合规审核已通过",
   EXPIRED: "曾经通过，有效期过期，需重新提交",
@@ -254,6 +254,7 @@ export interface AccessApplicationVO {
     name: string;
     customer_code: string | null;
     customer_kind: string;
+    customer_sub_type: string | null;
   };
   scenario_id: string | null;
   scenario_code: string | null;
@@ -398,6 +399,10 @@ export interface ReviewCaseVO {
   customer_id: string;
   customer_name: string;
   customer_code: string | null;
+  /** 发起申请时的客户管理客户类型快照 */
+  customer_kind: string | null;
+  /** 发起申请时的主体类型快照 */
+  customer_sub_type: string | null;
   scenario_name: string | null;
   channel_code: string | null;
   channel_name: string | null;

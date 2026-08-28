@@ -2,6 +2,8 @@
 import {
   AccessStatusLabel,
   ApplicationMaterialStatusLabel,
+  FundingKindLabel,
+  FundingOwnerLabel,
   ReviewDecisionActionLabel,
   ReviewTypeLabel,
   CustomerKind,
@@ -10,12 +12,20 @@ import {
   CustomerStatusLabel,
   CustomerSubTypeLabel,
   RegionLabel,
+  TradeOrderStatusLabel,
+  fundingKindOf,
+  fundingOwnerRole,
   type AccessApplicationVO,
   type ApplicationMaterialVO,
   type AccessStatus,
   type CustomerEventVO,
   type CustomerMaterialVO,
   type CustomerVO,
+  type FileRef,
+  type FundingMarkVO,
+  type FundingSide,
+  type PayoutOrderVO,
+  type TradeOrderVO,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, ref, watch } from "vue";
@@ -23,6 +33,7 @@ import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
 import { fetchApplication, fetchApplications, fetchCustomerMaterials, openFilePreview } from "@/api/access";
 import { fetchCustomer, fetchCustomerEvents, updateCustomer } from "@/api/customer";
+import { fetchOrderDispatch, fetchOrders } from "@/api/order";
 import { formatDateTime, formatRelative } from "@/utils/format";
 
 const { t } = useI18n();
@@ -42,6 +53,9 @@ const materialsLoaded = ref(false);
 const applications = ref<AccessApplicationVO[]>([]);
 const applicationsLoading = ref(false);
 const applicationsLoaded = ref(false);
+const orders = ref<TradeOrderVO[]>([]);
+const ordersLoading = ref(false);
+const ordersLoaded = ref(false);
 
 const isSub = computed(() => current.value?.customer_kind === CustomerKind.SUB_CUSTOMER);
 const isIntermediary = computed(() => current.value?.customer_kind === CustomerKind.INTERMEDIARY);
@@ -98,14 +112,30 @@ async function loadApplications() {
   }
 }
 
+async function loadOrders() {
+  if (!current.value) return;
+  ordersLoading.value = true;
+  try {
+    const result = await fetchOrders({ customer_id: current.value.id, page: 1, page_size: 50 });
+    orders.value = result.items;
+    ordersLoaded.value = true;
+  } finally {
+    ordersLoading.value = false;
+  }
+}
+
 function resetTabData() {
   events.value = [];
   materials.value = [];
   materialsLoaded.value = false;
   applications.value = [];
   applicationsLoaded.value = false;
+  orders.value = [];
+  ordersLoaded.value = false;
   expandedApps.value = new Set();
   appDetails.value = new Map();
+  expandedOrders.value = new Set();
+  orderDispatches.value = new Map();
 }
 
 /** 切换抽屉主体（查看下级客户 / 上级中介） */
@@ -141,6 +171,7 @@ function onTabActivated(tab: string) {
   if (tab === "timeline" && !events.value.length) loadEvents();
   if (tab === "documents" && !materialsLoaded.value) loadMaterials();
   if (tab === "applications" && !applicationsLoaded.value) loadApplications();
+  if (tab === "funding" && !ordersLoaded.value) loadOrders();
 }
 
 watch(activeTab, onTabActivated);
@@ -195,6 +226,16 @@ const accessStatusTagType: Record<AccessStatus, "primary" | "success" | "warning
   APPROVED: "success",
   EXPIRED: "info",
   SUSPENDED: "info",
+  CANCELLED: "info",
+};
+
+const orderStatusTagType: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
+  PENDING_KYC: "info",
+  AWAITING_INFLOW: "warning",
+  AWAITING_DISPATCH: "primary",
+  DISPATCH_REVIEW: "info",
+  AWAITING_PAYOUT: "warning",
+  COMPLETED: "success",
   CANCELLED: "info",
 };
 
@@ -265,6 +306,92 @@ async function previewMaterial(material: CustomerMaterialVO, download = false) {
   } catch {
     /* 错误提示由 http 拦截器统一处理 */
   }
+}
+
+const expandedOrders = ref(new Set<string>());
+const orderDispatches = ref(new Map<string, PayoutOrderVO | null>());
+const orderDispatchLoading = ref<string | null>(null);
+
+async function toggleOrder(order: TradeOrderVO) {
+  const next = new Set(expandedOrders.value);
+  if (next.has(order.id)) {
+    next.delete(order.id);
+    expandedOrders.value = next;
+    return;
+  }
+  next.add(order.id);
+  expandedOrders.value = next;
+  if (order.dispatch_id && !orderDispatches.value.has(order.id)) {
+    orderDispatchLoading.value = order.id;
+    try {
+      const dispatch = await fetchOrderDispatch(order.id);
+      const map = new Map(orderDispatches.value);
+      map.set(order.id, dispatch);
+      orderDispatches.value = map;
+    } finally {
+      orderDispatchLoading.value = null;
+    }
+  }
+}
+
+function fmtMoney(currency: string, amount: number): string {
+  return `${currency} ${amount.toLocaleString("en-US")}`;
+}
+
+function fundingKindText(order: TradeOrderVO, side: FundingSide): string {
+  return localizeText(FundingKindLabel[fundingKindOf(order, side)]);
+}
+
+function fundingOwnerText(order: TradeOrderVO, side: FundingSide): string {
+  const role = fundingOwnerRole(order, side);
+  return localizeText(FundingOwnerLabel[role] ?? role);
+}
+
+function isFileRef(value: unknown): value is FileRef {
+  return !!value && typeof value === "object" && "storage_key" in value && "original_name" in value;
+}
+
+function voucherText(voucher: FundingMarkVO["voucher"] | undefined): string {
+  if (!voucher) return "-";
+  return typeof voucher === "string" ? voucher : voucher.original_name;
+}
+
+async function previewFile(file: FileRef, download = false) {
+  try {
+    await openFilePreview(file, download);
+  } catch {
+    /* 错误提示由 http 拦截器统一处理 */
+  }
+}
+
+function fundingRows(order: TradeOrderVO, side: FundingSide): Array<[string, string | FileRef]> {
+  const mark = side === "inflow" ? order.inflow_mark : order.outflow_mark;
+  const expectedAmount = side === "inflow" ? order.sell_amount : order.buy_amount;
+  const expectedCurrency = side === "inflow" ? order.sell_currency : order.buy_currency;
+  const rows: Array<[string, string | FileRef]> = [
+    [
+      side === "inflow" ? t("customer.drawer.orderExpectedInflow") : t("customer.drawer.orderExpectedOutflow"),
+      fmtMoney(expectedCurrency, expectedAmount),
+    ],
+    [t("customer.drawer.orderFundingKind"), fundingKindText(order, side)],
+    [t("customer.drawer.orderFundingOwner"), fundingOwnerText(order, side)],
+  ];
+  if (!mark) {
+    rows.push([t("customer.drawer.orderMarkStatus"), t("customer.drawer.orderMarkPending")]);
+    return rows;
+  }
+  rows.push([
+    side === "inflow" ? t("customer.drawer.orderActualInflow") : t("customer.drawer.orderActualOutflow"),
+    fmtMoney(mark.currency || expectedCurrency, mark.amount),
+  ]);
+  rows.push([t("customer.drawer.orderMarkedBy"), `${mark.by} · ${formatDateTime(mark.at)}`]);
+  if (mark.method) rows.push([t("customer.drawer.orderMethod"), mark.method]);
+  if (mark.account) rows.push([t("customer.drawer.orderAccount"), mark.account]);
+  if (mark.hash) rows.push([t("customer.drawer.orderHash"), [mark.chain, mark.hash, mark.confirms ? `${mark.confirms} confirmations` : ""].filter(Boolean).join(" · ")]);
+  if (mark.place) rows.push([t("customer.drawer.orderPlace"), [mark.place, mark.handler].filter(Boolean).join(" · ")]);
+  if (mark.voucher) rows.push([t("customer.drawer.orderVoucher"), mark.voucher]);
+  if (mark.note) rows.push([t("customer.drawer.orderNote"), mark.note]);
+  return rows;
 }
 
 const kindText = (c: CustomerVO) => localizeText(CustomerKindLabel[c.customer_kind]);
@@ -474,9 +601,119 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
           </div>
         </el-tab-pane>
 
-        <el-tab-pane :label="t('customer.drawer.tabFunding')" name="funding" disabled />
+        <el-tab-pane :label="t('customer.drawer.tabFunding')" name="funding">
+          <div v-loading="ordersLoading" class="tab-pane-body">
+            <template v-if="orders.length">
+              <div
+                v-for="order in orders"
+                :key="order.id"
+                class="app-card order-card clickable"
+                :class="{ expanded: expandedOrders.has(order.id) }"
+                @click="toggleOrder(order)"
+              >
+                <div class="app-head">
+                  <strong>{{ order.order_no }}</strong>
+                  <el-tag :type="orderStatusTagType[order.status] ?? 'info'" effect="light" size="small">
+                    {{ localizeText(TradeOrderStatusLabel[order.status]) }}
+                  </el-tag>
+                  <span class="app-toggle">{{ expandedOrders.has(order.id) ? "⌃" : "⌄" }}</span>
+                </div>
+                <small class="app-meta">
+                  {{ order.trade_type }} ·
+                  {{ fmtMoney(order.sell_currency, order.sell_amount) }} → {{ fmtMoney(order.buy_currency, order.buy_amount) }} ·
+                  {{ formatRelative(order.created_at) }}
+                </small>
+                <p v-if="order.exception && !expandedOrders.has(order.id)" class="app-reason">
+                  {{ order.exception.kind }}：{{ order.exception.reason }}
+                </p>
+
+                <div
+                  v-if="expandedOrders.has(order.id)"
+                  v-loading="orderDispatchLoading === order.id"
+                  class="app-detail order-detail"
+                  @click.stop
+                >
+                  <div class="app-info-grid">
+                    <div><span>{{ t("customer.drawer.orderBusinessType") }}</span><b>{{ order.business_type || "-" }}</b></div>
+                    <div><span>{{ t("customer.drawer.orderRate") }}</span><b>{{ order.rate }}</b></div>
+                    <div><span>{{ t("customer.drawer.orderHandler") }}</span><b>{{ order.handler_name || "-" }}</b></div>
+                    <div><span>{{ t("customer.drawer.orderUpdatedAt") }}</span><b>{{ formatDateTime(order.updated_at) }}</b></div>
+                  </div>
+
+                  <template v-if="order.quote">
+                    <h5>{{ t("customer.drawer.orderQuote") }}</h5>
+                    <p class="app-review-line">
+                      {{ order.quote.source }} · {{ order.quote.deal_rate }}
+                      <em>{{ [order.quote.quoted_by, order.quote.quoted_at ? formatDateTime(order.quote.quoted_at) : ""].filter(Boolean).join(" · ") }}</em>
+                    </p>
+                  </template>
+
+                  <h5>{{ t("customer.drawer.orderInflow") }}</h5>
+                  <div class="order-field-list">
+                    <div v-for="[label, value] in fundingRows(order, 'inflow')" :key="`in-${label}`" class="order-field-row">
+                      <span>{{ label }}</span>
+                      <b v-if="!isFileRef(value)">{{ value }}</b>
+                      <span v-else class="file-actions">
+                        <b>{{ voucherText(value) }}</b>
+                        <el-button size="small" link type="primary" @click="previewFile(value)">{{ t("customer.drawer.preview") }}</el-button>
+                        <el-button size="small" link @click="previewFile(value, true)">{{ t("customer.drawer.download") }}</el-button>
+                      </span>
+                    </div>
+                  </div>
+
+                  <h5>{{ t("customer.drawer.orderOutflow") }}</h5>
+                  <div class="order-field-list">
+                    <div v-for="[label, value] in fundingRows(order, 'outflow')" :key="`out-${label}`" class="order-field-row">
+                      <span>{{ label }}</span>
+                      <b v-if="!isFileRef(value)">{{ value }}</b>
+                      <span v-else class="file-actions">
+                        <b>{{ voucherText(value) }}</b>
+                        <el-button size="small" link type="primary" @click="previewFile(value)">{{ t("customer.drawer.preview") }}</el-button>
+                        <el-button size="small" link @click="previewFile(value, true)">{{ t("customer.drawer.download") }}</el-button>
+                      </span>
+                    </div>
+                  </div>
+
+                  <template v-if="order.dispatch_id">
+                    <h5>{{ t("customer.drawer.orderDispatch") }}</h5>
+                    <div v-if="orderDispatches.get(order.id)" class="order-field-list">
+                      <div class="order-field-row">
+                        <span>{{ t("customer.drawer.orderDispatchNo") }}</span>
+                        <b>{{ orderDispatches.get(order.id)!.dispatch_no }}</b>
+                      </div>
+                      <div class="order-field-row">
+                        <span>{{ t("customer.drawer.orderDispatchChannel") }}</span>
+                        <b>{{ orderDispatches.get(order.id)!.channel }}</b>
+                      </div>
+                      <div class="order-field-row">
+                        <span>{{ t("customer.drawer.orderDispatchReceipt") }}</span>
+                        <span v-if="orderDispatches.get(order.id)!.receipt?.file" class="file-actions">
+                          <b>{{ orderDispatches.get(order.id)!.receipt!.file!.original_name }}</b>
+                          <el-button size="small" link type="primary" @click="previewFile(orderDispatches.get(order.id)!.receipt!.file!)">{{ t("customer.drawer.preview") }}</el-button>
+                          <el-button size="small" link @click="previewFile(orderDispatches.get(order.id)!.receipt!.file!, true)">{{ t("customer.drawer.download") }}</el-button>
+                        </span>
+                        <b v-else>{{ orderDispatches.get(order.id)!.receipt?.file_name || "-" }}</b>
+                      </div>
+                    </div>
+                    <p v-else class="app-empty-line">{{ t("customer.drawer.orderDispatchLoading") }}</p>
+                  </template>
+
+                  <h5>{{ t("customer.drawer.orderTimeline") }}</h5>
+                  <div v-if="order.timeline.length" class="app-timeline">
+                    <div v-for="(entry, index) in order.timeline" :key="index" class="app-timeline-row order-timeline-row">
+                      <time>{{ formatDateTime(entry.at) }}</time>
+                      <span>{{ entry.title }} · {{ entry.actor }}</span>
+                      <em>{{ entry.detail }}</em>
+                    </div>
+                  </div>
+                  <p v-else class="app-empty-line">{{ t("customer.drawer.orderNoTimeline") }}</p>
+                </div>
+              </div>
+            </template>
+            <el-empty v-else-if="!ordersLoading" :description="t('customer.drawer.emptyOrders')" />
+          </div>
+        </el-tab-pane>
       </el-tabs>
-      <p class="tabs-hint">{{ t("customer.drawer.fundingHint") }}</p>
     </div>
   </el-drawer>
 </template>
@@ -757,6 +994,11 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   margin-bottom: 8px;
 }
 
+.order-card.expanded {
+  border-color: #d9ecff;
+  background: #fcfdff;
+}
+
 .app-head {
   display: flex;
   align-items: center;
@@ -772,6 +1014,54 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   margin: 6px 0 0;
   font-size: 12px;
   color: #c45656;
+}
+
+.order-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-field-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  color: #606266;
+}
+
+.order-field-row > span:first-child {
+  color: #909399;
+}
+
+.order-field-row b {
+  min-width: 0;
+  font-weight: 500;
+  color: #303133;
+  overflow-wrap: anywhere;
+}
+
+.file-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.file-actions b {
+  margin-right: 2px;
+}
+
+.order-timeline-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.order-timeline-row em {
+  grid-column: 2;
+  overflow-wrap: anywhere;
 }
 
 .event-detail {

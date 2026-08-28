@@ -31,6 +31,7 @@ const items = ref<TradeOrderVO[]>([]);
 const total = ref(0);
 const stats = ref<OrderListStatsVO | null>(null);
 const query = reactive({ keyword: "", status: "", page: 1, page_size: 10 });
+const createdRange = ref<[Date, Date] | null>(null);
 const activeTodo = ref("");
 
 const ACTIVE_STATUSES = "PENDING_KYC,AWAITING_INFLOW,AWAITING_DISPATCH,DISPATCH_REVIEW,AWAITING_PAYOUT";
@@ -45,44 +46,16 @@ const sumStatus = (s: OrderListStatsVO, ...statuses: string[]) =>
   statuses.reduce((n, status) => n + (s.by_status[status] ?? 0), 0);
 const allCount = (s: OrderListStatsVO) => Object.values(s.by_status).reduce((a, b) => a + b, 0);
 
-const TODO_DEFS = computed<Record<string, TodoTab[]>>(() => ({
-  AGENT: [
-    { label: t("orders.list.tabs.myTrades"), params: {}, count: allCount },
-    { label: t("orders.list.tabs.pendingKyc"), params: { status: "PENDING_KYC" }, count: s => sumStatus(s, "PENDING_KYC") },
-    { label: t("orders.list.tabs.awaitingInflow"), params: { status: "AWAITING_INFLOW" }, count: s => sumStatus(s, "AWAITING_INFLOW") },
-    { label: t("orders.list.tabs.awaitingDispatch"), params: { status: "AWAITING_DISPATCH" }, count: s => sumStatus(s, "AWAITING_DISPATCH") },
-    { label: t("orders.list.tabs.rejected"), params: { flag: "rejected" }, count: s => s.payment_rejected + s.dispatch_rejected },
-  ],
-  OPS: [
-    { label: t("orders.list.tabs.pendingReview"), params: { status: "DISPATCH_REVIEW" }, count: s => sumStatus(s, "DISPATCH_REVIEW") },
-    { label: t("orders.list.tabs.reviewed"), params: { status: "AWAITING_PAYOUT,COMPLETED" }, count: s => sumStatus(s, "AWAITING_PAYOUT", "COMPLETED") },
-    { label: t("orders.list.tabs.exception"), params: { flag: "exception" }, count: s => s.exceptions },
-    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
-  ],
-  FINANCE: [
-    { label: t("orders.list.tabs.fiatInflowPending"), params: { status: "AWAITING_INFLOW", inflow_kind: "fiat" }, count: s => s.inflow_fiat },
-    { label: t("orders.list.tabs.registered"), params: { status: "AWAITING_DISPATCH,DISPATCH_REVIEW,AWAITING_PAYOUT,COMPLETED" }, count: s => sumStatus(s, "AWAITING_DISPATCH", "DISPATCH_REVIEW", "AWAITING_PAYOUT", "COMPLETED") },
-    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
-  ],
-  WALLET: [
-    { label: t("orders.list.tabs.chainInflowPending"), params: { status: "AWAITING_INFLOW", inflow_kind: "chain" }, count: s => s.inflow_chain },
-    { label: t("orders.list.tabs.chainOutflowPending"), params: { status: "AWAITING_PAYOUT", outflow_kind: "chain" }, count: s => s.outflow_chain },
-    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
-  ],
-  PAYOUT: [
-    { label: t("orders.list.tabs.bankOutflowPending"), params: { status: "AWAITING_PAYOUT", outflow_kind: "fiat" }, count: s => s.outflow_fiat },
-    { label: t("orders.list.tabs.completed"), params: { status: "COMPLETED" }, count: s => sumStatus(s, "COMPLETED") },
-    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
-  ],
-  MANAGER: [
-    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
+const todoTabs = computed<TodoTab[]>(() => {
+  const tabs: TodoTab[] = [
     { label: t("orders.list.tabs.active"), params: { status: ACTIVE_STATUSES }, count: s => s.active },
-    { label: t("orders.list.tabs.exception"), params: { flag: "exception" }, count: s => s.exceptions },
     { label: t("orders.list.tabs.completed"), params: { status: "COMPLETED" }, count: s => sumStatus(s, "COMPLETED") },
-  ],
-}));
-
-const todoTabs = computed(() => TODO_DEFS.value[role.value] ?? TODO_DEFS.value.MANAGER);
+    { label: t("orders.list.tabs.all"), params: {}, count: allCount },
+  ];
+  return role.value === "MANAGER"
+    ? tabs
+    : [{ label: t("orders.list.tabs.todo"), params: { scope: "mine" }, count: s => s.todo }, ...tabs];
+});
 
 const subtitle = computed(() => {
   const map: Record<string, string> = {
@@ -101,18 +74,26 @@ async function load() {
   loading.value = true;
   try {
     const tabDef = todoTabs.value.find(tab => tab.label === activeTodo.value) ?? todoTabs.value[0];
+    const [createdFrom, createdTo] = createdRange.value ?? [];
+    const endOfDay = createdTo
+      ? new Date(createdTo.getFullYear(), createdTo.getMonth(), createdTo.getDate(), 23, 59, 59, 999)
+      : null;
     const page = await fetchOrders({
       keyword: query.keyword || undefined,
       status: query.status || tabDef.params.status,
+      scope: tabDef.params.scope,
       flag: tabDef.params.flag,
       inflow_kind: tabDef.params.inflow_kind,
       outflow_kind: tabDef.params.outflow_kind,
+      created_from: createdFrom?.getTime(),
+      created_to: endOfDay?.getTime(),
       page: query.page,
       page_size: query.page_size,
     });
     items.value = page.items;
     total.value = page.total;
     stats.value = page.stats;
+    window.dispatchEvent(new CustomEvent("order-todo-count-updated", { detail: page.stats.todo }));
   } finally {
     loading.value = false;
   }
@@ -268,11 +249,21 @@ onMounted(() => {
         <el-select v-model="query.status" class="status-filter" clearable :placeholder="t('orders.list.allStatus')" @change="search">
           <el-option v-for="(label, value) in TradeOrderStatusLabel" :key="value" :value="value" :label="label" />
         </el-select>
+        <el-date-picker
+          v-model="createdRange"
+          class="date-filter"
+          type="daterange"
+          unlink-panels
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          clearable
+          @change="search"
+        />
         <span class="count">{{ t("orders.list.countSummary", { total }) }}</span>
       </div>
 
       <el-table v-loading="loading" :data="items" row-key="id" @row-click="openPanel">
-        <el-table-column :label="t('orders.list.columns.orderNo')" width="165">
+        <el-table-column :label="t('orders.list.columns.orderNo')" width="140">
           <template #default="{ row }">
             <strong class="mono">{{ row.order_no }}</strong>
             <div class="muted">{{ t("orders.common.createdAt", { time: formatRelative(row.created_at) }) }}</div>
@@ -310,7 +301,6 @@ onMounted(() => {
         <el-table-column :label="t('orders.list.columns.status')" min-width="130">
           <template #default="{ row }">
             <el-tag :type="STATUS_TAG[row.status]" size="small">{{ localizeText(TradeOrderStatusLabel[row.status as TradeOrderStatus]) }}</el-tag>
-            <div v-if="row.exception" class="flag">{{ row.exception.kind }} · {{ row.exception.reason }}</div>
             <div v-if="row.dispatch_rejected" class="flag">{{ t("orders.common.dispatchRejectedFlag") }}</div>
             <div v-if="row.payment_rejected" class="flag">{{ t("orders.list.paymentRejected") }}</div>
           </template>
@@ -441,6 +431,7 @@ h1 {
   gap: 10px;
   align-items: center;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .keyword {
@@ -449,6 +440,11 @@ h1 {
 
 .status-filter {
   width: 150px;
+}
+
+.date-filter {
+  width: 260px;
+  max-width: 260px;
 }
 
 .count {

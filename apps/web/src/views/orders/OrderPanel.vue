@@ -16,7 +16,7 @@ import {
   type TradeOrderVO,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Close, Download, View } from "@element-plus/icons-vue";
+import { Close, CopyDocument, Download, FullScreen, View } from "@element-plus/icons-vue";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
@@ -55,6 +55,7 @@ const order = ref<TradeOrderVO | null>(null);
 const dispatch = ref<PayoutOrderVO | null>(null);
 const loading = ref(false);
 const tab = ref<"payment" | "payout" | "execution" | "activity">("payment");
+const dispatchTextVisible = ref(false);
 
 type FieldValue = string | FileRef;
 
@@ -459,6 +460,22 @@ async function doDispatchReturn() {
     ElMessage.success(t("orders.panel.dialogs.dispatchReturned"));
   } catch { /* 取消 */ }
 }
+
+async function copyPanelDispatchText() {
+  const text = dispatch.value?.final_text?.trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+  ElMessage.success(t("orders.panel.dispatchTextCopied"));
+}
 </script>
 
 <template>
@@ -479,9 +496,6 @@ async function doDispatchReturn() {
           <h2>{{ order.customer_name }}（{{ order.customer_code || t("orders.common.noCode") }}）</h2>
           <el-tag :type="STATUS_TAG[order.status]" effect="dark" size="small">
             {{ localizeText(TradeOrderStatusLabel[order.status]) }}
-          </el-tag>
-          <el-tag v-if="order.exception" type="danger" size="small" effect="light">
-            {{ order.exception.kind }} · {{ order.exception.reason }}
           </el-tag>
           <el-tag v-if="order.dispatch_rejected" type="danger" size="small" effect="light">{{ t("orders.common.dispatchRejectedFlag") }}</el-tag>
         </div>
@@ -555,9 +569,6 @@ async function doDispatchReturn() {
           <el-alert v-if="!order.kyc.ready && !['COMPLETED', 'CANCELLED'].includes(order.status)" type="warning" :closable="false" class="mb">
             {{ t("orders.panel.kycNotReadyAlert", { kyc: localizeText(order.kyc.label) }) }}
           </el-alert>
-          <el-alert v-if="order.exception" type="error" :closable="false" class="mb">
-            {{ t("orders.panel.exceptionAlert", { kind: order.exception.kind, reason: order.exception.reason, detail: order.exception.detail }) }}{{ order.exception.escalated ? t("orders.panel.escalatedSuffix") : "" }}
-          </el-alert>
           <section class="funding-card" :class="{ done: fundingState('inflow').state === 'arrived', error: fundingState('inflow').state === 'exception' }">
             <header>
               <div><strong>{{ t("orders.panel.customerInflow") }}</strong><em>{{ fundingState("inflow").kindLabel }}</em></div>
@@ -590,14 +601,35 @@ async function doDispatchReturn() {
             {{ t("orders.panel.rejectedAlert", { reason: order.dispatch_rejected.reason, by: order.dispatch_rejected.by, at: formatDateTime(order.dispatch_rejected.at) }) }}
           </el-alert>
           <section class="block">
-            <h4>{{ t("orders.common.dispatch") }}</h4>
+            <div class="block-title">
+              <h4>{{ t("orders.common.dispatch") }}</h4>
+              <el-button
+                v-if="dispatch?.final_text"
+                :icon="FullScreen"
+                link
+                type="primary"
+                @click="dispatchTextVisible = true"
+              >
+                {{ t("orders.panel.expandDispatchText") }}
+              </el-button>
+            </div>
             <template v-if="dispatch">
               <div class="dispatch-head">
                 <strong class="mono">{{ dispatch.dispatch_no }}</strong>
                 <el-tag size="small">{{ t("orders.panel.channelTag", { channel: dispatch.channel }) }}</el-tag>
                 <small>{{ t("orders.panel.submittedMeta", { by: dispatch.submitted_by, at: formatDateTime(dispatch.submitted_at) }) }}</small>
               </div>
-              <pre class="dispatch-text">{{ dispatch.final_text }}</pre>
+              <div class="dispatch-text-wrap">
+                <el-button
+                  class="dispatch-copy"
+                  :icon="CopyDocument"
+                  circle
+                  text
+                  :title="t('orders.panel.copyDispatchText')"
+                  @click="copyPanelDispatchText"
+                />
+                <pre class="dispatch-text">{{ dispatch.final_text }}</pre>
+              </div>
             </template>
             <p v-else-if="order.status === 'AWAITING_DISPATCH'" class="empty-inline">
               {{ isTrader ? t("orders.panel.dispatchEmptyTrader") : t("orders.panel.dispatchEmptyWait") }}
@@ -716,14 +748,34 @@ async function doDispatchReturn() {
         </div>
       </footer>
     </div>
+    <el-dialog
+      v-model="dispatchTextVisible"
+      :title="t('orders.panel.dispatchTextTitle')"
+      width="760px"
+      append-to-body
+    >
+      <div class="dispatch-text-wrap">
+        <el-button
+          class="dispatch-copy"
+          :icon="CopyDocument"
+          circle
+          text
+          :title="t('orders.panel.copyDispatchText')"
+          @click="copyPanelDispatchText"
+        />
+        <pre class="dispatch-text dispatch-text-large">{{ dispatch?.final_text }}</pre>
+      </div>
+    </el-dialog>
   </el-drawer>
 </template>
 
 <style scoped>
 .panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  min-height: 100%;
+}
+
+:deep(.el-drawer__body) {
+  overflow-y: auto;
 }
 
 .panel-head {
@@ -988,8 +1040,6 @@ async function doDispatchReturn() {
 }
 
 .panel-body {
-  flex: 1;
-  overflow-y: auto;
   padding-bottom: 8px;
 }
 
@@ -1098,6 +1148,18 @@ dd {
   color: #606266;
 }
 
+.block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.block-title h4 {
+  margin: 0;
+}
+
 .dispatch-head {
   display: flex;
   align-items: center;
@@ -1109,17 +1171,41 @@ dd {
   color: #909399;
 }
 
+.dispatch-text-wrap {
+  position: relative;
+}
+
+.dispatch-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  color: #d7dce6;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dispatch-copy:hover {
+  color: #f4f7fb;
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .dispatch-text {
   background: #1f2430;
   color: #d7dce6;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 44px 10px 12px;
   font-size: 12px;
   line-height: 1.7;
   white-space: pre-wrap;
   margin: 0;
   max-height: 220px;
   overflow: auto;
+}
+
+.dispatch-text-large {
+  max-height: 65vh;
+  font-size: 13px;
+  margin: 0;
 }
 
 .review-row {

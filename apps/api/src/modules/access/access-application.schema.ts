@@ -25,7 +25,12 @@ export class AccessApplication {
 
   /** 创建申请时的客户快照 */
   @Prop({ type: Object, required: true })
-  customer_snapshot: { name: string; customer_code: string | null; customer_kind: string };
+  customer_snapshot: {
+    name: string;
+    customer_code: string | null;
+    customer_kind: string;
+    customer_sub_type: string | null;
+  };
 
   @Prop({ type: Types.ObjectId, default: null })
   scenario_id: Types.ObjectId | null;

@@ -18,9 +18,12 @@ export interface OrderListQuery {
   /** 逗号分隔状态列表 */
   status?: string;
   customer_id?: string;
+  scope?: "mine";
   flag?: "exception" | "payment_rejected" | "dispatch_rejected" | "rejected";
   inflow_kind?: "fiat" | "chain";
   outflow_kind?: "fiat" | "chain";
+  created_from?: number;
+  created_to?: number;
   page?: number;
   page_size?: number;
 }

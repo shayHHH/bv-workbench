@@ -120,9 +120,8 @@ const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | 
 };
 
 /* el-table 插槽 row 无类型，统一经带类型的辅助函数取展示内容 */
-const kindText = (row: TableRow) =>
-  row.rowType === "sub" ? t("customer.list.kindSub") : localizeText(CustomerKindLabel[row.c.customer_kind]);
-const subTypeText = (row: TableRow) => (row.c.sub_type ? localizeText(CustomerSubTypeLabel[row.c.sub_type]) : "");
+const kindText = (row: TableRow) => localizeText(CustomerKindLabel[row.c.customer_kind]);
+const subjectTypeText = (row: TableRow) => (row.c.sub_type ? localizeText(CustomerSubTypeLabel[row.c.sub_type]) : "—");
 const regionText = (row: TableRow) => {
   const region = row.c.region ?? row.parent?.region ?? null;
   return region ? localizeText(RegionLabel[region]) : t("customer.list.regionEmpty");
@@ -231,11 +230,15 @@ onMounted(load);
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('customer.list.colKindRegion')" min-width="130">
+        <el-table-column :label="t('customer.list.colCustomerType')" min-width="120">
           <template #default="{ row }">
             {{ kindText(row) }}
-            <div v-if="subTypeText(row)" class="sub-type">{{ subTypeText(row) }}</div>
             <div class="muted">{{ regionText(row) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('customer.list.colSubjectType')" min-width="110">
+          <template #default="{ row }">
+            {{ subjectTypeText(row) }}
           </template>
         </el-table-column>
         <el-table-column :label="t('customer.common.currentStatus')" min-width="100">

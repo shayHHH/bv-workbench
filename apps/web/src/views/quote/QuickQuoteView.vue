@@ -5,8 +5,6 @@
  * 对齐原型 quote/index02.html 的 quickQuote 视图（差异见 docs/db/quotes.md）。
  */
 import {
-  ArrowDown,
-  ArrowUp,
   Close,
   CopyDocument,
   Delete,
@@ -566,20 +564,6 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               <el-button :icon="Plus" @click="createDialogVisible = true">
                 {{ t("quote.quick.newCustomer") }}
               </el-button>
-              <div v-if="selected" class="customer-chips">
-                <span>
-                  {{ t("quote.quick.customerInfo") }}
-                  <strong>{{ selected.customer_code ?? t("quote.common.noCode") }}</strong>
-                </span>
-                <span>
-                  {{ t("quote.quick.brokerInfo") }}
-                  <strong>{{ selected.broker_label ?? t("quote.common.direct") }}</strong>
-                </span>
-                <span>
-                  {{ t("quote.quick.note") }}
-                  <strong>{{ selected.remark ?? "-" }}</strong>
-                </span>
-              </div>
             </div>
           </div>
         </el-card>
@@ -592,7 +576,6 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               <div class="section-title">
                 <div>
                   <strong>{{ t("quote.quick.outputPreview") }}</strong>
-                  <p>{{ customerDisplayLabel(selected) }} · {{ selected.broker_label ?? t("quote.common.direct") }}</p>
                 </div>
               </div>
               <div class="output-actions">
@@ -621,14 +604,12 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               <div class="output-field">
                 <div class="field-label">
                   <span>{{ t("quote.quick.opening") }}</span>
-                  <small>{{ t("quote.quick.openingHint") }}</small>
                 </div>
                 <el-input v-model="config.text.opening" />
               </div>
               <div class="output-field">
                 <div class="field-label">
                   <span>{{ t("quote.quick.ending") }}</span>
-                  <small>{{ t("quote.quick.endingHint") }}</small>
                 </div>
                 <el-input
                   v-model="config.text.ending"
@@ -702,15 +683,19 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
                     <strong class="summary-result">{{ results.get(item.id)?.value ?? "--" }}</strong>
                   </button>
                   <div class="summary-actions">
-                    <el-button text size="small" :icon="ArrowUp" :disabled="index === 0" :title="t('quote.quick.moveUp')" @click="moveItem(index, -1)" />
+                    <el-button text size="small" class="move-arrow" :disabled="index === 0" :title="t('quote.quick.moveUp')" @click="moveItem(index, -1)">
+                      ↑
+                    </el-button>
                     <el-button
                       text
                       size="small"
-                      :icon="ArrowDown"
+                      class="move-arrow"
                       :disabled="index === config.items.length - 1"
                       :title="t('quote.quick.moveDown')"
                       @click="moveItem(index, 1)"
-                    />
+                    >
+                      ↓
+                    </el-button>
                     <el-button
                       text
                       size="small"
@@ -730,14 +715,18 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
                     <small>{{ t("quote.quick.updatedAt", { time: formatQuoteTime(item.last_quoted_at) }) }}</small>
                   </div>
                   <div class="item-actions">
-                    <el-button text :icon="ArrowUp" :disabled="index === 0" :title="t('quote.quick.moveUp')" @click="moveItem(index, -1)" />
+                    <el-button text class="move-arrow" :disabled="index === 0" :title="t('quote.quick.moveUp')" @click="moveItem(index, -1)">
+                      ↑
+                    </el-button>
                     <el-button
                       text
-                      :icon="ArrowDown"
+                      class="move-arrow"
                       :disabled="index === config.items.length - 1"
                       :title="t('quote.quick.moveDown')"
                       @click="moveItem(index, 1)"
-                    />
+                    >
+                      ↓
+                    </el-button>
                     <el-button
                       text
                       :icon="Delete"
@@ -1036,7 +1025,7 @@ h1 {
 
 .customer-control-row {
   display: grid;
-  grid-template-columns: minmax(280px, 420px) auto minmax(220px, 1fr);
+  grid-template-columns: minmax(280px, 1fr) auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -1046,37 +1035,6 @@ h1 {
   position: relative;
   flex: 1;
   min-width: 0;
-}
-
-.customer-chips {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-.customer-chips span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  max-width: 100%;
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  background: #fafbfc;
-  padding: 5px 8px;
-  color: #909399;
-  font-size: 12px;
-}
-
-.customer-chips strong {
-  min-width: 0;
-  color: #303133;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .dropdown {
@@ -1316,6 +1274,13 @@ h1 {
   padding: 4px 5px;
 }
 
+.move-arrow {
+  min-width: 24px;
+  font-size: 14px;
+  line-height: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .summary-row code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #606266;
@@ -1384,7 +1349,7 @@ h1 {
   background: #fafbfc;
   border: 1px solid #f0f2f5;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .formula-toolbar {
@@ -1436,7 +1401,7 @@ h1 {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 8px;
   align-items: end;
 }
 

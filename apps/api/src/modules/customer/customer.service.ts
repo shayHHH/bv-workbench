@@ -308,7 +308,7 @@ export class CustomerService {
         name: dto.name.trim(),
         customer_kind: dto.customer_kind,
         parent_id: parentId,
-        sub_type: isSub ? (dto.sub_type ?? null) : null,
+        sub_type: dto.sub_type ?? null,
         region: dto.region ?? null,
         phone: dto.phone?.trim() || null,
         remark: dto.remark?.trim() || null,
@@ -362,7 +362,6 @@ export class CustomerService {
       doc.parent_id = parentId;
     } else {
       doc.parent_id = null;
-      doc.sub_type = null;
     }
     doc.customer_kind = targetKind;
 
@@ -378,6 +377,7 @@ export class CustomerService {
     }
 
     if (dto.name !== undefined) doc.name = dto.name.trim();
+    if (dto.sub_type !== undefined) doc.sub_type = dto.sub_type ?? null;
     if (dto.sub_type !== undefined && targetKind === CustomerKind.SUB_CUSTOMER) {
       doc.sub_type = dto.sub_type ?? null;
     }

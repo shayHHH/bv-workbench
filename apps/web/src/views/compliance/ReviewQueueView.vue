@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  CustomerSubTypeLabel,
   ReviewAuditTypeLabel,
   ReviewFinalResultLabel,
   ReviewTypeLabel,
@@ -95,6 +96,12 @@ function openDetail(row: ReviewCaseVO) {
 function myConclusion(row: ReviewCaseVO): string {
   const action = row.decision?.action;
   return action ? t(`compliance.queue.decision.${action}`) : "--";
+}
+
+function subjectTypeText(row: ReviewCaseVO): string {
+  const subType = row.customer_sub_type;
+  if (!subType) return "--";
+  return localizeText(CustomerSubTypeLabel[subType as keyof typeof CustomerSubTypeLabel] ?? subType);
 }
 
 const FINAL_TAG: Record<string, "success" | "warning" | "info"> = {
@@ -194,6 +201,9 @@ onMounted(load);
           <el-table-column :label="t('compliance.queue.colCustomerCode')" min-width="100">
             <template #default="{ row }">{{ row.customer_code || t("customer.common.noCode") }}</template>
           </el-table-column>
+          <el-table-column :label="t('compliance.queue.colSubjectType')" min-width="95">
+            <template #default="{ row }">{{ subjectTypeText(row) }}</template>
+          </el-table-column>
           <el-table-column :label="t('compliance.queue.colAuditType')" min-width="100">
             <template #default="{ row }">
               <el-tag :type="row.audit_type === 'RESUBMIT' ? 'warning' : 'primary'" size="small" effect="light">
@@ -229,6 +239,9 @@ onMounted(load);
           </el-table-column>
           <el-table-column :label="t('compliance.queue.colCustomerCode')" min-width="100">
             <template #default="{ row }">{{ row.customer_code || t("customer.common.noCode") }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colSubjectType')" min-width="95">
+            <template #default="{ row }">{{ subjectTypeText(row) }}</template>
           </el-table-column>
           <el-table-column :label="t('compliance.queue.colMyConclusion')" min-width="90">
             <template #default="{ row }">{{ myConclusion(row) }}</template>

@@ -19,7 +19,7 @@ import {
   ReviewMaterialHistoryVO,
   ReviewRequirementVO,
 } from "@bv/shared";
-import { Model, Types } from "mongoose";
+import { Model, PipelineStage, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
 import { AssignmentService } from "../assignment/assignment.service";
 import { KycScenario, KycScenarioDocument } from "../kyc/kyc-scenario.schema";
@@ -31,7 +31,7 @@ import { QueryReviewDto, ReviewDecisionDto } from "./dto/access.dto";
 
 /**
  * 合规结论 → 申请状态（demo 语义）：
- * 驳回 → 待补件（退回交易员补充后重新提交）；终止 → 审核拒绝（需重新发起新申请）。
+ * 驳回 → 被驳回（退回交易员补充后重新提交）；终止 → 审核拒绝（需重新发起新申请）。
  */
 const ACTION_TO_STATUS: Record<ReviewDecisionAction, AccessStatus> = {
   APPROVE: AccessStatus.APPROVED,
@@ -90,16 +90,53 @@ export class ReviewService {
         ...(query.submitted_to ? { $lte: new Date(query.submitted_to) } : {}),
       };
     }
-    const [items, total] = await Promise.all([
-      this.caseModel
-        .find(filter)
-        .sort({ [query.sort_by ?? "submitted_at"]: query.sort_order === "asc" ? 1 : -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .lean(),
-      this.caseModel.countDocuments(filter),
-    ]);
-    return { items: items.map(toVO), total, page, page_size: pageSize };
+    const sortField = query.sort_by ?? "submitted_at";
+    const sortDirection = query.sort_order === "asc" ? 1 : -1;
+    const shouldDedupeByApplication = query.status === ReviewCaseStatus.PROCESSED;
+    const [items, total] = shouldDedupeByApplication
+      ? await this.listLatestProcessedCases(filter, sortField, sortDirection, page, pageSize)
+      : await Promise.all([
+          this.caseModel
+            .find(filter)
+            .sort({ [sortField]: sortDirection })
+            .skip((page - 1) * pageSize)
+            .limit(pageSize)
+            .lean(),
+          this.caseModel.countDocuments(filter),
+        ]);
+    const vos = items.map(toVO);
+    await this.fillCustomerSnapshotFallbacks(vos);
+    return { items: vos, total, page, page_size: pageSize };
+  }
+
+  private async listLatestProcessedCases(
+    filter: Record<string, unknown>,
+    sortField: "submitted_at" | "reviewed_at",
+    sortDirection: 1 | -1,
+    page: number,
+    pageSize: number,
+  ) {
+    const pipeline: PipelineStage[] = [
+      { $match: filter },
+      { $sort: { reviewed_at: -1, submitted_at: -1, _id: -1 } },
+      { $group: { _id: "$application_id", doc: { $first: "$$ROOT" } } },
+      { $replaceRoot: { newRoot: "$doc" } },
+      {
+        $facet: {
+          items: [
+            { $sort: { [sortField]: sortDirection, _id: sortDirection } },
+            { $skip: (page - 1) * pageSize },
+            { $limit: pageSize },
+          ],
+          total: [{ $count: "count" }],
+        },
+      },
+    ];
+    const [result] = await this.caseModel.aggregate<{
+      items: Array<ReviewCase & { _id: Types.ObjectId; created_at?: Date; updated_at?: Date }>;
+      total: Array<{ count: number }>;
+    }>(pipeline);
+    return [result?.items ?? [], result?.total[0]?.count ?? 0] as const;
   }
 
   /** 合规官工作台指标（demo 合规 dashboard 指标条），「今日」按服务器本地日界 */
@@ -141,13 +178,37 @@ export class ReviewService {
   async getById(id: string): Promise<ReviewCaseVO> {
     const doc = await this.findOrFail(id);
     const vo = toVO(doc.toObject());
-    const [requirements, history] = await Promise.all([
+    const [requirements, history, application] = await Promise.all([
       this.requirementsOf(doc),
       this.materialHistoryOf(doc),
+      vo.customer_kind && vo.customer_sub_type
+        ? Promise.resolve(null)
+        : this.applicationModel
+          .findOne({ _id: doc.application_id, is_deleted: false })
+          .select("customer_snapshot")
+          .lean(),
     ]);
+    vo.customer_kind = vo.customer_kind ?? application?.customer_snapshot?.customer_kind ?? null;
+    vo.customer_sub_type = vo.customer_sub_type ?? application?.customer_snapshot?.customer_sub_type ?? null;
     vo.requirements = requirements;
     vo.material_history = history;
     return vo;
+  }
+
+  private async fillCustomerSnapshotFallbacks(items: ReviewCaseVO[]): Promise<void> {
+    const missing = items.filter(item => !item.customer_kind || !item.customer_sub_type);
+    if (!missing.length) return;
+    const ids = [...new Set(missing.map(item => item.application_id))].map(id => new Types.ObjectId(id));
+    const applications = await this.applicationModel
+      .find({ _id: { $in: ids }, is_deleted: false })
+      .select("customer_snapshot")
+      .lean();
+    const byId = new Map(applications.map(app => [String(app._id), app.customer_snapshot]));
+    for (const item of missing) {
+      const snapshot = byId.get(item.application_id);
+      item.customer_kind = item.customer_kind ?? snapshot?.customer_kind ?? null;
+      item.customer_sub_type = item.customer_sub_type ?? snapshot?.customer_sub_type ?? null;
+    }
   }
 
   /** 本渠道适用的材料清单项（按申请的 scenario_id + 工单渠道解析；场景被删则返回空） */
@@ -353,6 +414,8 @@ function toVO(
     customer_id: String(doc.customer_id),
     customer_name: doc.customer_name,
     customer_code: doc.customer_code,
+    customer_kind: doc.customer_kind ?? null,
+    customer_sub_type: doc.customer_sub_type ?? null,
     scenario_name: doc.scenario_name,
     channel_code: doc.channel_code,
     channel_name: doc.channel_name,

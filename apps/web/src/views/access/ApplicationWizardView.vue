@@ -4,6 +4,8 @@ import {
   AccessStatusLabel,
   ApplicationMaterialStatus,
   ApplicationMaterialStatusLabel,
+  CustomerKindLabel,
+  CustomerSubTypeLabel,
   KycItemValidityLabel,
   LEGACY_DECISION_ACTION_LABEL,
   MaterialSource,
@@ -57,6 +59,18 @@ const draft = reactive({
 });
 
 const application = ref<Awaited<ReturnType<typeof fetchApplication>> | null>(null);
+
+function customerTypeText() {
+  const snapshot = application.value?.customer_snapshot;
+  if (!snapshot) return "—";
+  return localizeText(CustomerKindLabel[snapshot.customer_kind as keyof typeof CustomerKindLabel] ?? snapshot.customer_kind);
+}
+
+function subjectTypeText() {
+  const subType = application.value?.customer_snapshot.customer_sub_type;
+  if (!subType) return "—";
+  return localizeText(CustomerSubTypeLabel[subType as keyof typeof CustomerSubTypeLabel] ?? subType);
+}
 
 const EDITABLE_STATUSES: AccessStatus[] = [
   AccessStatus.DRAFT,
@@ -468,6 +482,12 @@ onMounted(load);
             <h3>{{ t("access.wizard.customerInfoTitle") }}</h3>
             <el-form label-position="top" class="info-form">
               <div class="form-grid">
+                <el-form-item :label="t('access.wizard.customerType')">
+                  <el-input :model-value="customerTypeText()" disabled />
+                </el-form-item>
+                <el-form-item :label="t('access.wizard.subjectType')">
+                  <el-input :model-value="subjectTypeText()" disabled />
+                </el-form-item>
                 <el-form-item :label="t('access.wizard.cnName')">
                   <el-input v-model="draft.customer_cn_name" :disabled="!editable" maxlength="100" />
                 </el-form-item>
@@ -605,6 +625,8 @@ onMounted(load);
                 {{ currentScenario?.scenario_name || t("access.wizard.notSelected") }}
                 <span v-if="currentChannel" class="muted"> · {{ currentChannel.channel_name }}</span>
               </el-descriptions-item>
+              <el-descriptions-item :label="t('access.wizard.customerType')">{{ customerTypeText() }}</el-descriptions-item>
+              <el-descriptions-item :label="t('access.wizard.subjectType')">{{ subjectTypeText() }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.wizard.cnName')">{{ draft.customer_cn_name || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.wizard.enName')">{{ draft.customer_en_name || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.wizard.noteShort')" :span="2">{{ draft.business_note || "—" }}</el-descriptions-item>

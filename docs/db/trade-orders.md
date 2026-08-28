@@ -14,7 +14,7 @@ DISPATCH_REVIEW 出款审核中 → AWAITING_PAYOUT 待出款执行 → COMPLETE
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `order_no` | string | `TO-YYYYMMDD-序号`，唯一（counters 原子自增） |
+| `order_no` | string | `YYYYMMDD-序号`，每日从 `001` 开始，最大 `999`，唯一（counters 原子自增） |
 | `customer_id` + `customer_name/customer_code/person_name` | — | 客户引用 + 建单快照 |
 | `business_type` | string \| null | 准入业务类型（KYC 场景名，联动订单 KYC 徽标） |
 | `trade_type` | string | 现金换U / U换现金 / 转账换U / U换转账 / 法币换法币（可自定义） |

@@ -5,8 +5,9 @@
  */
 import {
   DispatchChannel,
+  FundingKind,
+  fundingKindOf,
   type TradeOrderVO,
-  type TreasuryAccountVO,
   type VaAccountVO,
 } from "@bv/shared";
 import {
@@ -29,18 +30,25 @@ const { t } = useI18n();
 
 const submitting = ref(false);
 const vaAccounts = ref<VaAccountVO[]>([]);
-const treasury = ref<TreasuryAccountVO[]>([]);
 const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, text: "" });
 
-const sgb = computed(() => treasury.value.find(item => item.key.startsWith("bank-SGB-")));
-const sino = computed(() => treasury.value.find(item => item.key.startsWith("bank-SINO-")));
+const channelOptions = computed(() => {
+  const options: DispatchChannel[] = [DispatchChannel.SGB, DispatchChannel.SINO];
+  if (props.order && fundingKindOf(props.order, "outflow") === FundingKind.CHAIN) options.push(DispatchChannel.WALLET);
+  return options;
+});
+const channelLabel = (channel: DispatchChannel) => (channel === DispatchChannel.WALLET ? "钱包" : channel);
 
 watch(visible, async open => {
   if (!open || !props.order) return;
   const context = await fetchDispatchContext(props.order.id);
   vaAccounts.value = context.va_accounts;
-  treasury.value = context.treasury;
-  form.channel = vaAccounts.value.length ? DispatchChannel.SGB : DispatchChannel.SINO;
+  form.channel =
+    fundingKindOf(props.order, "outflow") === FundingKind.CHAIN
+      ? DispatchChannel.WALLET
+      : vaAccounts.value.length
+        ? DispatchChannel.SGB
+        : DispatchChannel.SINO;
   form.text = "";
 });
 
@@ -64,6 +72,22 @@ async function copyVa(va: VaAccountVO) {
     document.body.removeChild(el);
   }
   showToast(t("orders.dispatch.vaCopied", { label: va.label }));
+}
+
+async function copyDispatchText() {
+  const text = form.text.trim();
+  if (!text) return showToast(t("orders.dispatch.warnEmptyText"));
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+  showSuccessToast(t("orders.dispatch.textCopied"));
 }
 
 async function submit() {
@@ -90,14 +114,6 @@ async function submit() {
 
       <div class="channel-strip">
         <div>
-          <span>{{ t("orders.dispatch.sgbAvailable") }}</span>
-          <strong>{{ sgb ? fmtMoney(sgb.currency, sgb.available) : "—" }}</strong>
-        </div>
-        <div>
-          <span>{{ t("orders.dispatch.sinoAvailable") }}</span>
-          <strong>{{ sino ? fmtMoney(sino.currency, sino.available) : "—" }}</strong>
-        </div>
-        <div>
           <span>{{ t("orders.dispatch.payableAmount") }}</span>
           <strong>{{ order ? fmtMoney(order.buy_currency, order.buy_amount) : "—" }}</strong>
         </div>
@@ -106,13 +122,13 @@ async function submit() {
       <div class="section-label">{{ t("orders.dispatch.channel") }}</div>
       <div class="channel-options">
         <button
-          v-for="channel in [DispatchChannel.SGB, DispatchChannel.SINO]"
+          v-for="channel in channelOptions"
           :key="channel"
           type="button"
           :class="{ active: form.channel === channel }"
           @click="form.channel = channel"
         >
-          {{ channel }}
+          {{ channelLabel(channel) }}
         </button>
       </div>
 
@@ -132,7 +148,10 @@ async function submit() {
         <p v-else class="va-empty">{{ t("orders.dispatch.noVa") }}</p>
       </template>
 
-      <div class="section-label">{{ t("orders.dispatch.textLabel") }}</div>
+      <div class="section-label text-label-row">
+        <span>{{ t("orders.dispatch.textLabel") }}</span>
+        <button type="button" @click="copyDispatchText">{{ t("orders.dispatch.copyText") }}</button>
+      </div>
       <van-field
         v-model="form.text"
         type="textarea"
@@ -174,7 +193,7 @@ h3 {
 
 .channel-strip {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -202,6 +221,21 @@ h3 {
   font-size: 13px;
   color: #606266;
   margin: 12px 0 8px;
+}
+
+.text-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.text-label-row button {
+  border: 0;
+  background: transparent;
+  color: #409eff;
+  font-size: 13px;
+  padding: 0;
 }
 
 .channel-options {

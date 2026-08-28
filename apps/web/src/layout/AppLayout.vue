@@ -13,10 +13,12 @@ import {
   Tickets,
   User,
 } from "@element-plus/icons-vue";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { type AppLocale, localizeText, setLocale } from "@/i18n";
+import { fetchApplications } from "@/api/access";
+import { fetchOrders } from "@/api/order";
 import { useAuthStore } from "@/stores/auth";
 import UserProfileDialogs from "./UserProfileDialogs.vue";
 
@@ -38,7 +40,7 @@ const menu: MenuItem[] = [
   { path: "/dashboard", titleKey: "layout.menu.dashboard", icon: Monitor },
   /* 客户管理全员可见（用户 2026-08-27：每个角色都可以看客户列表与详情抽屉） */
   { path: "/customers", titleKey: "layout.menu.customers", icon: User },
-  { path: "/orders", titleKey: "layout.menu.orders", icon: Tickets, roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET"] },
+  { path: "/orders", titleKey: "layout.menu.orders", icon: Tickets, roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"] },
   { path: "/department", titleKey: "layout.menu.department", icon: Calendar, roles: ["MANAGER"] },
   {
     path: "/quote",
@@ -93,6 +95,55 @@ function switchLocale(target: AppLocale) {
 const visibleMenu = computed(() =>
   menu.filter(item => !item.roles || item.roles.includes(auth.roleCode)),
 );
+const rejectedAccessCount = ref(0);
+const orderTodoCount = ref(0);
+const canViewAccess = computed(() => ["AGENT", "OPS"].includes(auth.roleCode));
+const canViewOrders = computed(() => ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"].includes(auth.roleCode));
+const canShowOrderBadge = computed(() => ["AGENT", "OPS", "FINANCE", "PAYOUT"].includes(auth.roleCode));
+
+async function loadAccessBadge() {
+  if (!canViewAccess.value) {
+    rejectedAccessCount.value = 0;
+    return;
+  }
+  try {
+    const result = await fetchApplications({
+      status: "SUPPLEMENT_REQUIRED",
+      page: 1,
+      page_size: 1,
+    });
+    rejectedAccessCount.value = result.total;
+  } catch {
+    rejectedAccessCount.value = 0;
+  }
+}
+
+async function loadOrderBadge() {
+  if (!canShowOrderBadge.value) {
+    orderTodoCount.value = 0;
+    return;
+  }
+  try {
+    const result = await fetchOrders({
+      scope: "mine",
+      page: 1,
+      page_size: 1,
+    });
+    orderTodoCount.value = result.stats.todo;
+  } catch {
+    orderTodoCount.value = 0;
+  }
+}
+
+function loadBadges() {
+  void Promise.all([loadAccessBadge(), loadOrderBadge()]);
+}
+
+function syncOrderBadge(event: Event) {
+  if (!canShowOrderBadge.value) return;
+  const count = (event as CustomEvent<number>).detail;
+  if (typeof count === "number" && Number.isFinite(count)) orderTodoCount.value = Math.max(0, count);
+}
 
 /* 审计 3.4：环境标示按构建环境区分，不再写死"正式环境" */
 const envNote = computed(() => (import.meta.env.PROD ? t("layout.envProd") : t("layout.envDev")));
@@ -107,12 +158,12 @@ const searchText = ref("");
 const profileVisible = ref(false);
 const passwordVisible = ref(false);
 
-/* 审计 3.5：单号前缀路由（TO/SCH→订单，APP→审核跟踪，RC→合规队列），其余按客户搜索 */
+/* 审计 3.5：单号路由（订单 YYYYMMDD-001 / SCH→订单，APP→审核跟踪，RC→合规队列），其余按客户搜索 */
 function submitSearch() {
   const keyword = searchText.value.trim();
   const upper = keyword.toUpperCase();
   let path = "/customers";
-  if (/^(TO|SCH)-/.test(upper)) path = "/orders";
+  if (/^(SCH)-/.test(upper) || /^\d{8}-\d{3}$/.test(upper)) path = "/orders";
   else if (/^APP-/.test(upper)) path = "/access/documents";
   else if (/^RC-/.test(upper)) path = "/compliance/review";
   router.push({ path, query: keyword ? { kw: keyword } : {} });
@@ -122,6 +173,20 @@ function logout() {
   auth.logout();
   router.push("/login");
 }
+
+onMounted(() => {
+  loadBadges();
+  window.addEventListener("order-todo-count-updated", syncOrderBadge);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("order-todo-count-updated", syncOrderBadge);
+});
+
+watch(
+  () => [auth.roleCode, route.fullPath],
+  () => loadBadges(),
+);
 </script>
 
 <template>
@@ -140,15 +205,39 @@ function logout() {
           <el-sub-menu v-if="item.children" :index="item.path">
             <template #title>
               <el-icon><component :is="item.icon" /></el-icon>
-              <span>{{ t(item.titleKey) }}</span>
+              <span class="menu-title">
+                {{ t(item.titleKey) }}
+                <span
+                  v-if="item.path === '/access' && rejectedAccessCount"
+                  class="menu-badge"
+                >
+                  {{ rejectedAccessCount > 99 ? "99+" : rejectedAccessCount }}
+                </span>
+              </span>
             </template>
             <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
-              {{ t(child.titleKey) }}
+              <span class="menu-child-title">
+                {{ t(child.titleKey) }}
+                <span
+                  v-if="child.path === '/access/documents' && rejectedAccessCount"
+                  class="menu-badge menu-badge--child"
+                >
+                  {{ rejectedAccessCount > 99 ? "99+" : rejectedAccessCount }}
+                </span>
+              </span>
             </el-menu-item>
           </el-sub-menu>
           <el-menu-item v-else :index="item.path">
             <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ t(item.titleKey) }}</span>
+            <span class="menu-title">
+              {{ t(item.titleKey) }}
+              <span
+                v-if="item.path === '/orders' && orderTodoCount"
+                class="menu-badge"
+              >
+                {{ orderTodoCount > 99 ? "99+" : orderTodoCount }}
+              </span>
+            </span>
           </el-menu-item>
         </template>
       </el-menu>
@@ -278,6 +367,47 @@ function logout() {
 
 .menu :deep(.el-sub-menu .el-menu) {
   background: rgba(0, 0, 0, 0.18);
+}
+
+.menu-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.menu-child-title {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.menu-badge {
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: #343c45;
+  border-radius: 999px;
+  color: #f4f7fb;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 22px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.menu-badge--child {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 20px;
 }
 
 .sidebar-note {

@@ -74,6 +74,13 @@ export class QueryOrderDto {
   @MaxLength(100)
   keyword?: string;
 
+  /** 创建时间筛选（毫秒时间戳） */
+  @IsOptional()
+  created_from?: number;
+
+  @IsOptional()
+  created_to?: number;
+
   /** 逗号分隔状态列表 */
   @IsOptional()
   @IsString()
@@ -82,6 +89,11 @@ export class QueryOrderDto {
   @IsOptional()
   @IsMongoId()
   customer_id?: string;
+
+  /** 当前角色待处理订单 */
+  @IsOptional()
+  @IsIn(["mine"])
+  scope?: "mine";
 
   /** 入款/出款资金形态筛选（fiat=法币或现金 / chain=链上） */
   @IsOptional()

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import {
   DispatchChannel,
+  FundingKind,
+  fundingKindOf,
   type TradeOrderVO,
-  type TreasuryAccountVO,
   type VaAccountVO,
 } from "@bv/shared";
 import { ElMessage } from "element-plus";
@@ -18,18 +19,25 @@ const { t } = useI18n();
 
 const submitting = ref(false);
 const vaAccounts = ref<VaAccountVO[]>([]);
-const treasury = ref<TreasuryAccountVO[]>([]);
 const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, text: "" });
 
-const sgb = computed(() => treasury.value.find(item => item.key.startsWith("bank-SGB-")));
-const sino = computed(() => treasury.value.find(item => item.key.startsWith("bank-SINO-")));
+const channelOptions = computed(() => {
+  const options: DispatchChannel[] = [DispatchChannel.SGB, DispatchChannel.SINO];
+  if (props.order && fundingKindOf(props.order, "outflow") === FundingKind.CHAIN) options.push(DispatchChannel.WALLET);
+  return options;
+});
+const channelLabel = (channel: DispatchChannel) => (channel === DispatchChannel.WALLET ? "钱包" : channel);
 
 watch(visible, async open => {
   if (!open || !props.order) return;
   const context = await fetchDispatchContext(props.order.id);
   vaAccounts.value = context.va_accounts;
-  treasury.value = context.treasury;
-  form.channel = vaAccounts.value.length ? DispatchChannel.SGB : DispatchChannel.SINO;
+  form.channel =
+    fundingKindOf(props.order, "outflow") === FundingKind.CHAIN
+      ? DispatchChannel.WALLET
+      : vaAccounts.value.length
+        ? DispatchChannel.SGB
+        : DispatchChannel.SINO;
   form.text = "";
 });
 
@@ -55,6 +63,22 @@ async function copyVa(va: VaAccountVO) {
   ElMessage.success(t("orders.dispatch.vaCopied", { label: va.label }));
 }
 
+async function copyDispatchText() {
+  const text = form.text.trim();
+  if (!text) return ElMessage.warning(t("orders.dispatch.warnEmptyText"));
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+  ElMessage.success(t("orders.dispatch.textCopied"));
+}
+
 async function submit() {
   const order = props.order!;
   const text = form.text.trim();
@@ -74,15 +98,14 @@ async function submit() {
 <template>
   <el-dialog v-model="visible" :title="`${t('orders.common.startDispatch')} · ${order?.order_no ?? ''}`" width="640px" :close-on-click-modal="false">
     <div class="channel-strip">
-      <div><span>{{ t("orders.dispatch.sgbAvailable") }}</span><strong>{{ sgb ? `${sgb.currency} ${sgb.available.toLocaleString("en-US")}` : "—" }}</strong></div>
-      <div><span>{{ t("orders.dispatch.sinoAvailable") }}</span><strong>{{ sino ? `${sino.currency} ${sino.available.toLocaleString("en-US")}` : "—" }}</strong></div>
       <div><span>{{ t("orders.dispatch.payableAmount") }}</span><strong>{{ order ? `${order.buy_currency} ${order.buy_amount.toLocaleString("en-US")}` : "—" }}</strong></div>
     </div>
     <el-form label-position="top">
       <el-form-item :label="t('orders.dispatch.channel')">
         <el-radio-group v-model="form.channel">
-          <el-radio-button :value="DispatchChannel.SGB">SGB</el-radio-button>
-          <el-radio-button :value="DispatchChannel.SINO">SINO</el-radio-button>
+          <el-radio-button v-for="channel in channelOptions" :key="channel" :value="channel">
+            {{ channelLabel(channel) }}
+          </el-radio-button>
         </el-radio-group>
       </el-form-item>
 
@@ -105,7 +128,13 @@ async function submit() {
         <p v-else class="va-empty">{{ t("orders.dispatch.noVa") }}</p>
       </div>
 
-      <el-form-item :label="t('orders.dispatch.textLabel')">
+      <el-form-item>
+        <template #label>
+          <div class="text-label-row">
+            <span>{{ t("orders.dispatch.textLabel") }}</span>
+            <el-button size="small" text @click="copyDispatchText">{{ t("orders.dispatch.copyText") }}</el-button>
+          </div>
+        </template>
         <el-input
           v-model="form.text"
           type="textarea"
@@ -126,7 +155,7 @@ async function submit() {
 <style scoped>
 .channel-strip {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -199,6 +228,14 @@ async function submit() {
   margin: 0;
   color: #909399;
   font-size: 12px;
+}
+
+.text-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
 }
 
 .mono-text :deep(textarea) {

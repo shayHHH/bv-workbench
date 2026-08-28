@@ -2,6 +2,9 @@
 import {
   AccessStatusLabel,
   ApplicationMaterialStatus,
+  MaterialSource,
+  type KycItem,
+  type KycScenarioVO,
   ReviewType,
   ReviewTypeLabel,
   type AccessApplicationVO,
@@ -19,6 +22,7 @@ import {
   submitApplication,
   uploadFile,
 } from "@/api/access";
+import { fetchActiveScenarios } from "@/api/kyc";
 import { formatDateTime, formatRelative } from "@/utils/format";
 
 const route = useRoute();
@@ -26,6 +30,7 @@ const router = useRouter();
 const { t } = useI18n();
 
 const application = ref<AccessApplicationVO | null>(null);
+const scenarios = ref<KycScenarioVO[]>([]);
 const loading = ref(false);
 const submitting = ref(false);
 const fileInput = ref<HTMLInputElement>();
@@ -36,9 +41,10 @@ interface SupplementRow {
   name: string;
   size: number;
   file: FileRef | null;
-  /** 匹配的被退回材料 material_key */
+  /** 匹配的当前渠道 KYC 材料项 item_id */
   targetKey: string;
   uploading: boolean;
+  uploadTask?: Promise<void>;
 }
 
 const uploads = ref<SupplementRow[]>([]);
@@ -50,27 +56,44 @@ const returnedMaterials = computed(
     ) ?? [],
 );
 
-const keptMaterials = computed(
-  () =>
-    application.value?.materials.filter(
-      material => material.status !== ApplicationMaterialStatus.RETURNED,
-    ) ?? [],
+const selectedScenario = computed(
+  () => scenarios.value.find(item => item.id === application.value?.scenario_id) ?? null,
 );
 
-const allMatched = computed(
-  () => uploads.value.length > 0 && uploads.value.every(row => row.targetKey && !row.uploading),
+const selectedChannel = computed(
+  () =>
+    selectedScenario.value?.channels.find(
+      channel => channel.channel_code === application.value?.channel_code,
+    ) ?? null,
 );
+
+const materialOptions = computed<KycItem[]>(
+  () => selectedChannel.value?.sections.flatMap(section => section.items) ?? [],
+);
+
+const optionNameById = computed(
+  () => new Map(materialOptions.value.map(item => [item.item_id, item.item_name])),
+);
+
+const hasUploading = computed(() => uploads.value.some(row => row.uploading));
+const allMatched = computed(() => uploads.value.length > 0 && uploads.value.every(row => row.targetKey));
 
 const footerHint = computed(() => {
   if (!uploads.value.length) return t("access.supplement.hintNeedFile");
   if (uploads.value.some(row => !row.targetKey)) return t("access.supplement.hintUnmatched");
+  if (hasUploading.value) return t("access.supplement.hintUploading");
   return t("access.supplement.hintReady");
 });
 
 async function load() {
   loading.value = true;
   try {
-    application.value = await fetchApplication(route.params.id as string);
+    const [app, activeScenarios] = await Promise.all([
+      fetchApplication(route.params.id as string),
+      fetchActiveScenarios(),
+    ]);
+    application.value = app;
+    scenarios.value = activeScenarios;
   } finally {
     loading.value = false;
   }
@@ -88,25 +111,27 @@ async function addFiles(list: FileList | File[]) {
   }
   const usedTargets = new Set(uploads.value.map(row => row.targetKey).filter(Boolean));
   for (const file of accepted) {
-    // 自动预猜匹配：取第一个尚未被占用的被退回材料（demo 行为）
-    const target = returnedMaterials.value.find(m => !usedTargets.has(m.material_key));
-    if (target) usedTargets.add(target.material_key);
+    const target = materialOptions.value.find(m => !usedTargets.has(m.item_id));
+    if (target) usedTargets.add(target.item_id);
     const row: SupplementRow = {
       key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: file.name,
       size: file.size,
       file: null,
-      targetKey: target?.material_key ?? "",
+      targetKey: target?.item_id ?? "",
       uploading: true,
     };
     uploads.value.push(row);
-    try {
-      row.file = await uploadFile(file);
-    } catch {
-      uploads.value = uploads.value.filter(item => item.key !== row.key);
-    } finally {
-      row.uploading = false;
-    }
+    row.uploadTask = uploadFile(file)
+      .then(ref => {
+        row.file = ref;
+      })
+      .catch(() => {
+        uploads.value = uploads.value.filter(item => item.key !== row.key);
+      })
+      .finally(() => {
+        row.uploading = false;
+      });
   }
 }
 
@@ -125,24 +150,66 @@ function removeRow(key: string) {
   uploads.value = uploads.value.filter(row => row.key !== key);
 }
 
+function displayMaterialName(material: { requirement_item_id: string | null; name: string }) {
+  return material.requirement_item_id
+    ? (optionNameById.value.get(material.requirement_item_id) ?? material.name)
+    : material.name;
+}
+
+async function previewMaterial(file: FileRef | null) {
+  if (!file) return;
+  try {
+    await openFilePreview(file);
+  } catch {
+    /* 提示由拦截器处理 */
+  }
+}
+
 async function submitSupplement() {
   const app = application.value;
   if (!app || !allMatched.value) return;
   submitting.value = true;
   try {
-    const replacement = new Map(uploads.value.map(row => [row.targetKey, row]));
+    await Promise.all(uploads.value.map(row => row.uploadTask).filter(Boolean));
+    if (!uploads.value.length || uploads.value.some(row => !row.file)) {
+      ElMessage.warning(t("access.supplement.hintNeedFile"));
+      return;
+    }
+    const replacement = new Map<string, SupplementRow[]>();
+    for (const row of uploads.value) {
+      const rows = replacement.get(row.targetKey) ?? [];
+      rows.push(row);
+      replacement.set(row.targetKey, rows);
+    }
+    const nextMaterials = app.materials.map(material => {
+      const rows = material.requirement_item_id
+        ? replacement.get(material.requirement_item_id)
+        : undefined;
+      const replaced =
+        material.status === ApplicationMaterialStatus.RETURNED && rows?.length ? rows.shift() : null;
+      return {
+        material_key: material.material_key,
+        requirement_item_id: material.requirement_item_id,
+        name: replaced ? replaced.name : material.name,
+        source: replaced ? MaterialSource.LOCAL_UPLOAD : material.source,
+        file: replaced ? replaced.file : material.file,
+        library_material_id: replaced ? null : material.library_material_id,
+      };
+    });
+    for (const [itemId, rows] of replacement) {
+      for (const row of rows) {
+        nextMaterials.push({
+          material_key: row.key,
+          requirement_item_id: itemId,
+          name: row.name,
+          source: MaterialSource.LOCAL_UPLOAD,
+          file: row.file,
+          library_material_id: null,
+        });
+      }
+    }
     await saveApplicationDraft(app.id, {
-      materials: app.materials.map(material => {
-        const replaced = replacement.get(material.material_key);
-        return {
-          material_key: material.material_key,
-          requirement_item_id: material.requirement_item_id,
-          name: replaced ? replaced.name : material.name,
-          source: material.source,
-          file: replaced ? replaced.file : material.file,
-          library_material_id: replaced ? null : material.library_material_id,
-        };
-      }),
+      materials: nextMaterials,
     });
     await submitApplication(app.id, (app.review_type as ReviewType) || ReviewType.FX);
     ElMessage.success(t("access.supplement.submitted", { no: app.application_no }));
@@ -202,9 +269,20 @@ onMounted(load);
             <p class="reject-note">{{ application.latest_review?.reason || t("access.supplement.rejectFallback") }}</p>
             <div v-if="returnedMaterials.length" class="target-chips">
               <span class="chips-label">{{ t("access.supplement.neededItems") }}</span>
-              <el-tag v-for="material in returnedMaterials" :key="material.material_key" type="warning" effect="plain">
-                {{ material.name }}
-              </el-tag>
+              <button
+                v-for="material in returnedMaterials"
+                :key="material.material_key"
+                class="material-chip"
+                type="button"
+                :disabled="!material.file"
+                @click="previewMaterial(material.file)"
+              >
+                {{ displayMaterialName(material) }}
+                <span v-if="material.name !== displayMaterialName(material)" class="chip-file-name">
+                  {{ material.name }}
+                </span>
+                <span v-if="material.file" class="chip-preview">{{ t("access.common.preview") }}</span>
+              </button>
             </div>
           </el-card>
 
@@ -231,14 +309,17 @@ onMounted(load);
               <span class="doc-icon">{{ /pdf$/i.test(row.name) ? "PDF" : "IMG" }}</span>
               <span class="file-main">
                 <strong>{{ row.name }}</strong>
-                <small>{{ sizeText(row.size) }} · {{ t("access.supplement.pendingSubmit") }}</small>
+                <small>
+                  {{ sizeText(row.size) }} ·
+                  {{ row.uploading ? t("access.supplement.uploading") : t("access.supplement.pendingSubmit") }}
+                </small>
               </span>
               <el-select v-model="row.targetKey" class="map-select" :placeholder="t('access.supplement.matchPh')" size="small">
                 <el-option
-                  v-for="material in returnedMaterials"
-                  :key="material.material_key"
-                  :value="material.material_key"
-                  :label="t('access.supplement.needSupplementSuffix', { name: material.name })"
+                  v-for="material in materialOptions"
+                  :key="material.item_id"
+                  :value="material.item_id"
+                  :label="material.item_name"
                 />
               </el-select>
               <button class="remove" type="button" @click="removeRow(row.key)">×</button>
@@ -254,26 +335,6 @@ onMounted(load);
         </div>
 
         <div class="side-col">
-          <el-card shadow="never">
-            <template #header>
-              <strong>{{ t("access.supplement.keptTitle") }}</strong>
-              <span class="head-sub">{{ t("access.supplement.keptHint") }}</span>
-            </template>
-            <div v-for="material in keptMaterials" :key="material.material_key" class="kept-row">
-              <strong>{{ material.name }}</strong>
-              <el-button
-                v-if="material.file"
-                size="small"
-                link
-                type="primary"
-                @click="openFilePreview(material.file!)"
-              >
-                {{ t("access.common.preview") }}
-              </el-button>
-            </div>
-            <el-empty v-if="!keptMaterials.length" :description="t('access.supplement.noOtherMaterials')" :image-size="60" />
-          </el-card>
-
           <el-card shadow="never">
             <template #header><strong>{{ t("access.common.orderLog") }}</strong><span class="head-sub">{{ t("access.common.recentActivity") }}</span></template>
             <ol class="history">
@@ -385,6 +446,43 @@ h1 {
   font-size: 13px;
 }
 
+.material-chip {
+  min-height: 32px;
+  border: 1px solid #f3c27d;
+  border-radius: 6px;
+  background: #fffaf2;
+  color: #d66b00;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.material-chip:disabled {
+  cursor: default;
+}
+
+.material-chip:not(:disabled):hover {
+  border-color: #ff7a00;
+  background: #fff4e6;
+}
+
+.chip-file-name {
+  color: #909399;
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-preview {
+  color: #409eff;
+  font-size: 12px;
+}
+
 .head-sub {
   margin-left: 10px;
   color: #909399;
@@ -480,14 +578,6 @@ h1 {
 .muted {
   color: #909399;
   font-size: 13px;
-}
-
-.kept-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px dashed #ebeef5;
 }
 
 .history {

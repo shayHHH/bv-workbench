@@ -49,6 +49,7 @@ export const DispatchStatusLabel: Record<DispatchStatus, string> = {
 export const DispatchChannel = {
   SGB: "SGB",
   SINO: "SINO",
+  WALLET: "WALLET",
 } as const;
 export type DispatchChannel = (typeof DispatchChannel)[keyof typeof DispatchChannel];
 
@@ -364,6 +365,7 @@ export interface QuoteCandidateVO {
 
 /** 列表响应附带的统计（指标条 + 待办页签计数在前端算需要全量，改为服务端聚合） */
 export interface OrderListStatsVO {
+  todo: number;
   active: number;
   by_status: Record<string, number>;
   exceptions: number;
@@ -418,16 +420,16 @@ export interface CreateDispatchInput {
 
 /* ---- 链上交易哈希校验（钱包运营登记链上出入款） ---- */
 
-/** 各网络交易哈希格式：TRC20（TRON）为 64 位十六进制（无 0x 前缀）；ERC20（ETH）为 0x + 64 位十六进制 */
+/** 各网络交易哈希格式：按链类型校验位数，避免录入外部系统返回的非标准字符时误拦截 */
 export const TX_HASH_PATTERNS: Record<string, RegExp> = {
-  TRC20: /^[0-9a-fA-F]{64}$/,
-  ERC20: /^0x[0-9a-fA-F]{64}$/,
+  TRC20: /^.{64}$/,
+  ERC20: /^0x.{64}$/,
 };
 
 /** 校验失败时的格式提示（前端经 localizeText 转繁体，后端直接用于错误信息） */
 export const TX_HASH_FORMAT_HINTS: Record<string, string> = {
-  TRC20: "TRC20（TRON）交易哈希应为 64 位十六进制字符，不带 0x 前缀",
-  ERC20: "ERC20（ETH）交易哈希应为 0x 开头 + 64 位十六进制字符（共 66 位）",
+  TRC20: "TRC20（TRON）交易哈希应为 64 位字符，不带 0x 前缀",
+  ERC20: "ERC20（ETH）交易哈希应为 0x 开头 + 64 位字符（共 66 位）",
 };
 
 /** 未知网络只做非空校验（向后兼容自定义链） */

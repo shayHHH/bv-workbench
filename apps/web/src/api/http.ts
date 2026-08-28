@@ -26,7 +26,9 @@ http.interceptors.response.use(
     const body = error.response?.data;
     const message = Array.isArray(body?.message)
       ? body?.message[0]
-      : body?.message || error.message || "请求失败";
+      : body?.message ||
+        (error.request ? "无法连接服务器，请确认后端服务已启动" : error.message) ||
+        "请求失败";
     if (error.response?.status === 401) {
       const auth = useAuthStore();
       const wasLoggedIn = auth.isLoggedIn;

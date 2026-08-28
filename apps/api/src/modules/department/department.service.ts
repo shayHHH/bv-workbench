@@ -125,7 +125,7 @@ export class DepartmentService {
         },
         { $group: { _id: "$owner_user_id", count: { $sum: 1 } } },
       ]),
-      // 名下待动作的准入申请（草稿 / 待补件）
+      // 名下待动作的准入申请（草稿 / 被驳回）
       this.accessModel.aggregate<{ _id: Types.ObjectId; count: number }>([
         {
           $match: {
@@ -233,8 +233,10 @@ export class DepartmentService {
         last_login_at: user.last_login_at ? user.last_login_at.toISOString() : null,
       };
     });
+    const memberIds = new Set(memberVOs.map(member => member.user_id));
+    const visibleLeaves = leaves.filter(doc => memberIds.has(String(doc.user_id)));
 
-    return { members: memberVOs, leaves: leaves.map(doc => this.toLeaveVO(doc)) };
+    return { members: memberVOs, leaves: visibleLeaves.map(doc => this.toLeaveVO(doc)) };
   }
 
   /** 指定时间窗内的「已处理」四路聚合：完成订单 / 合规结论 / 出款执行 / 排单审核 */

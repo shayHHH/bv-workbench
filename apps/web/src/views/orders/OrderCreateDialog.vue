@@ -29,7 +29,6 @@ const quotes = ref<QuoteCandidateVO[]>([]);
 const form = reactive({
   customer_id: "",
   business_scenario_id: "",
-  person_name: "",
   trade_type: "转账换U",
   custom_trade_type: "",
   sell_currency: "USD",
@@ -143,7 +142,6 @@ async function submit() {
       customer_id: form.customer_id,
       business_type: pickedScenario?.scenario_name ?? null,
       business_scenario_id: form.business_scenario_id || null,
-      person_name: form.person_name.trim() || null,
       trade_type: tradeType,
       sell_currency: form.sell_currency,
       sell_amount: sellAmount,
@@ -257,9 +255,6 @@ async function submit() {
           </el-select>
         </el-form-item>
       </div>
-      <el-form-item :label="t('orders.create.personName')">
-        <el-input v-model="form.person_name" maxlength="80" :placeholder="t('orders.create.personNamePlaceholder')" />
-      </el-form-item>
       <el-form-item :label="t('orders.common.remark')">
         <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" :placeholder="t('orders.create.remarkPlaceholder')" />
       </el-form-item>

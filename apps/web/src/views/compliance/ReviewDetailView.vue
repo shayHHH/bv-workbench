@@ -2,6 +2,8 @@
 import {
   ApplicationMaterialStatus,
   ApplicationMaterialStatusLabel,
+  CustomerKindLabel,
+  CustomerSubTypeLabel,
   MaterialSourceLabel,
   type MaterialSource,
   ReviewAuditTypeLabel,
@@ -32,6 +34,16 @@ const caseId = route.params.id as string;
 const loading = ref(true);
 const submitting = ref(false);
 const reviewCase = ref<ReviewCaseVO | null>(null);
+
+function customerKindText(kind: string | null | undefined) {
+  if (!kind) return "—";
+  return localizeText(CustomerKindLabel[kind as keyof typeof CustomerKindLabel] ?? kind);
+}
+
+function subjectTypeText(kind: string | null | undefined) {
+  if (!kind) return "—";
+  return localizeText(CustomerSubTypeLabel[kind as keyof typeof CustomerSubTypeLabel] ?? kind);
+}
 
 /** 单份材料判定草稿：material_key -> {verdict, reason} */
 const verdicts = reactive(new Map<string, { verdict: "ACCEPTED" | "RETURNED"; reason: string }>());
@@ -85,6 +97,18 @@ function toggleAccept(materialKey: string) {
 
 function verdictOf(materialKey: string) {
   return verdicts.get(materialKey);
+}
+
+function requirementNameOf(material: ApplicationMaterialVO): string {
+  if (!material.requirement_item_id) return "";
+  return reviewCase.value?.requirements?.find(req => req.item_id === material.requirement_item_id)?.name ?? "";
+}
+
+function rejectMaterialLabel(material: ApplicationMaterialVO): string {
+  const fileName = material.file?.original_name || material.name;
+  const requirementName = requirementNameOf(material);
+  if (!requirementName || requirementName === fileName) return fileName;
+  return `${fileName} · ${requirementName}`;
 }
 
 function collectVerdicts(returnKeys: string[], reason: string | null): ReviewMaterialVerdict[] {
@@ -289,20 +313,39 @@ onMounted(load);
         <div class="detail-main">
           <el-card shadow="never" class="block">
             <h4 class="block-title">{{ t("compliance.detail.formTitle") }}</h4>
-            <el-descriptions :column="4" border>
-              <el-descriptions-item :label="t('compliance.detail.scenario')">{{ reviewCase.scenario_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.channel')">{{ reviewCase.channel_name || reviewCase.channel_code || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.submittedBy')">{{ reviewCase.submitted_by_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.submittedAt')">{{ new Date(reviewCase.submitted_at).toLocaleString() }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.completeness')">
-                {{ reviewCase.completeness.done }} / {{ reviewCase.completeness.total }}
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.cnName')">{{ reviewCase.form_snapshot.customer_cn_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.enName')" :span="2">{{ reviewCase.form_snapshot.customer_en_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.businessNote')" :span="4">
-                {{ reviewCase.form_snapshot.business_note || "—" }}
-              </el-descriptions-item>
-            </el-descriptions>
+            <div class="submission-grid">
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.cnName") }}</span>
+                <strong>{{ reviewCase.form_snapshot.customer_cn_name || "—" }}</strong>
+              </div>
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.enName") }}</span>
+                <strong>{{ reviewCase.form_snapshot.customer_en_name || "—" }}</strong>
+              </div>
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.customerKind") }}</span>
+                <strong>
+                  {{ customerKindText(reviewCase.customer_kind) }}
+                  <template v-if="reviewCase.customer_sub_type"> · {{ subjectTypeText(reviewCase.customer_sub_type) }}</template>
+                </strong>
+              </div>
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.scenario") }}</span>
+                <strong>{{ reviewCase.scenario_name || "—" }}</strong>
+              </div>
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.channel") }}</span>
+                <strong>{{ reviewCase.channel_name || reviewCase.channel_code || "—" }}</strong>
+              </div>
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.submitterAndTime") }}</span>
+                <strong>{{ reviewCase.submitted_by_name || "—" }} · {{ formatDateTime(reviewCase.submitted_at) }}</strong>
+              </div>
+              <div class="submission-field wide">
+                <span>{{ t("compliance.detail.businessNote") }}</span>
+                <strong>{{ reviewCase.form_snapshot.business_note || "—" }}</strong>
+              </div>
+            </div>
           </el-card>
 
           <el-card shadow="never" class="block">
@@ -443,8 +486,13 @@ onMounted(load);
               v-for="material in reviewCase.materials_snapshot"
               :key="material.material_key"
               :value="material.material_key"
-              :label="material.name"
-            />
+              :label="rejectMaterialLabel(material)"
+            >
+              <div class="return-option">
+                <span>{{ material.file?.original_name || material.name }}</span>
+                <small v-if="requirementNameOf(material)">{{ requirementNameOf(material) }}</small>
+              </div>
+            </el-option>
           </el-select>
         </template>
         <el-input
@@ -518,6 +566,53 @@ h1 {
 
 .block-title {
   margin: 0 0 10px;
+}
+
+.submission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.submission-field {
+  min-width: 0;
+  background: #fff;
+  padding: 12px 14px;
+  border-right: 1px solid #ebeef5;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.submission-field:nth-child(3n),
+.submission-field.wide {
+  border-right: none;
+}
+
+.submission-field:nth-child(n + 4):not(.wide) {
+  border-bottom: none;
+}
+
+.submission-field.wide {
+  grid-column: 1 / -1;
+  border-top: 1px solid #ebeef5;
+  border-bottom: none;
+}
+
+.submission-field span {
+  display: block;
+  margin-bottom: 6px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.submission-field strong {
+  display: block;
+  min-height: 20px;
+  color: #303133;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .muted {
@@ -648,5 +743,23 @@ h1 {
 
 :deep(.history-row td) {
   color: #909399;
+}
+
+.return-option {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.return-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.return-option small {
+  color: #909399;
+  font-size: 12px;
 }
 </style>

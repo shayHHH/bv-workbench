@@ -14,6 +14,10 @@ export const router = createRouter({
       meta: { title: "登录", public: true },
     },
     {
+      path: "/m/home",
+      redirect: "/dashboard",
+    },
+    {
       path: "/",
       component: AppLayout,
       children: [

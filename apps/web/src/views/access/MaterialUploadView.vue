@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import {
   CustomerKind,
+  CustomerKindLabel,
   CustomerStatus,
   CustomerStatusLabel,
+  CustomerSubTypeLabel,
   KycItemTypeLabel,
   KycItemValidity,
   MaterialSource,
@@ -61,6 +63,8 @@ const state = reactive({
   searching: false,
   scenarioId: "",
   channelIndex: 0,
+  customerCnName: "",
+  customerEnName: "",
   note: "",
   files: [] as UploadRow[],
   libraryOpen: false,
@@ -95,9 +99,22 @@ function customerLabel(candidate: CustomerVO): string {
   return `${candidate.customer_code || t("access.common.noCode")} - ${candidate.name}`;
 }
 
+function customerMeta(candidate: CustomerVO): string {
+  const parts = [
+    localizeText(CustomerKindLabel[candidate.customer_kind]),
+    candidate.sub_type ? localizeText(CustomerSubTypeLabel[candidate.sub_type]) : null,
+    candidate.customer_kind === CustomerKind.SUB_CUSTOMER && candidate.parent_name
+      ? `${t("access.upload.parentBroker")} ${candidate.parent_name}`
+      : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
 function selectCustomer(id: string) {
   const found = state.candidates.find(item => item.id === id) ?? null;
   state.customer = found;
+  state.customerCnName = found?.name ?? "";
+  state.customerEnName = "";
   state.libraryItems = [];
   state.files = state.files.filter(row => row.source !== "library");
   if (state.libraryOpen && found) loadLibrary();
@@ -107,6 +124,8 @@ function onCustomerCreated(customer: CustomerVO) {
   createCustomerVisible.value = false;
   state.candidates = [customer, ...state.candidates];
   state.customer = customer;
+  state.customerCnName = customer.name;
+  state.customerEnName = "";
   ElMessage.success(t("access.upload.customerSelected", { name: customer.name }));
 }
 
@@ -151,10 +170,6 @@ function pickChannel(index: number) {
 function channelLabel(name: string): string {
   return /渠道|供应商|专列/.test(name) ? name : t("access.upload.channelSuffix", { name });
 }
-
-const restrictionText = computed(() =>
-  (selectedChannel.value?.restrictions ?? []).map(item => item.content).join("；"),
-);
 
 /** 当前渠道全部材料项拍平（文件行"关联"下拉与核验清单共用） */
 const flatItems = computed<KycItem[]>(
@@ -332,16 +347,28 @@ function validityText(item: KycItem): string {
 /* ---------------- 提交 ---------------- */
 
 const hasDraft = computed(
-  () => !!state.files.length || !!state.customer || !!state.note || state.libraryOpen,
+  () =>
+    !!state.files.length ||
+    !!state.customer ||
+    !!state.customerCnName ||
+    !!state.customerEnName ||
+    !!state.note ||
+    state.libraryOpen,
 );
 
-const canSubmit = computed(() => !!state.customer && state.files.length > 0 && !state.submitting);
+const canSubmit = computed(() => {
+  if (!state.customer || !state.files.length || state.submitting) return false;
+  if (state.destination === "library") return true;
+  return !!selectedScenario.value && !!selectedChannel.value;
+});
 
 function clearAll() {
   Object.assign(state, {
     customer: null,
     scenarioId: scenarios.value[0]?.id ?? "",
     channelIndex: 0,
+    customerCnName: "",
+    customerEnName: "",
     note: "",
     files: [],
     libraryOpen: false,
@@ -389,8 +416,8 @@ async function submitAll() {
       scenario_id: selectedScenario.value.id,
       channel_code: selectedChannel.value.channel_code,
       form: {
-        customer_cn_name: state.customer.name,
-        customer_en_name: null,
+        customer_cn_name: state.customerCnName.trim() || state.customer.name,
+        customer_en_name: state.customerEnName.trim() || null,
         business_note: state.note || null,
       },
       materials: state.files.map(row => ({
@@ -472,7 +499,7 @@ onMounted(async () => {
             >
               <span>{{ customerLabel(candidate) }}</span>
               <span class="option-meta">
-                {{ candidate.customer_kind === CustomerKind.SUB_CUSTOMER ? `${t("access.upload.subCustomer")}${candidate.parent_name ? `（${candidate.parent_name}）` : ""}` : "" }}
+                {{ customerMeta(candidate) }}
               </span>
             </el-option>
           </el-select>
@@ -511,6 +538,36 @@ onMounted(async () => {
         </div>
       </div>
 
+      <div class="pair-grid form-grid">
+        <div class="field">
+          <label>{{ t("access.upload.cnName") }} <span class="optional">{{ t("access.upload.optional") }}</span></label>
+          <el-input
+            v-model="state.customerCnName"
+            maxlength="100"
+            :placeholder="t('access.upload.cnNamePh')"
+          />
+        </div>
+        <div class="field">
+          <label>{{ t("access.upload.enName") }} <span class="optional">{{ t("access.upload.optional") }}</span></label>
+          <el-input
+            v-model="state.customerEnName"
+            maxlength="100"
+            :placeholder="t('access.upload.enNamePh')"
+          />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>{{ t("access.upload.noteField") }} <span class="optional">{{ t("access.upload.optional") }}</span></label>
+        <el-input
+          v-model="state.note"
+          type="textarea"
+          :rows="2"
+          maxlength="1000"
+          :placeholder="t('access.upload.notePh')"
+        />
+      </div>
+
       <div class="field">
         <label>{{ t("access.upload.channelField") }} <em>*</em></label>
         <div v-if="selectedScenario?.channels.length" class="channel-chips">
@@ -528,25 +585,6 @@ onMounted(async () => {
           </button>
         </div>
         <p v-else class="muted">{{ t("access.upload.noChannels") }}</p>
-      </div>
-
-      <div v-if="restrictionText" class="restriction-alert">
-        <span class="warn-icon">⚠</span>
-        <p>
-          <strong>{{ t("access.upload.restrictionTitle", { name: channelLabel(selectedChannel!.channel_name) }) }}</strong>
-          {{ restrictionText }}
-        </p>
-      </div>
-
-      <div class="field">
-        <label>{{ t("access.upload.noteField") }} <span class="optional">{{ t("access.upload.optional") }}</span></label>
-        <el-input
-          v-model="state.note"
-          type="textarea"
-          :rows="2"
-          maxlength="1000"
-          :placeholder="t('access.upload.notePh')"
-        />
       </div>
     </section>
 
@@ -1024,33 +1062,6 @@ h1 {
   height: 7px;
   border-radius: 50%;
   background: #ff7a00;
-}
-
-/* 渠道限制警示条 */
-.restriction-alert {
-  display: flex;
-  gap: 10px;
-  background: #fdf6ec;
-  border: 1px solid #faecd8;
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin-bottom: 14px;
-}
-
-.warn-icon {
-  color: #c2660a;
-  flex: none;
-}
-
-.restriction-alert p {
-  margin: 0;
-  color: #8a5a00;
-  line-height: 1.7;
-  font-size: 13px;
-}
-
-.restriction-alert strong {
-  color: #c2660a;
 }
 
 /* 上传区 */

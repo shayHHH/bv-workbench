@@ -26,7 +26,7 @@ const form = reactive({
   generate_code: true,
   name: "",
   parent_id: "",
-  sub_type: "",
+  sub_type: "PERSONAL",
   region: "",
   phone: "",
   remark: "",
@@ -72,7 +72,7 @@ watch(visible, open => {
     generate_code: true,
     name: "",
     parent_id: "",
-    sub_type: "",
+    sub_type: "PERSONAL",
     region: "",
     phone: "",
     remark: "",
@@ -116,7 +116,7 @@ async function submit() {
       customer_kind: form.customer_kind,
       customer_code: needsCode.value ? form.customer_code : null,
       parent_id: isSub.value ? form.parent_id : null,
-      sub_type: isSub.value && form.sub_type ? (form.sub_type as never) : null,
+      sub_type: form.sub_type ? (form.sub_type as never) : null,
       region: form.region ? (form.region as never) : null,
       phone: form.phone || null,
       remark: form.remark || null,
@@ -197,8 +197,8 @@ async function submit() {
           <el-input v-model="form.name" :placeholder="t('customer.create.namePh')" maxlength="100" />
         </el-form-item>
 
-        <el-form-item v-if="isSub" :label="t('customer.create.subTypeOptional')">
-          <el-select v-model="form.sub_type" clearable :placeholder="t('customer.create.subTypePh')" style="width: 100%">
+        <el-form-item :label="t('customer.create.subjectType')">
+          <el-select v-model="form.sub_type" clearable :placeholder="t('customer.create.subjectTypePh')" style="width: 100%">
             <el-option
               v-for="(label, value) in CustomerSubTypeLabel"
               :key="value"

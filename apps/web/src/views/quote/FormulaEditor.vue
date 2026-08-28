@@ -164,13 +164,13 @@ onMounted(() => {
 
 <style scoped>
 .formula-editor {
-  min-height: 40px;
+  min-height: 30px;
   border: 1px solid #dcdfe6;
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 4px 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
-  line-height: 1.9;
+  line-height: 20px;
   background: #fff;
   outline: none;
   word-break: break-all;
@@ -196,10 +196,10 @@ onMounted(() => {
   color: #d9531e;
   border: 1px solid #f6b895;
   border-radius: 999px;
-  padding: 0 10px;
+  padding: 0 9px;
   margin: 0 2px;
   font-size: 12px;
-  line-height: 22px;
+  line-height: 20px;
   user-select: none;
   white-space: nowrap;
 }

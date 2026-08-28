@@ -30,7 +30,7 @@ import {
   VaAccountVO,
   type FileRef,
 } from "@bv/shared";
-import { Connection, Model, Types } from "mongoose";
+import { Connection, FilterQuery, Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
 import { nextBusinessNo } from "../../common/sequence";
 import { AccessApplication, AccessApplicationDocument } from "../access/access-application.schema";
@@ -194,36 +194,44 @@ export class OrderService {
 
   /* ---------------- 列表 / 详情 ---------------- */
 
-  async list(query: QueryOrderDto): Promise<PageResult<TradeOrderVO> & { stats: OrderListStatsVO }> {
+  async list(query: QueryOrderDto, operator?: JwtPayload): Promise<PageResult<TradeOrderVO> & { stats: OrderListStatsVO }> {
     const page = query.page || 1;
     const pageSize = Math.min(query.page_size || 10, 50);
-    const filter: Record<string, unknown> = { is_deleted: false };
+    const filter: FilterQuery<TradeOrderDocument> = { is_deleted: false };
     if (query.status) {
       const valid = new Set(Object.values(TradeOrderStatus) as string[]);
       const statuses = query.status.split(",").map(s => s.trim()).filter(s => valid.has(s));
       if (statuses.length) filter.status = { $in: statuses };
     }
     if (query.customer_id) filter.customer_id = new Types.ObjectId(query.customer_id);
+    const createdRange: Record<string, Date> = {};
+    const createdFrom = Number(query.created_from);
+    const createdTo = Number(query.created_to);
+    if (Number.isFinite(createdFrom) && createdFrom > 0) createdRange.$gte = new Date(createdFrom);
+    if (Number.isFinite(createdTo) && createdTo > 0) createdRange.$lte = new Date(createdTo);
+    if (Object.keys(createdRange).length) filter.created_at = createdRange;
     if (query.inflow_kind) filter.sell_currency = query.inflow_kind === "chain" ? "USDT" : { $ne: "USDT" };
     if (query.outflow_kind) filter.buy_currency = query.outflow_kind === "chain" ? "USDT" : { $ne: "USDT" };
     if (query.flag === "exception") filter.exception = { $ne: null };
     if (query.flag === "payment_rejected") filter.payment_rejected = { $ne: null };
     if (query.flag === "dispatch_rejected") filter.dispatch_rejected = { $ne: null };
     if (query.flag === "rejected")
-      filter.$or = [{ payment_rejected: { $ne: null } }, { dispatch_rejected: { $ne: null } }];
+      this.appendAnd(filter, { $or: [{ payment_rejected: { $ne: null } }, { dispatch_rejected: { $ne: null } }] });
     if (query.keyword) {
       const pattern = new RegExp(escapeRegExp(query.keyword.trim()), "i");
-      filter.$and = [
-        {
-          $or: [
-            { order_no: pattern },
-            { customer_name: pattern },
-            { customer_code: pattern },
-            { trade_type: pattern },
-          ],
-        },
-      ];
+      this.appendAnd(filter, {
+        $or: [
+          { order_no: pattern },
+          { customer_name: pattern },
+          { customer_code: pattern },
+          { trade_type: pattern },
+        ],
+      });
     }
+    const todoFilter = this.myTodoFilter(operator?.role_code);
+    if (query.scope === "mine") this.appendAnd(filter, todoFilter ?? { _id: null });
+    const todoCountFilter: FilterQuery<TradeOrderDocument> = { is_deleted: false };
+    if (todoFilter) this.appendAnd(todoCountFilter, todoFilter);
     const [items, total, statuses] = await Promise.all([
       this.orderModel
         .find(filter)
@@ -237,7 +245,8 @@ export class OrderService {
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
     ]);
-    const [exceptions, paymentRejected, dispatchRejected, inflowFiat, inflowChain, outflowFiat, outflowChain] = await Promise.all([
+    const [todo, exceptions, paymentRejected, dispatchRejected, inflowFiat, inflowChain, outflowFiat, outflowChain] = await Promise.all([
+      todoFilter ? this.orderModel.countDocuments(todoCountFilter) : Promise.resolve(0),
       this.orderModel.countDocuments({ is_deleted: false, exception: { $ne: null }, status: { $ne: TradeOrderStatus.CANCELLED } }),
       this.orderModel.countDocuments({ is_deleted: false, payment_rejected: { $ne: null } }),
       this.orderModel.countDocuments({ is_deleted: false, dispatch_rejected: { $ne: null } }),
@@ -257,6 +266,7 @@ export class OrderService {
       page,
       page_size: pageSize,
       stats: {
+        todo,
         active,
         by_status: byStatus,
         exceptions,
@@ -268,6 +278,50 @@ export class OrderService {
         outflow_chain: outflowChain,
       },
     };
+  }
+
+  private appendAnd(filter: FilterQuery<TradeOrderDocument>, condition: FilterQuery<TradeOrderDocument>): void {
+    const existing = Array.isArray(filter.$and) ? filter.$and : [];
+    filter.$and = [...existing, condition];
+  }
+
+  private myTodoFilter(roleCode?: string): FilterQuery<TradeOrderDocument> | null {
+    switch (roleCode) {
+      case "AGENT":
+        return {
+          status: { $in: [TradeOrderStatus.PENDING_KYC, TradeOrderStatus.AWAITING_DISPATCH] },
+        };
+      case "OPS":
+        return {
+          status: TradeOrderStatus.DISPATCH_REVIEW,
+        };
+      case "FINANCE":
+        return {
+          status: TradeOrderStatus.AWAITING_INFLOW,
+        };
+      case "WALLET":
+        return {
+          $or: [
+            { status: TradeOrderStatus.AWAITING_INFLOW, sell_currency: "USDT" },
+            { status: TradeOrderStatus.AWAITING_PAYOUT, buy_currency: "USDT" },
+          ],
+        };
+      case "PAYOUT":
+        return {
+          status: TradeOrderStatus.AWAITING_PAYOUT,
+        };
+      case "MANAGER":
+        return {
+          exception: { $ne: null },
+          status: { $nin: [TradeOrderStatus.COMPLETED, TradeOrderStatus.CANCELLED] },
+        };
+      case "ADMIN":
+        return {
+          status: { $nin: [TradeOrderStatus.COMPLETED, TradeOrderStatus.CANCELLED] },
+        };
+      default:
+        return null;
+    }
   }
 
   async getById(id: string): Promise<TradeOrderVO> {
@@ -283,17 +337,19 @@ export class OrderService {
     return dispatch ? toDispatchVO(dispatch) : null;
   }
 
-  /** 排单弹窗上下文：客户 VA 账户 + SGB/SINO 通道可用余额 */
+  /** 排单弹窗上下文：客户 VA 账户 + 银行/钱包通道可用余额 */
   async dispatchContext(orderId: string): Promise<{
     va_accounts: VaAccountVO[];
     treasury: TreasuryAccountVO[];
   }> {
     const doc = await this.findOrFail(orderId);
     /* 通道可用余额按订单出款币种查询（审计 1.4.10），无对应账户则前端显示 — */
+    const treasuryKeys = [`bank-SGB-${doc.buy_currency}`, `bank-SINO-${doc.buy_currency}`];
+    if (fundingKindOf(shape(doc), "outflow") === FundingKind.CHAIN) treasuryKeys.push(`wallet-${doc.buy_currency}`);
     const [vaAccounts, treasury] = await Promise.all([
       this.vaModel.find({ customer_id: doc.customer_id, is_deleted: false }).lean(),
       this.treasuryModel
-        .find({ key: { $in: [`bank-SGB-${doc.buy_currency}`, `bank-SINO-${doc.buy_currency}`] }, is_deleted: false })
+        .find({ key: { $in: treasuryKeys }, is_deleted: false })
         .lean(),
     ]);
     return {
@@ -456,6 +512,9 @@ export class OrderService {
     if (doc.status !== TradeOrderStatus.AWAITING_DISPATCH) throw new ConflictException("订单不在待出款排单状态");
     const text = dto.text.trim();
     if (!text) throw new BadRequestException("请粘贴或编辑排单文案");
+    if (dto.channel === DispatchChannel.WALLET && fundingKindOf(shape(doc), "outflow") !== FundingKind.CHAIN) {
+      throw new BadRequestException("钱包通道仅用于链上出款订单");
+    }
     let vaAccount: PayoutOrder["va_account"] = null;
     if (dto.channel === DispatchChannel.SGB) {
       const va = dto.va_account_id
@@ -486,7 +545,11 @@ export class OrderService {
       final_text: text,
       payout_account:
         dto.payout_account?.trim() ||
-        (dto.channel === DispatchChannel.SGB ? `${(doc.person_name || doc.customer_name).toUpperCase()} SGB VA` : "pobo cq開-開"),
+        (dto.channel === DispatchChannel.SGB
+          ? `${(doc.person_name || doc.customer_name).toUpperCase()} SGB VA`
+          : dto.channel === DispatchChannel.WALLET
+            ? `${doc.buy_currency} 钱包`
+            : "pobo cq開-開"),
       va_account: vaAccount,
       payee: parsed.payee || doc.person_name || doc.customer_name,
       payee_bank: [parsed.bankName, parsed.accountNumber].filter(Boolean).join(" · ") || "見排单文案",

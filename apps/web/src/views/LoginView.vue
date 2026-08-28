@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { login } from "@/api/auth";
 import { useAuthStore } from "@/stores/auth";
+import { defaultHomePath } from "@/utils/device";
 
 const route = useRoute();
 const router = useRouter();
@@ -20,7 +21,7 @@ async function submit() {
   try {
     const result = await login(username.value.trim(), password.value);
     auth.setSession(result.token, result.user);
-    router.replace((route.query.redirect as string) || "/dashboard");
+    router.replace((route.query.redirect as string) || defaultHomePath(result.user.role?.code ?? ""));
   } catch {
     /* 错误提示由 http 拦截器统一处理 */
   } finally {

@@ -7,6 +7,7 @@ export default defineConfig({
   // @bv/shared 是 workspace 链接包（CJS 产物），需要显式预打包才能按 ESM 命名导出使用
   optimizeDeps: {
     include: ["@bv/shared"],
+    force: true,
   },
   resolve: {
     alias: {
@@ -14,6 +15,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: "127.0.0.1",
     port: 5173,
     proxy: {
       "/api": {

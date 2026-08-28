@@ -77,7 +77,7 @@ export interface DepartmentMemberVO {
   today_done: number;
   /** 所选统计范围内已处理（done_period=today 时等于 today_done） */
   period_done: number;
-  /** 待处理：名下进行中订单 + 待补件/草稿申请 + 分配到的待审核案件等 */
+  /** 待处理：名下进行中订单 + 被驳回/草稿申请 + 分配到的待审核案件等 */
   pending: number;
   last_login_at: string | null;
 }

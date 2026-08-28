@@ -22,8 +22,8 @@ export class OrderController {
 
   @Get()
   @Roles(...ORDER_VIEW_ROLES)
-  list(@Query() query: QueryOrderDto) {
-    return this.orderService.list(query);
+  list(@Query() query: QueryOrderDto, @CurrentUser() operator: JwtPayload) {
+    return this.orderService.list(query, operator);
   }
 
   @Get("quote-candidates")

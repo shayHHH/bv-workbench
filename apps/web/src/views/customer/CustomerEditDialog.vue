@@ -116,7 +116,7 @@ async function submit() {
       customer_kind: form.customer_kind,
       customer_code: form.customer_code.trim() || null,
       parent_id: isSub.value ? form.parent_id : null,
-      sub_type: isSub.value && form.sub_type ? (form.sub_type as never) : null,
+      sub_type: form.sub_type ? (form.sub_type as never) : null,
       region: form.region ? (form.region as never) : null,
       phone: form.phone || null,
       remark: form.remark || null,
@@ -186,9 +186,9 @@ async function submit() {
           <el-input v-model="form.name" maxlength="100" />
         </el-form-item>
 
-        <el-form-item v-if="isSub" :label="t('customer.edit.subTypeOptional')">
-          <el-select v-model="form.sub_type" clearable :placeholder="t('customer.edit.subTypePh')" style="width: 100%">
-            <el-option v-for="(label, value) in CustomerSubTypeLabel" :key="value" :label="label" :value="value" />
+        <el-form-item :label="t('customer.edit.subjectType')">
+          <el-select v-model="form.sub_type" clearable :placeholder="t('customer.edit.subjectTypePh')" style="width: 100%">
+            <el-option v-for="(label, value) in CustomerSubTypeLabel" :key="value" :label="localizeText(label)" :value="value" />
           </el-select>
         </el-form-item>
 
