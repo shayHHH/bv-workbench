@@ -88,10 +88,6 @@ export class TradeOrder {
     deposit_address: string | null;
     deposit_by: string | null;
     deposit_at: Date | null;
-    payout_address: string | null;
-    kya_passed: boolean;
-    kya_by: string | null;
-    kya_at: Date | null;
   } | null;
 
   @Prop({ type: Object, default: null })

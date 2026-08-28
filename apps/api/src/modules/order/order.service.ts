@@ -15,6 +15,8 @@ import {
   FundingKind,
   fundingKindOf,
   fundingOwnerRole,
+  isValidTxHash,
+  TX_HASH_FORMAT_HINTS,
   KYC_BADGE_NONE,
   OrderKycBadge,
   OrderListStatsVO,
@@ -26,6 +28,7 @@ import {
   TradeOrderVO,
   TreasuryAccountVO,
   VaAccountVO,
+  type FileRef,
 } from "@bv/shared";
 import { Connection, Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
@@ -203,11 +206,6 @@ export class OrderService {
     if (query.customer_id) filter.customer_id = new Types.ObjectId(query.customer_id);
     if (query.inflow_kind) filter.sell_currency = query.inflow_kind === "chain" ? "USDT" : { $ne: "USDT" };
     if (query.outflow_kind) filter.buy_currency = query.outflow_kind === "chain" ? "USDT" : { $ne: "USDT" };
-    if (query.kya_pending === "1") {
-      filter.buy_currency = "USDT";
-      filter.status = { $in: [TradeOrderStatus.AWAITING_INFLOW, TradeOrderStatus.AWAITING_DISPATCH] };
-      filter["wallet_ops.kya_passed"] = { $ne: true };
-    }
     if (query.flag === "exception") filter.exception = { $ne: null };
     if (query.flag === "payment_rejected") filter.payment_rejected = { $ne: null };
     if (query.flag === "dispatch_rejected") filter.dispatch_rejected = { $ne: null };
@@ -239,7 +237,7 @@ export class OrderService {
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
     ]);
-    const [exceptions, paymentRejected, dispatchRejected, inflowFiat, inflowChain, outflowFiat, outflowChain, kyaPending] = await Promise.all([
+    const [exceptions, paymentRejected, dispatchRejected, inflowFiat, inflowChain, outflowFiat, outflowChain] = await Promise.all([
       this.orderModel.countDocuments({ is_deleted: false, exception: { $ne: null }, status: { $ne: TradeOrderStatus.CANCELLED } }),
       this.orderModel.countDocuments({ is_deleted: false, payment_rejected: { $ne: null } }),
       this.orderModel.countDocuments({ is_deleted: false, dispatch_rejected: { $ne: null } }),
@@ -247,12 +245,6 @@ export class OrderService {
       this.orderModel.countDocuments({ is_deleted: false, status: TradeOrderStatus.AWAITING_INFLOW, sell_currency: "USDT" }),
       this.orderModel.countDocuments({ is_deleted: false, status: TradeOrderStatus.AWAITING_PAYOUT, buy_currency: { $ne: "USDT" } }),
       this.orderModel.countDocuments({ is_deleted: false, status: TradeOrderStatus.AWAITING_PAYOUT, buy_currency: "USDT" }),
-      this.orderModel.countDocuments({
-        is_deleted: false,
-        buy_currency: "USDT",
-        status: { $in: [TradeOrderStatus.AWAITING_INFLOW, TradeOrderStatus.AWAITING_DISPATCH] },
-        "wallet_ops.kya_passed": { $ne: true },
-      }),
     ]);
     const byStatus = Object.fromEntries(statuses.map(item => [item._id, item.count]));
     const active = Object.entries(byStatus)
@@ -274,7 +266,6 @@ export class OrderService {
         inflow_chain: inflowChain,
         outflow_fiat: outflowFiat,
         outflow_chain: outflowChain,
-        kya_pending: kyaPending,
       },
     };
   }
@@ -413,21 +404,6 @@ export class OrderService {
     return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
 
-  async walletKya(id: string, address: string, operator: JwtPayload): Promise<TradeOrderVO> {
-    const doc = await this.findOrFail(id);
-    if (fundingKindOf(shape(doc), "outflow") !== FundingKind.CHAIN) throw new BadRequestException("该订单出款不走链上");
-    doc.wallet_ops = {
-      ...(doc.wallet_ops ?? emptyWalletOps()),
-      payout_address: address.trim(),
-      kya_passed: true,
-      kya_by: operator.display_name,
-      kya_at: new Date(),
-    };
-    this.log(doc, "客户地址 KYA 通过", `${address.trim()} · 白名单校验通过，建议先做小额测试`, operator);
-    await doc.save();
-    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
-  }
-
   /* ---------------- 入款确认（登记即确认） ---------------- */
 
   async inflowConfirm(id: string, dto: FundingActionDto, operator: JwtPayload): Promise<TradeOrderVO> {
@@ -435,7 +411,10 @@ export class OrderService {
     if (doc.status !== TradeOrderStatus.AWAITING_INFLOW) throw new ConflictException("订单不在待客户入款状态");
     this.assertFundingOwner(doc, "inflow", operator);
     const kind = fundingKindOf(shape(doc), "inflow");
-    if (kind === FundingKind.CHAIN && !dto.hash?.trim()) throw new BadRequestException("请填写 Transaction Hash");
+    if (kind === FundingKind.CHAIN) {
+      if (!dto.hash?.trim()) throw new BadRequestException("请填写 Transaction Hash");
+      this.assertTxHashFormat(dto.chain, dto.hash);
+    }
     if (kind === FundingKind.CASH && !dto.place?.trim()) throw new BadRequestException("请填写交收地点");
 
     doc.inflow_mark = markOf(dto, operator, doc.sell_currency);
@@ -559,14 +538,14 @@ export class OrderService {
     this.assertFundingOwner(doc, "outflow", operator);
     const kind = fundingKindOf(shape(doc), "outflow");
     if (kind === FundingKind.CHAIN) {
-      if (!doc.wallet_ops?.kya_passed) throw new BadRequestException("客户收 U 地址 KYA 未通过，不能执行链上出款");
       if (!dto.hash?.trim()) throw new BadRequestException("请填写 Transaction Hash");
+      this.assertTxHashFormat(dto.chain, dto.hash);
     }
     if (kind === FundingKind.BANK && !dto.account?.trim()) throw new BadRequestException("请填写出款账户");
     if (kind === FundingKind.CASH && !dto.place?.trim()) throw new BadRequestException("请填写交收地点");
 
     doc.outflow_mark = markOf(dto, operator, doc.buy_currency);
-    const receiptName = dto.voucher?.trim() || (dto.hash ? `${dto.hash.slice(0, 12)}…` : "手工登记");
+    const receiptName = voucherLabel(dto.voucher) || (dto.hash ? `${dto.hash.slice(0, 12)}…` : "手工登记");
     if (doc.dispatch_id) {
       await this.payoutModel.updateOne(
         { _id: doc.dispatch_id, status: DispatchStatus.AWAITING_PAYOUT },
@@ -577,6 +556,7 @@ export class OrderService {
             paid_at: new Date(),
             receipt: {
               file_name: receiptName,
+              file: isFileRef(dto.voucher) ? dto.voucher : null,
               reference: dto.hash?.trim() || dto.account?.trim() || null,
               note: null,
               uploaded_by: operator.display_name,
@@ -609,7 +589,7 @@ export class OrderService {
     }
     doc.dispatch_id = null;
     doc.dispatch_rejected = { reason: reason || "执行异常，需重新排单", by: operator.display_name, at: new Date() };
-    this.advance(doc, TradeOrderStatus.AWAITING_DISPATCH, operator, "执行异常退回", `${reason || "账户错误 / KYA 失败 / 通道不可用"}，订单回到待出款排单`);
+    this.advance(doc, TradeOrderStatus.AWAITING_DISPATCH, operator, "执行异常退回", `${reason || "账户错误 / 通道不可用"}，订单回到待出款排单`);
     await doc.save();
     return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
   }
@@ -664,6 +644,15 @@ export class OrderService {
     const owner = fundingOwnerRole(shape(doc), side);
     if (operator.role_code !== owner && operator.role_code !== "ADMIN") {
       throw new ForbiddenException(`该动作由${ROLE_NAME.get(owner) ?? owner}执行`);
+    }
+  }
+
+  /** 按所选网络校验交易哈希位数/前缀（TRC20 64 位十六进制；ERC20 0x+64 位） */
+  private assertTxHashFormat(chain: string | null | undefined, hash: string): void {
+    if (!isValidTxHash(chain, hash)) {
+      throw new BadRequestException(
+        TX_HASH_FORMAT_HINTS[chain ?? ""] ?? "Transaction Hash 格式不正确",
+      );
     }
   }
 
@@ -880,10 +869,6 @@ export class OrderService {
             deposit_address: doc.wallet_ops.deposit_address,
             deposit_by: doc.wallet_ops.deposit_by,
             deposit_at: doc.wallet_ops.deposit_at ? new Date(doc.wallet_ops.deposit_at).toISOString() : null,
-            payout_address: doc.wallet_ops.payout_address,
-            kya_passed: doc.wallet_ops.kya_passed,
-            kya_by: doc.wallet_ops.kya_by,
-            kya_at: doc.wallet_ops.kya_at ? new Date(doc.wallet_ops.kya_at).toISOString() : null,
           }
         : null,
       inflow_mark: fundingMarkVO(doc.inflow_mark),
@@ -932,10 +917,6 @@ function emptyWalletOps() {
     deposit_address: null,
     deposit_by: null,
     deposit_at: null,
-    payout_address: null,
-    kya_passed: false,
-    kya_by: null,
-    kya_at: null,
   };
 }
 
@@ -946,7 +927,7 @@ function markOf(dto: FundingActionDto, operator: JwtPayload, currency = "") {
     amount: dto.amount,
     currency,
     account: dto.account?.trim() || null,
-    voucher: dto.voucher?.trim() || null,
+    voucher: normalizeVoucher(dto.voucher),
     chain: dto.chain?.trim() || null,
     hash: dto.hash?.trim() || null,
     confirms: dto.confirms?.trim() || null,
@@ -960,15 +941,33 @@ function markOf(dto: FundingActionDto, operator: JwtPayload, currency = "") {
 
 function inflowDetail(kind: FundingKind, dto: FundingActionDto, currency: string): string {
   const amount = `${currency} ${fmt(dto.amount)}`;
+  const voucher = voucherLabel(dto.voucher);
   if (kind === FundingKind.CHAIN) return `链上收款 · 实际到账 ${amount} · 哈希 ${(dto.hash ?? "").slice(0, 16)}…（${dto.chain || "TRC20"} · ${dto.confirms || "-"} 次确认）`;
   if (kind === FundingKind.CASH) return `现金交收 ${dto.place}${dto.handler ? ` · 交收人 ${dto.handler}` : ""}${dto.token ? ` · 信物 ${dto.token}` : ""}`;
-  return `实收 ${amount} · ${dto.method || "电汇转账"}${dto.voucher ? ` · 凭证 ${dto.voucher}` : ""}${dto.note ? ` · 说明：${dto.note}` : ""}`;
+  return `实收 ${amount} · ${dto.method || "电汇转账"}${voucher ? ` · 凭证 ${voucher}` : ""}${dto.note ? ` · 说明：${dto.note}` : ""}`;
 }
 
 function outflowDetail(kind: FundingKind, dto: FundingActionDto): string {
+  const voucher = voucherLabel(dto.voucher);
   if (kind === FundingKind.CHAIN) return `链上哈希 ${dto.hash}（${dto.chain || "TRC20"} · ${dto.confirms || "-"} 次确认）`;
   if (kind === FundingKind.CASH) return `现金交收 ${dto.place}${dto.handler ? ` · 交收人 ${dto.handler}` : ""}`;
-  return `账户 ${dto.account}${dto.voucher ? ` · 凭证 ${dto.voucher}` : ""}`;
+  return `账户 ${dto.account}${voucher ? ` · 凭证 ${voucher}` : ""}`;
+}
+
+function isFileRef(value: unknown): value is FileRef {
+  return !!value && typeof value === "object" && "storage_key" in value && "original_name" in value;
+}
+
+function normalizeVoucher(voucher: FundingActionDto["voucher"]): FileRef | string | null {
+  if (isFileRef(voucher)) return voucher;
+  if (typeof voucher === "string") return voucher.trim() || null;
+  return null;
+}
+
+function voucherLabel(voucher: FundingActionDto["voucher"]): string {
+  if (isFileRef(voucher)) return voucher.original_name;
+  if (typeof voucher === "string") return voucher.trim();
+  return "";
 }
 
 /** 收益估算：比例取共享 PROFIT_RATE_CONFIG（demo 口径），界面标注"估算"，待接真实成本配置 */
@@ -1006,7 +1005,7 @@ function fundingMarkVO(mark: Record<string, unknown> | null) {
     amount: num(mark.amount),
     currency: (mark.currency as string) ?? "",
     account: (mark.account as string) ?? null,
-    voucher: (mark.voucher as string) ?? null,
+    voucher: normalizeVoucher(mark.voucher as FundingActionDto["voucher"]),
     chain: (mark.chain as string) ?? null,
     hash: (mark.hash as string) ?? null,
     confirms: (mark.confirms as string) ?? null,
@@ -1047,7 +1046,11 @@ function toDispatchVO(doc: PayoutOrder & { _id: Types.ObjectId }): PayoutOrderVO
     paid_by: doc.paid_by,
     paid_at: doc.paid_at ? doc.paid_at.toISOString() : null,
     receipt: doc.receipt
-      ? { ...doc.receipt, uploaded_at: new Date(doc.receipt.uploaded_at).toISOString() }
+      ? {
+          ...doc.receipt,
+          file: isFileRef(doc.receipt.file) ? doc.receipt.file : null,
+          uploaded_at: new Date(doc.receipt.uploaded_at).toISOString(),
+        }
       : null,
   };
 }
@@ -1067,4 +1070,3 @@ function fmtTime(value: Date): string {
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-

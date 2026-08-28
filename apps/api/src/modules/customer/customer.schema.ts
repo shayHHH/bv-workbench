@@ -4,7 +4,6 @@ import {
   CustomerStatus,
   CustomerSubType,
   Region,
-  RiskLevel,
 } from "@bv/shared";
 import { HydratedDocument, Types } from "mongoose";
 import { addBaseFields, BASE_TIMESTAMPS } from "../../common/base.schema";
@@ -38,13 +37,6 @@ export class Customer {
   @Prop({ type: String, enum: Object.values(Region), default: null })
   region: Region | null;
 
-  /** 所属交易员；用户体系上线后迁移为 owner_user_id(ObjectId) */
-  @Prop({ type: String, default: null })
-  agent_name: string | null;
-
-  @Prop({ type: String, default: null })
-  follow_trader: string | null;
-
   @Prop({ type: String, default: null })
   phone: string | null;
 
@@ -53,9 +45,6 @@ export class Customer {
 
   @Prop({ type: String, required: true, enum: Object.values(CustomerStatus), default: CustomerStatus.NEW })
   customer_status: CustomerStatus;
-
-  @Prop({ type: String, required: true, enum: Object.values(RiskLevel), default: RiskLevel.PENDING })
-  risk_level: RiskLevel;
 }
 
 export type CustomerDocument = HydratedDocument<Customer> & {

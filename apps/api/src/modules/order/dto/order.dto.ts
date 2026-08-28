@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { DispatchChannel, TradeOrderStatus } from "@bv/shared";
+import { DispatchChannel, TradeOrderStatus, type FileRef } from "@bv/shared";
 
 export class CreateOrderDto {
   @IsMongoId()
@@ -92,10 +92,6 @@ export class QueryOrderDto {
   @IsIn(["fiat", "chain"])
   outflow_kind?: "fiat" | "chain";
 
-  /** 待地址 KYA（出款链上且 KYA 未过） */
-  @IsOptional()
-  @IsIn(["1"])
-  kya_pending?: string;
 
   /** 待办快捷筛选（demo 页签）：exception / payment_rejected / dispatch_rejected / rejected */
   @IsOptional()
@@ -126,7 +122,7 @@ export class FundingActionDto {
   amount: number;
 
   @IsOptional() @IsString() @MaxLength(100) account?: string | null;
-  @IsOptional() @IsString() @MaxLength(200) voucher?: string | null;
+  @IsOptional() voucher?: FileRef | string | null;
   @IsOptional() @IsString() @MaxLength(20) chain?: string | null;
   @IsOptional() @IsString() @MaxLength(120) hash?: string | null;
   @IsOptional() @IsString() @MaxLength(10) confirms?: string | null;

@@ -24,7 +24,7 @@ export const BUILTIN_ROLES: ReadonlyArray<{ code: string; name: string; descript
   { code: "COMPLIANCE", name: "合规官", description: "处理已提交合规的案件并出具结论" },
   { code: "MANAGER", name: "运营经理", description: "交易总览、资金管理、对账与异常监控" },
   { code: "FINANCE", name: "财务", description: "账务流水、库存管理、对账与佣金" },
-  { code: "WALLET", name: "钱包运营", description: "收 U 地址、KYA、链上出入款登记" },
+  { code: "WALLET", name: "钱包运营", description: "收 U 地址、链上出入款登记" },
 ];
 
 /**

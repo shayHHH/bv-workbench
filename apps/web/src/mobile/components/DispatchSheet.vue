@@ -1,0 +1,289 @@
+<script setup lang="ts">
+/**
+ * 发起出款排单底部弹层（高级交易员）。逻辑对齐桌面 DispatchDialog：
+ * 通道选择 + VA 收款要素复制 + 排单文案提交。
+ */
+import {
+  DispatchChannel,
+  type TradeOrderVO,
+  type TreasuryAccountVO,
+  type VaAccountVO,
+} from "@bv/shared";
+import {
+  Button as VanButton,
+  Field as VanField,
+  Popup as VanPopup,
+  showSuccessToast,
+  showToast,
+} from "vant";
+import { computed, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { createDispatch, fetchDispatchContext } from "@/api/order";
+import { fmtMoney } from "../orderMeta";
+
+const visible = defineModel<boolean>({ required: true });
+const props = defineProps<{ order: TradeOrderVO | null }>();
+const emit = defineEmits<{ done: [order: TradeOrderVO] }>();
+
+const { t } = useI18n();
+
+const submitting = ref(false);
+const vaAccounts = ref<VaAccountVO[]>([]);
+const treasury = ref<TreasuryAccountVO[]>([]);
+const form = reactive({ channel: DispatchChannel.SGB as DispatchChannel, text: "" });
+
+const sgb = computed(() => treasury.value.find(item => item.key.startsWith("bank-SGB-")));
+const sino = computed(() => treasury.value.find(item => item.key.startsWith("bank-SINO-")));
+
+watch(visible, async open => {
+  if (!open || !props.order) return;
+  const context = await fetchDispatchContext(props.order.id);
+  vaAccounts.value = context.va_accounts;
+  treasury.value = context.treasury;
+  form.channel = vaAccounts.value.length ? DispatchChannel.SGB : DispatchChannel.SINO;
+  form.text = "";
+});
+
+/** 一键复制 VA 收款要素（排单文案沿用 demo 繁体口径） */
+async function copyVa(va: VaAccountVO) {
+  const block = [
+    `出款帳戶：${va.label}`,
+    "Account 1：",
+    `Virtual Account Number：${va.virtual_account_number}`,
+    `IBAN：${va.iban}`,
+    `Currency：${va.currency}`,
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(block);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = block;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+  showToast(t("orders.dispatch.vaCopied", { label: va.label }));
+}
+
+async function submit() {
+  const order = props.order!;
+  const text = form.text.trim();
+  if (!text) return showToast(t("orders.dispatch.warnEmptyText"));
+  submitting.value = true;
+  try {
+    const updated = await createDispatch(order.id, { channel: form.channel, text });
+    showSuccessToast(t("orders.dispatch.submitted", { orderNo: order.order_no }));
+    visible.value = false;
+    emit("done", updated);
+  } finally {
+    submitting.value = false;
+  }
+}
+</script>
+
+<template>
+  <van-popup v-model:show="visible" position="bottom" round safe-area-inset-bottom>
+    <div class="dispatch-sheet">
+      <h3>{{ t("orders.common.startDispatch") }}</h3>
+      <p class="brief mono">{{ order?.order_no }}</p>
+
+      <div class="channel-strip">
+        <div>
+          <span>{{ t("orders.dispatch.sgbAvailable") }}</span>
+          <strong>{{ sgb ? fmtMoney(sgb.currency, sgb.available) : "—" }}</strong>
+        </div>
+        <div>
+          <span>{{ t("orders.dispatch.sinoAvailable") }}</span>
+          <strong>{{ sino ? fmtMoney(sino.currency, sino.available) : "—" }}</strong>
+        </div>
+        <div>
+          <span>{{ t("orders.dispatch.payableAmount") }}</span>
+          <strong>{{ order ? fmtMoney(order.buy_currency, order.buy_amount) : "—" }}</strong>
+        </div>
+      </div>
+
+      <div class="section-label">{{ t("orders.dispatch.channel") }}</div>
+      <div class="channel-options">
+        <button
+          v-for="channel in [DispatchChannel.SGB, DispatchChannel.SINO]"
+          :key="channel"
+          type="button"
+          :class="{ active: form.channel === channel }"
+          @click="form.channel = channel"
+        >
+          {{ channel }}
+        </button>
+      </div>
+
+      <template v-if="form.channel === 'SGB'">
+        <div class="section-label">{{ t("orders.dispatch.vaAccount") }}</div>
+        <div v-if="vaAccounts.length" class="va-list">
+          <div v-for="va in vaAccounts" :key="va.id" class="va-card">
+            <div class="va-lines">
+              <div><span>{{ t("orders.dispatch.vaLabel") }}</span><code>{{ va.label }}</code></div>
+              <div><span>VA Number</span><code>{{ va.virtual_account_number }}</code></div>
+              <div><span>IBAN</span><code>{{ va.iban }}</code></div>
+              <div><span>Currency</span><code>{{ va.currency }}</code></div>
+            </div>
+            <van-button size="small" @click="copyVa(va)">{{ t("orders.dispatch.vaCopy") }}</van-button>
+          </div>
+        </div>
+        <p v-else class="va-empty">{{ t("orders.dispatch.noVa") }}</p>
+      </template>
+
+      <div class="section-label">{{ t("orders.dispatch.textLabel") }}</div>
+      <van-field
+        v-model="form.text"
+        type="textarea"
+        :rows="6"
+        :autosize="{ minHeight: 120, maxHeight: 220 }"
+        :placeholder="t('orders.dispatch.textPlaceholder')"
+        class="text-input mono"
+      />
+
+      <div class="buttons">
+        <van-button block @click="visible = false">{{ t("orders.common.cancel") }}</van-button>
+        <van-button block type="primary" :loading="submitting" @click="submit">
+          {{ t("orders.dispatch.submitReview") }}
+        </van-button>
+      </div>
+    </div>
+  </van-popup>
+</template>
+
+<style scoped>
+.dispatch-sheet {
+  padding: 20px 16px 16px;
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+h3 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.brief {
+  color: #909399;
+  font-size: 12px;
+  text-align: center;
+  margin: 0 0 12px;
+}
+
+.channel-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.channel-strip div {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.channel-strip span {
+  display: block;
+  color: #909399;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.channel-strip strong {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.section-label {
+  font-size: 13px;
+  color: #606266;
+  margin: 12px 0 8px;
+}
+
+.channel-options {
+  display: flex;
+  gap: 8px;
+}
+
+.channel-options button {
+  border: 1px solid #dcdfe6;
+  background: #fff;
+  border-radius: 6px;
+  padding: 7px 18px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.channel-options button.active {
+  border-color: #ff7a00;
+  color: #ff7a00;
+  background: #fff7f0;
+}
+
+.va-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.va-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafbfc;
+}
+
+.va-lines {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.va-lines span {
+  color: #909399;
+  margin-right: 8px;
+}
+
+.va-lines code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.va-empty {
+  margin: 0;
+  color: #909399;
+  font-size: 12px;
+}
+
+.text-input {
+  background: #f6f7f9;
+  border-radius: 8px;
+}
+
+.text-input :deep(textarea) {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+</style>

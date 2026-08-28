@@ -133,12 +133,9 @@ export interface CustomerVO {
   parent_name: string | null;
   sub_type: CustomerSubType | null;
   region: Region | null;
-  agent_name: string | null;
-  follow_trader: string | null;
   phone: string | null;
   remark: string | null;
   customer_status: CustomerStatus;
-  risk_level: RiskLevel;
   created_at: string;
   updated_at: string;
   /** 列表接口为中介行内联返回的下级客户 */
@@ -202,12 +199,9 @@ export interface UpdateCustomerInput {
   parent_id?: string | null;
   sub_type?: CustomerSubType | null;
   region?: Region | null;
-  agent_name?: string | null;
-  follow_trader?: string | null;
   phone?: string | null;
   remark?: string | null;
   customer_status?: CustomerStatus;
-  risk_level?: RiskLevel;
 }
 
 /** 新建客户请求体 */
@@ -220,8 +214,6 @@ export interface CreateCustomerInput {
   parent_id?: string | null;
   sub_type?: CustomerSubType | null;
   region?: Region | null;
-  agent_name?: string | null;
-  follow_trader?: string | null;
   phone?: string | null;
   remark?: string | null;
 }

@@ -191,28 +191,28 @@ onMounted(load);
           <el-table-column :label="t('compliance.queue.colCustomerName')" min-width="160">
             <template #default="{ row }"><strong>{{ row.customer_name }}</strong></template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colCustomerCode')" width="110">
+          <el-table-column :label="t('compliance.queue.colCustomerCode')" min-width="100">
             <template #default="{ row }">{{ row.customer_code || t("customer.common.noCode") }}</template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colAuditType')" width="110">
+          <el-table-column :label="t('compliance.queue.colAuditType')" min-width="100">
             <template #default="{ row }">
               <el-tag :type="row.audit_type === 'RESUBMIT' ? 'warning' : 'primary'" size="small" effect="light">
                 {{ localizeText(ReviewAuditTypeLabel[row.audit_type as ReviewAuditType]) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colReviewType')" width="100">
+          <el-table-column :label="t('compliance.queue.colReviewType')" min-width="90">
             <template #default="{ row }">{{ row.review_type ? localizeText(ReviewTypeLabel[row.review_type as ReviewType]) : "--" }}</template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colStatus')" width="110">
+          <el-table-column :label="t('compliance.queue.colStatus')" min-width="90">
             <template #default>
               <span class="status-dot"><i></i>{{ t("compliance.queue.statusPending") }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="submitted_at" :label="t('compliance.queue.colSubmittedTime')" width="180" sortable="custom">
+          <el-table-column prop="submitted_at" :label="t('compliance.queue.colSubmittedTime')" min-width="160" sortable="custom">
             <template #default="{ row }">{{ formatDateTime(row.submitted_at) }}</template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colActions')" width="100" align="right">
+          <el-table-column :label="t('compliance.queue.colActions')" min-width="90" align="right">
             <template #default="{ row }">
               <el-button size="small" type="primary" link @click="openDetail(row)">{{ t("compliance.queue.goReview") }}</el-button>
             </template>
@@ -227,16 +227,16 @@ onMounted(load);
           <el-table-column :label="t('compliance.queue.colCustomerName')" min-width="140">
             <template #default="{ row }"><strong>{{ row.customer_name }}</strong></template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colCustomerCode')" width="100">
+          <el-table-column :label="t('compliance.queue.colCustomerCode')" min-width="100">
             <template #default="{ row }">{{ row.customer_code || t("customer.common.noCode") }}</template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colMyConclusion')" width="100">
+          <el-table-column :label="t('compliance.queue.colMyConclusion')" min-width="90">
             <template #default="{ row }">{{ myConclusion(row) }}</template>
           </el-table-column>
-          <el-table-column prop="reviewed_at" :label="t('compliance.queue.colReviewedAt')" width="175" sortable="custom">
+          <el-table-column prop="reviewed_at" :label="t('compliance.queue.colReviewedAt')" min-width="160" sortable="custom">
             <template #default="{ row }">{{ row.reviewed_at ? formatDateTime(row.reviewed_at) : "--" }}</template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colFinal')" width="110">
+          <el-table-column :label="t('compliance.queue.colFinal')" min-width="100">
             <template #default="{ row }">
               <el-tag v-if="row.final_result" :type="FINAL_TAG[row.final_result] || 'info'" size="small" effect="light">
                 {{ finalText(row) }}
@@ -244,12 +244,12 @@ onMounted(load);
               <span v-else class="muted">--</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colFinalizedAt')" width="160">
+          <el-table-column :label="t('compliance.queue.colFinalizedAt')" min-width="150">
             <template #default="{ row }">
               {{ row.final_result && row.final_result !== "UNRESOLVED" && row.reviewed_at ? formatDateTime(row.reviewed_at) : "--" }}
             </template>
           </el-table-column>
-          <el-table-column :label="t('compliance.queue.colActions')" width="90" align="right">
+          <el-table-column :label="t('compliance.queue.colActions')" min-width="90" align="right">
             <template #default="{ row }">
               <el-button size="small" type="primary" link @click="openDetail(row)">{{ t("compliance.queue.detail") }}</el-button>
             </template>

@@ -531,6 +531,9 @@ h1 {
 .actions-card {
   position: sticky;
   bottom: 0;
+  /* el-table 的 sticky 固定列自带 z-index，结论条必须更高才能整体盖住表格 */
+  z-index: 10;
+  box-shadow: 0 -6px 16px rgba(31, 36, 48, 0.08);
 }
 
 .actions-row {

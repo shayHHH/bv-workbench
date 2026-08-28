@@ -80,12 +80,6 @@ export class OrderController {
     return this.orderService.walletDepositAddress(id, dto.address, operator);
   }
 
-  @Post(":id/wallet/kya")
-  @Roles("WALLET")
-  walletKya(@Param("id") id: string, @Body() dto: WalletAddressDto, @CurrentUser() operator: JwtPayload) {
-    return this.orderService.walletKya(id, dto.address, operator);
-  }
-
   /** 入款登记即确认：责任人（财务/钱包/现金）由服务层按资金形态校验 */
   @Post(":id/inflow-confirm")
   @Roles("FINANCE", "WALLET", "ADMIN")

@@ -66,7 +66,6 @@ const TODO_DEFS = computed<Record<string, TodoTab[]>>(() => ({
   ],
   WALLET: [
     { label: t("orders.list.tabs.chainInflowPending"), params: { status: "AWAITING_INFLOW", inflow_kind: "chain" }, count: s => s.inflow_chain },
-    { label: t("orders.list.tabs.kyaPending"), params: { kya_pending: "1" }, count: s => s.kya_pending },
     { label: t("orders.list.tabs.chainOutflowPending"), params: { status: "AWAITING_PAYOUT", outflow_kind: "chain" }, count: s => s.outflow_chain },
     { label: t("orders.list.tabs.all"), params: {}, count: allCount },
   ],
@@ -108,7 +107,6 @@ async function load() {
       flag: tabDef.params.flag,
       inflow_kind: tabDef.params.inflow_kind,
       outflow_kind: tabDef.params.outflow_kind,
-      kya_pending: tabDef.params.kya_pending,
       page: query.page,
       page_size: query.page_size,
     });
@@ -167,7 +165,6 @@ function rowCta(order: TradeOrderVO): string {
   if (r === "WALLET") {
     if (order.status === TradeOrderStatus.AWAITING_INFLOW && fundingKindOf(order, "inflow") === FundingKind.CHAIN)
       return order.wallet_ops?.deposit_address ? t("orders.list.cta.registerInflow") : t("orders.list.cta.provideDepositAddress");
-    if (fundingKindOf(order, "outflow") === FundingKind.CHAIN && !order.wallet_ops?.kya_passed && ["AWAITING_INFLOW", "AWAITING_DISPATCH"].includes(order.status)) return t("orders.list.cta.kyaRegister");
     if (order.status === TradeOrderStatus.AWAITING_PAYOUT && fundingKindOf(order, "outflow") === FundingKind.CHAIN) return t("orders.common.registerChainTransfer");
   }
   if (r === "PAYOUT" && order.status === TradeOrderStatus.AWAITING_PAYOUT && fundingKindOf(order, "outflow") !== FundingKind.CHAIN) return t("orders.common.payoutRegister");

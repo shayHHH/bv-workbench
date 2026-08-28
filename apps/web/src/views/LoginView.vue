@@ -33,7 +33,7 @@ async function submit() {
   <div class="login-page">
     <div class="login-card">
       <div class="brand">
-        <span class="brand-mark">B</span>
+        <img class="brand-mark" src="/bv.ico" alt="Bitvast" />
         <div>
           <strong>Bitvast</strong>
           <small>Trade Workbench</small>
@@ -98,12 +98,9 @@ async function submit() {
   height: 40px;
   border-radius: 10px;
   background: #231c17;
-  color: #ff7a00;
-  font-weight: 800;
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: contain;
+  padding: 5px;
+  box-sizing: border-box;
 }
 
 .brand strong {

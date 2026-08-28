@@ -268,7 +268,6 @@ export class AccessService {
       );
     }
 
-    const customer = await this.customerModel.findOne({ _id: doc.customer_id }).lean();
     const priorCase = await this.reviewCaseModel.exists({ application_id: doc._id, is_deleted: false });
     const channel = scenario.channels.find(c => c.channel_code === doc.channel_code);
     const restrictionText = channel?.restrictions?.length
@@ -290,7 +289,8 @@ export class AccessService {
       review_type: reviewType,
       audit_type: priorCase ? ReviewAuditType.RESUBMIT : ReviewAuditType.NEW,
       status: ReviewCaseStatus.PENDING,
-      risk_level: customer?.risk_level ?? null,
+      /* 客户主档已移除风险等级；工单风险快照仅保留历史数据 */
+      risk_level: null,
       completeness,
       note: doc.form.business_note,
       form_snapshot: { ...doc.form },

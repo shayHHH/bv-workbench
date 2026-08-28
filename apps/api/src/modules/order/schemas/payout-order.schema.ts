@@ -77,6 +77,7 @@ export class PayoutOrder {
   @Prop({ type: Object, default: null })
   receipt: {
     file_name: string;
+    file?: Record<string, unknown> | null;
     reference: string | null;
     note: string | null;
     uploaded_by: string;

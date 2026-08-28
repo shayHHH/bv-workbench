@@ -6,8 +6,6 @@ import {
   CustomerStatusLabel,
   CustomerSubTypeLabel,
   RegionLabel,
-  RiskLevel,
-  RiskLevelLabel,
   type CustomerVO,
 } from "@bv/shared";
 import { Plus, Refresh, Search } from "@element-plus/icons-vue";
@@ -121,13 +119,6 @@ const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | 
   SUSPENDED: "info",
 };
 
-const riskClass: Record<RiskLevel, string> = {
-  PENDING: "risk-pending",
-  LOW: "risk-low",
-  MEDIUM: "risk-medium",
-  HIGH: "risk-high",
-};
-
 /* el-table 插槽 row 无类型，统一经带类型的辅助函数取展示内容 */
 const kindText = (row: TableRow) =>
   row.rowType === "sub" ? t("customer.list.kindSub") : localizeText(CustomerKindLabel[row.c.customer_kind]);
@@ -138,12 +129,6 @@ const regionText = (row: TableRow) => {
 };
 const statusText = (row: TableRow) => localizeText(CustomerStatusLabel[row.c.customer_status]);
 const statusType = (row: TableRow) => statusTagType[row.c.customer_status];
-const riskText = (row: TableRow) => localizeText(RiskLevelLabel[row.c.risk_level]);
-const riskCls = (row: TableRow) => riskClass[row.c.risk_level];
-const ownerText = (row: TableRow) => {
-  const agent = row.c.agent_name ?? row.parent?.agent_name ?? null;
-  return agent ? t("customer.list.ownerAgent", { name: agent }) : t("customer.common.unassigned");
-};
 const updatedText = (row: TableRow) => formatRelative(row.c.updated_at);
 const isIntermediary = (row: TableRow) =>
   row.rowType === "main" && row.c.customer_kind === CustomerKind.INTERMEDIARY;
@@ -257,14 +242,6 @@ onMounted(load);
           <template #default="{ row }">
             <el-tag :type="statusType(row)" effect="light">{{ statusText(row) }}</el-tag>
           </template>
-        </el-table-column>
-        <el-table-column :label="t('customer.list.colRisk')" min-width="90">
-          <template #default="{ row }">
-            <span :class="riskCls(row)">{{ riskText(row) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('customer.list.colOwner')" min-width="110">
-          <template #default="{ row }">{{ ownerText(row) }}</template>
         </el-table-column>
         <el-table-column :label="t('customer.common.lastUpdated')" min-width="100">
           <template #default="{ row }"><span class="muted">{{ updatedText(row) }}</span></template>
@@ -461,23 +438,6 @@ h1 {
 
 :deep(.sub-row) {
   background: #fafbfc;
-}
-
-.risk-pending {
-  color: #909399;
-}
-
-.risk-low {
-  color: #529b2e;
-}
-
-.risk-medium {
-  color: #c2660a;
-}
-
-.risk-high {
-  color: #c45656;
-  font-weight: 600;
 }
 
 .pager {

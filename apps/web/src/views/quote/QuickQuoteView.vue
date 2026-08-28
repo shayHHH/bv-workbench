@@ -528,81 +528,73 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
 
     <div class="quote-shell" :class="{ 'side-collapsed': sideCollapsed }">
       <div class="main-col">
-        <!-- 客户选择 -->
-        <el-card shadow="never" class="customer-card">
-          <div class="customer-row">
-            <span class="row-label">{{ t("quote.quick.selectCustomer") }}</span>
-            <div ref="searchBoxRef" class="search-box">
-              <el-input
-                v-model="query"
-                :placeholder="t('quote.common.customerPlaceholder')"
-                clearable
-                @focus="dropdownOpen = true"
-                @input="dropdownOpen = true; highlight = 0"
-                @keydown="handleSearchKeydown"
-              />
-              <div v-if="dropdownOpen" class="dropdown">
-                <button
-                  v-for="(option, index) in matches"
-                  :key="option.id"
-                  type="button"
-                  class="dropdown-item"
-                  :class="{ active: index === highlight }"
-                  @mouseenter="highlight = index"
-                  @click="selectCustomer(option)"
-                >
-                  <strong>{{ customerDisplayLabel(option) }}</strong>
-                  <span>{{ option.broker_label ?? t("quote.common.direct") }}</span>
-                </button>
-                <div v-if="!matches.length" class="dropdown-empty">
-                  {{ t("quote.common.noMatchedCustomer") }}
+        <!-- 目标客户 / 中介对象 -->
+        <el-card shadow="never" class="customer-card quote-step-card">
+          <div class="customer-step-content">
+            <div class="step-copy">
+              <strong>{{ t("quote.quick.targetStepTitle") }}</strong>
+              <span>{{ t("quote.quick.targetStepHint") }}</span>
+            </div>
+            <div class="customer-control-row">
+              <div ref="searchBoxRef" class="search-box">
+                <el-input
+                  v-model="query"
+                  :placeholder="t('quote.common.customerPlaceholder')"
+                  clearable
+                  @focus="dropdownOpen = true"
+                  @input="dropdownOpen = true; highlight = 0"
+                  @keydown="handleSearchKeydown"
+                />
+                <div v-if="dropdownOpen" class="dropdown">
+                  <button
+                    v-for="(option, index) in matches"
+                    :key="option.id"
+                    type="button"
+                    class="dropdown-item"
+                    :class="{ active: index === highlight }"
+                    @mouseenter="highlight = index"
+                    @click="selectCustomer(option)"
+                  >
+                    <strong>{{ customerDisplayLabel(option) }}</strong>
+                    <span>{{ option.broker_label ?? t("quote.common.direct") }}</span>
+                  </button>
+                  <div v-if="!matches.length" class="dropdown-empty">
+                    {{ t("quote.common.noMatchedCustomer") }}
+                  </div>
                 </div>
               </div>
+              <el-button :icon="Plus" @click="createDialogVisible = true">
+                {{ t("quote.quick.newCustomer") }}
+              </el-button>
+              <div v-if="selected" class="customer-chips">
+                <span>
+                  {{ t("quote.quick.customerInfo") }}
+                  <strong>{{ selected.customer_code ?? t("quote.common.noCode") }}</strong>
+                </span>
+                <span>
+                  {{ t("quote.quick.brokerInfo") }}
+                  <strong>{{ selected.broker_label ?? t("quote.common.direct") }}</strong>
+                </span>
+                <span>
+                  {{ t("quote.quick.note") }}
+                  <strong>{{ selected.remark ?? "-" }}</strong>
+                </span>
+              </div>
             </div>
-            <el-button :icon="Plus" @click="createDialogVisible = true">
-              {{ t("quote.quick.newCustomer") }}
-            </el-button>
           </div>
         </el-card>
 
-        <!-- 对客报价配置 -->
-        <el-card v-if="config && selected" shadow="never" class="config-card">
-          <div class="config-head">
-            <div>
-              <h2>{{ t("quote.quick.configTitle") }}</h2>
-              <p class="config-sub">
-                {{ customerDisplayLabel(selected) }} ·
-                {{ selected.broker_label ?? t("quote.common.direct") }}
-              </p>
-            </div>
-            <el-button type="primary" @click="recalculate">
-              ⚡ {{ t("quote.quick.calc") }}
-            </el-button>
-          </div>
-
-          <div class="info-strip">
-            <div>
-              <span>{{ t("quote.quick.customerInfo") }}</span>
-              <strong>{{ selected.name }} - {{ selected.customer_code ?? t("quote.common.noCode") }}</strong>
-            </div>
-            <div>
-              <span>{{ t("quote.quick.brokerInfo") }}</span>
-              <strong>{{ selected.broker_label ?? "-" }}</strong>
-            </div>
-            <div>
-              <span>{{ t("quote.quick.brokerPointExpect") }}</span>
-              <strong>-</strong>
-            </div>
-            <div>
-              <span>{{ t("quote.quick.note") }}</span>
-              <strong>{{ selected.remark ?? "-" }}</strong>
-            </div>
-          </div>
-
+        <!-- 对客报价文本与配置 -->
+        <div v-if="config && selected" class="config-card quote-config-area">
           <!-- 文本预览 -->
-          <section class="output-box">
+          <section class="output-box step-section">
             <header class="output-head">
-              <strong>{{ t("quote.quick.outputPreview") }}</strong>
+              <div class="section-title">
+                <div>
+                  <strong>{{ t("quote.quick.outputPreview") }}</strong>
+                  <p>{{ customerDisplayLabel(selected) }} · {{ selected.broker_label ?? t("quote.common.direct") }}</p>
+                </div>
+              </div>
               <div class="output-actions">
                 <el-popover placement="bottom-end" trigger="click" width="240">
                   <template #reference>
@@ -673,6 +665,18 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               </el-checkbox>
             </div>
           </section>
+
+          <div class="config-head">
+            <div class="section-title">
+              <div>
+                <h2>{{ t("quote.quick.configTitle") }}</h2>
+                <p class="config-sub">{{ t("quote.quick.configSubtitle") }}</p>
+              </div>
+            </div>
+            <el-button type="primary" @click="recalculate">
+              ⚡ {{ t("quote.quick.calc") }}
+            </el-button>
+          </div>
 
           <!-- 报价项 -->
           <div class="item-list">
@@ -833,7 +837,7 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
           <div class="add-row">
             <el-button :icon="Plus" @click="addItem">{{ t("quote.quick.addItem") }}</el-button>
           </div>
-        </el-card>
+        </div>
         <el-card v-else v-loading="true" shadow="never" class="config-card loading-card" />
       </div>
 
@@ -999,22 +1003,80 @@ h1 {
   overflow: visible;
 }
 
-.customer-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.quote-step-card :deep(.el-card__body) {
+  padding: 14px 16px;
 }
 
-.row-label {
-  font-size: 13px;
-  color: #606266;
+.customer-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.step-copy {
+  min-width: 0;
+}
+
+.step-copy strong {
+  display: block;
+  font-size: 14px;
+  color: #303133;
+}
+
+.step-copy span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.customer-control-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .search-box {
   position: relative;
   flex: 1;
-  max-width: 420px;
+  min-width: 0;
+}
+
+.customer-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.customer-chips span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fafbfc;
+  padding: 5px 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.customer-chips strong {
+  min-width: 0;
+  color: #303133;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dropdown {
@@ -1067,8 +1129,10 @@ h1 {
 .config-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
+  align-items: center;
+  border-top: 1px solid #e8ebf0;
+  padding-top: 20px;
+  margin: 0 0 12px;
 }
 
 .config-head h2 {
@@ -1082,39 +1146,40 @@ h1 {
   font-size: 12px;
 }
 
-.info-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  background: #f7f8fa;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.info-strip span {
-  display: block;
-  color: #909399;
-  font-size: 12px;
-  margin-bottom: 2px;
-}
-
-.info-strip strong {
-  font-size: 13px;
+.quote-config-area {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 1px 2px rgba(24, 39, 75, 0.04);
 }
 
 .output-box {
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
+  padding: 2px 0 20px;
+  margin-bottom: 0;
+}
+
+.step-section {
+  background: #fff;
 }
 
 .output-head {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.section-title {
+  display: flex;
   align-items: center;
-  margin-bottom: 12px;
+  min-width: 0;
+}
+
+.section-title p {
+  margin: 3px 0 0;
+  color: #909399;
+  font-size: 12px;
 }
 
 .output-actions {
@@ -1133,7 +1198,7 @@ h1 {
 .output-header-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 
 .output-field {
@@ -1159,15 +1224,15 @@ h1 {
 }
 
 .output-body {
-  background: #fafafa;
-  border: 1px dashed #e4e7ed;
+  background: #fbfcfe;
+  border: 1px dashed #dfe5ee;
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   white-space: pre-wrap;
   min-height: 72px;
-  margin: 0 0 12px;
+  margin: 4px 0 14px;
 }
 
 .notes-row {

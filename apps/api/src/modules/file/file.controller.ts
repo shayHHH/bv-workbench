@@ -20,7 +20,7 @@ export class FileController {
 
   /** 上传单个材料文件，返回 FileRef；随草稿保存挂到申请上 */
   @Post()
-  @Roles("AGENT", "OPS", ...COMPLIANCE_DUTY_ROLES, "ADMIN")
+  @Roles("AGENT", "OPS", "FINANCE", "WALLET", "PAYOUT", ...COMPLIANCE_DUTY_ROLES, "ADMIN")
   @UseInterceptors(FileInterceptor("file", { limits: { fileSize: UPLOAD_MAX_SIZE } }))
   async upload(@UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException("未收到文件");

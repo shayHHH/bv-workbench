@@ -7,7 +7,6 @@ import {
   KycItemValidity,
   MaterialSource,
   ReviewType,
-  RiskLevelLabel,
   type CustomerMaterialVO,
   type CustomerVO,
   type FileRef,
@@ -503,13 +502,11 @@ onMounted(async () => {
             </el-tag>
           </div>
           <small class="muted">
-            {{ state.customer.agent_name ? t("access.upload.traderName", { name: state.customer.agent_name }) : t("access.upload.traderUnassigned") }}
-            {{ state.customer.phone ? ` · ${state.customer.phone}` : "" }}
-            {{ state.customer.parent_name ? ` · ${t("access.upload.parentIntermediary", { name: state.customer.parent_name })}` : "" }}
+            {{ state.customer.phone || "" }}
+            {{ state.customer.parent_name ? `${state.customer.phone ? " · " : ""}${t("access.upload.parentIntermediary", { name: state.customer.parent_name })}` : "" }}
           </small>
         </div>
         <div class="strip-side">
-          <el-tag size="small" effect="plain">{{ localizeText(RiskLevelLabel[state.customer.risk_level]) }}</el-tag>
           <el-button link type="primary" size="small" @click="viewCustomer">{{ t("access.upload.viewCustomer") }}</el-button>
         </div>
       </div>

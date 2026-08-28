@@ -10,16 +10,18 @@ import {
   orderStageCurrent,
   TradeOrderStatus,
   TradeOrderStatusLabel,
+  type FileRef,
   type FundingSide,
   type PayoutOrderVO,
   type TradeOrderVO,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Close } from "@element-plus/icons-vue";
+import { Close, Download, View } from "@element-plus/icons-vue";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
+import { openFilePreview } from "@/api/access";
 import {
   approveDispatch,
   cancelOrder,
@@ -32,7 +34,6 @@ import {
   riskStopOrder,
   syncOrderKyc,
   walletDepositAddress,
-  walletKya,
 } from "@/api/order";
 import { useAuthStore } from "@/stores/auth";
 import { formatDateTime } from "@/utils/format";
@@ -54,6 +55,25 @@ const order = ref<TradeOrderVO | null>(null);
 const dispatch = ref<PayoutOrderVO | null>(null);
 const loading = ref(false);
 const tab = ref<"payment" | "payout" | "execution" | "activity">("payment");
+
+type FieldValue = string | FileRef;
+
+function voucherLabel(voucher: FileRef | string | null | undefined): string {
+  if (!voucher) return "";
+  return typeof voucher === "string" ? voucher : voucher.original_name;
+}
+
+function isFileRef(value: unknown): value is FileRef {
+  return !!value && typeof value === "object" && "storage_key" in value && "original_name" in value;
+}
+
+async function openVoucherFile(file: FileRef, download = false): Promise<void> {
+  try {
+    await openFilePreview(file, download);
+  } catch {
+    /* 具体错误信息由 http 拦截器提示 */
+  }
+}
 
 async function load() {
   loading.value = true;
@@ -179,12 +199,12 @@ const STATE_TONE: Record<FundingStateCode, "primary" | "success" | "warning" | "
 };
 
 /** 资金卡字段（按形态与登记内容展示） */
-function markFields(info: FundingInfo, side: FundingSide): Array<[string, string]> {
+function markFields(info: FundingInfo, side: FundingSide): Array<[string, FieldValue]> {
   const o = order.value!;
   const mark = info.mark;
   const expected = side === "inflow" ? o.sell_amount : o.buy_amount;
   const currency = side === "inflow" ? o.sell_currency : o.buy_currency;
-  const rows: Array<[string, string]> = [
+  const rows: Array<[string, FieldValue]> = [
     [side === "inflow" ? t("orders.panel.fields.expectedRecv") : t("orders.panel.fields.expectedPay"), fmtMoney(currency, expected)],
   ];
   /* 实收/实付上屏：登记后展示实际金额，与应收/应付不符时标注差额（审计 1.1.2） */
@@ -205,7 +225,6 @@ function markFields(info: FundingInfo, side: FundingSide): Array<[string, string
   }
   if (info.kind === FundingKind.CHAIN) {
     if (side === "inflow") rows.push([t("orders.panel.fields.companyDepositAddr"), o.wallet_ops?.deposit_address || t("orders.panel.fields.awaitingWalletOps")]);
-    else rows.push([t("orders.panel.fields.customerPayoutAddr"), o.wallet_ops?.payout_address || t("orders.panel.fields.awaitingRegister")], [t("orders.panel.fields.addressKya"), o.wallet_ops?.kya_passed ? t("orders.panel.fields.kyaPassed", { by: o.wallet_ops.kya_by, at: o.wallet_ops.kya_at ? formatDateTime(o.wallet_ops.kya_at) : "" }) : t("orders.panel.fields.kyaNotPassed")]);
     if (mark?.hash) rows.push([t("orders.panel.fields.txHash"), t("orders.panel.fields.hashDetail", { hash: mark.hash.slice(0, 18), chain: mark.chain || "TRC20", confirms: mark.confirms || "-" })]);
   }
   if (info.kind === FundingKind.BANK && mark?.account) rows.push([t("orders.panel.fields.account"), mark.account]);
@@ -314,13 +333,6 @@ const actionBlocks = computed<ActionBlock[]>(() => {
       ],
     });
   }
-  if (role.value === "WALLET" && outflowInfo.kind === FundingKind.CHAIN && !o.wallet_ops?.kya_passed && ([TradeOrderStatus.AWAITING_INFLOW, TradeOrderStatus.AWAITING_DISPATCH, TradeOrderStatus.AWAITING_PAYOUT] as TradeOrderStatus[]).includes(o.status)) {
-    blocks.push({
-      tone: "warning",
-      text: t("orders.panel.actions.kyaText"),
-      buttons: [{ label: t("orders.panel.actions.kyaButton"), primary: true, run: doKya }],
-    });
-  }
   if (role.value === "WALLET" && inflowInfo.kind === FundingKind.CHAIN && !o.wallet_ops?.deposit_address && o.status === TradeOrderStatus.AWAITING_INFLOW) {
     blocks.push({
       tone: "info",
@@ -380,20 +392,6 @@ async function doDepositAddress() {
     if (!value?.trim()) return;
     applyUpdate(await walletDepositAddress(o.id, value.trim()));
     ElMessage.success(t("orders.panel.dialogs.depositDone"));
-  } catch { /* 取消 */ }
-}
-
-async function doKya() {
-  const o = order.value!;
-  try {
-    const { value } = await ElMessageBox.prompt(
-      t("orders.panel.dialogs.kyaPromptBody", { customer: o.customer_name, amount: fmtMoney(o.buy_currency, o.buy_amount) }),
-      t("orders.panel.dialogs.kyaPromptTitle", { orderNo: o.order_no }),
-      { inputValue: o.wallet_ops?.payout_address || "", inputPlaceholder: t("orders.panel.dialogs.kyaPlaceholder"), confirmButtonText: t("orders.panel.dialogs.kyaConfirm"), cancelButtonText: t("orders.common.cancel") },
-    );
-    if (!value?.trim()) return;
-    applyUpdate(await walletKya(o.id, value.trim()));
-    ElMessage.success(t("orders.panel.dialogs.kyaDone"));
   } catch { /* 取消 */ }
 }
 
@@ -567,7 +565,21 @@ async function doDispatchReturn() {
             </header>
             <p class="owner">{{ t("orders.panel.owner") }}<strong>{{ fundingState("inflow").ownerLabel }}</strong><template v-if="order.inflow_mark"> · {{ t("orders.panel.markedBy", { by: order.inflow_mark.by, at: formatDateTime(order.inflow_mark.at) }) }}</template></p>
             <dl>
-              <div v-for="[label, value] in markFields(fundingState('inflow'), 'inflow')" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+              <div v-for="[label, value] in markFields(fundingState('inflow'), 'inflow')" :key="label">
+                <dt>{{ label }}</dt>
+                <dd>
+                  <span v-if="!isFileRef(value)">{{ value }}</span>
+                  <span v-else class="file-ref">
+                    <span class="file-name">{{ value.original_name }}</span>
+                    <el-button size="small" link type="primary" :icon="View" @click="openVoucherFile(value)">
+                      {{ t("orders.panel.filePreview") }}
+                    </el-button>
+                    <el-button size="small" link :icon="Download" @click="openVoucherFile(value, true)">
+                      {{ t("orders.panel.fileDownload") }}
+                    </el-button>
+                  </span>
+                </dd>
+              </div>
             </dl>
           </section>
         </template>
@@ -630,14 +642,39 @@ async function doDispatchReturn() {
             </header>
             <p class="owner">{{ t("orders.panel.owner") }}<strong>{{ fundingState("outflow").ownerLabel }}</strong><template v-if="order.outflow_mark"> · {{ t("orders.panel.executedBy", { by: order.outflow_mark.by, at: formatDateTime(order.outflow_mark.at) }) }}</template></p>
             <dl>
-              <div v-for="[label, value] in markFields(fundingState('outflow'), 'outflow')" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+              <div v-for="[label, value] in markFields(fundingState('outflow'), 'outflow')" :key="label">
+                <dt>{{ label }}</dt>
+                <dd>
+                  <span v-if="!isFileRef(value)">{{ value }}</span>
+                  <span v-else class="file-ref">
+                    <span class="file-name">{{ value.original_name }}</span>
+                    <el-button size="small" link type="primary" :icon="View" @click="openVoucherFile(value)">
+                      {{ t("orders.panel.filePreview") }}
+                    </el-button>
+                    <el-button size="small" link :icon="Download" @click="openVoucherFile(value, true)">
+                      {{ t("orders.panel.fileDownload") }}
+                    </el-button>
+                  </span>
+                </dd>
+              </div>
             </dl>
           </section>
           <section class="block">
             <h4>{{ t("orders.panel.executionTitle") }}</h4>
-            <p v-if="dispatch?.receipt" class="empty-inline">
-              {{ t("orders.panel.receipt") }} {{ dispatch.receipt.file_name }}{{ dispatch.receipt.reference ? ` · ${dispatch.receipt.reference}` : "" }} · {{ dispatch.paid_by }} · {{ dispatch.paid_at ? formatDateTime(dispatch.paid_at) : "" }}
-            </p>
+            <div v-if="dispatch?.receipt" class="receipt-line">
+              <span>{{ t("orders.panel.receipt") }}</span>
+              <template v-if="dispatch.receipt.file">
+                <span class="file-name">{{ dispatch.receipt.file.original_name }}</span>
+                <el-button size="small" link type="primary" :icon="View" @click="openVoucherFile(dispatch.receipt.file)">
+                  {{ t("orders.panel.filePreview") }}
+                </el-button>
+                <el-button size="small" link :icon="Download" @click="openVoucherFile(dispatch.receipt.file, true)">
+                  {{ t("orders.panel.fileDownload") }}
+                </el-button>
+              </template>
+              <template v-else>{{ dispatch.receipt.file_name }}</template>
+              <small>{{ [dispatch.receipt.reference, dispatch.paid_by, dispatch.paid_at ? formatDateTime(dispatch.paid_at) : ""].filter(Boolean).join(" · ") }}</small>
+            </div>
             <p v-else-if="order.status === 'AWAITING_PAYOUT'" class="empty-inline">{{ t("orders.panel.waitOwnerExecute", { owner: fundingState("outflow").ownerLabel }) }}</p>
             <p v-else class="empty-inline">{{ t("orders.panel.executeAfterReview") }}</p>
           </section>
@@ -1016,6 +1053,36 @@ dt {
 dd {
   margin: 0;
   word-break: break-all;
+}
+
+.file-ref,
+.receipt-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.file-name {
+  color: #303133;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-line {
+  color: #606266;
+  font-size: 13px;
+}
+
+.receipt-line > span {
+  color: #909399;
+}
+
+.receipt-line small {
+  color: #909399;
 }
 
 .block {

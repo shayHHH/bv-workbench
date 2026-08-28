@@ -128,7 +128,7 @@ function logout() {
   <el-container class="layout">
     <el-aside width="220px" class="sidebar">
       <div class="brand">
-        <span class="brand-mark">B</span>
+        <img class="brand-mark" src="/bv.ico" alt="Bitvast" />
         <div>
           <strong>Bitvast</strong>
           <small>Trade Workbench</small>
@@ -242,12 +242,9 @@ function logout() {
   height: 34px;
   border-radius: 9px;
   background: #231c17;
-  color: #ff7a00;
-  font-weight: 800;
-  font-size: 19px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: contain;
+  padding: 4px;
+  box-sizing: border-box;
 }
 
 .brand strong {

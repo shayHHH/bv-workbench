@@ -512,12 +512,19 @@ onMounted(() => load());
           </el-form-item>
           <el-form-item :label="t('compliance.kycConfig.themeLabel')">
             <el-select v-model="channelDialog.theme" style="width: 100%">
+              <template #prefix>
+                <i class="theme-dot" :style="{ background: themeDot[channelDialog.theme] }" />
+              </template>
               <el-option
                 v-for="(label, value) in KycChannelThemeLabel"
                 :key="value"
                 :value="value"
                 :label="localizeText(label)"
-              />
+              >
+                <span class="theme-option">
+                  <i class="theme-dot" :style="{ background: themeDot[value] }" />{{ localizeText(label) }}
+                </span>
+              </el-option>
             </el-select>
           </el-form-item>
         </div>
@@ -894,5 +901,19 @@ h1 {
 .restriction-type {
   width: 120px;
   flex: none;
+}
+
+.theme-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

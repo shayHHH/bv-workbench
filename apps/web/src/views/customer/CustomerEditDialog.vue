@@ -5,7 +5,6 @@ import {
   CustomerStatusLabel,
   CustomerSubTypeLabel,
   RegionLabel,
-  RiskLevelLabel,
   type CustomerVO,
 } from "@bv/shared";
 import { ElMessage } from "element-plus";
@@ -30,12 +29,9 @@ const form = reactive({
   parent_id: "",
   sub_type: "",
   region: "",
-  agent_name: "",
-  follow_trader: "",
   phone: "",
   remark: "",
   customer_status: "NEW",
-  risk_level: "PENDING",
 });
 
 const isSub = computed(() => form.customer_kind === CustomerKind.SUB_CUSTOMER);
@@ -77,12 +73,9 @@ watch(visible, open => {
     parent_id: c.parent_id || "",
     sub_type: c.sub_type || "",
     region: c.region || "",
-    agent_name: c.agent_name || "",
-    follow_trader: c.follow_trader || "",
     phone: c.phone || "",
     remark: c.remark || "",
     customer_status: c.customer_status,
-    risk_level: c.risk_level,
   });
   if (c.customer_kind === CustomerKind.SUB_CUSTOMER) {
     searchBrokers("");
@@ -125,12 +118,9 @@ async function submit() {
       parent_id: isSub.value ? form.parent_id : null,
       sub_type: isSub.value && form.sub_type ? (form.sub_type as never) : null,
       region: form.region ? (form.region as never) : null,
-      agent_name: form.agent_name || null,
-      follow_trader: form.follow_trader || null,
       phone: form.phone || null,
       remark: form.remark || null,
       customer_status: form.customer_status as never,
-      risk_level: form.risk_level as never,
     });
     ElMessage.success(
       t("customer.edit.saveSuccess", {
@@ -205,27 +195,14 @@ async function submit() {
         <el-form-item :label="t('customer.common.phone')">
           <el-input v-model="form.phone" maxlength="50" :placeholder="t('customer.edit.phonePh')" />
         </el-form-item>
-        <el-form-item :label="t('customer.common.followTrader')">
-          <el-input v-model="form.follow_trader" maxlength="50" :placeholder="t('customer.edit.followTraderPh')" />
-        </el-form-item>
         <el-form-item :label="t('customer.common.region')">
           <el-select v-model="form.region" clearable :placeholder="t('customer.edit.regionPh')" style="width: 100%">
             <el-option v-for="(label, value) in RegionLabel" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('customer.common.agent')">
-          <el-select v-model="form.agent_name" clearable :placeholder="t('customer.edit.agentPh')" style="width: 100%">
-            <el-option v-for="name in ['杨澜', '周辰', '陈浩']" :key="name" :label="name" :value="name" />
-          </el-select>
-        </el-form-item>
         <el-form-item :label="t('customer.common.currentStatus')">
           <el-select v-model="form.customer_status" style="width: 100%">
             <el-option v-for="(label, value) in CustomerStatusLabel" :key="value" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('customer.common.riskLevel')">
-          <el-select v-model="form.risk_level" style="width: 100%">
-            <el-option v-for="(label, value) in RiskLevelLabel" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
       </div>

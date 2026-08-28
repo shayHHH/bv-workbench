@@ -4,6 +4,8 @@
  * 资金形态由币种/收款方式推导：USDT→链上（钱包运营）、现金→现金交收、其余→银行（入款财务/出款出款员）。
  */
 
+import type { FileRef } from "./access.js";
+
 /* ---------------- 订单主线状态 ---------------- */
 
 export const TradeOrderStatus = {
@@ -241,10 +243,6 @@ export interface OrderWalletOpsVO {
   deposit_address: string | null;
   deposit_by: string | null;
   deposit_at: string | null;
-  payout_address: string | null;
-  kya_passed: boolean;
-  kya_by: string | null;
-  kya_at: string | null;
 }
 
 export interface FundingMarkVO {
@@ -253,7 +251,7 @@ export interface FundingMarkVO {
   amount: number;
   currency: string;
   account: string | null;
-  voucher: string | null;
+  voucher: FileRef | string | null;
   chain: string | null;
   hash: string | null;
   confirms: string | null;
@@ -302,6 +300,7 @@ export interface TradeOrderVO {
 
 export interface DispatchReceiptVO {
   file_name: string;
+  file?: FileRef | null;
   reference: string | null;
   note: string | null;
   uploaded_by: string;
@@ -374,7 +373,6 @@ export interface OrderListStatsVO {
   inflow_chain: number;
   outflow_fiat: number;
   outflow_chain: number;
-  kya_pending: number;
 }
 
 /* ---------------- 输入 ---------------- */
@@ -398,7 +396,7 @@ export interface CreateOrderInput {
 export interface InflowConfirmInput {
   amount: number;
   account?: string | null;
-  voucher?: string | null;
+  voucher?: FileRef | string | null;
   chain?: string | null;
   hash?: string | null;
   confirms?: string | null;
@@ -416,4 +414,24 @@ export interface CreateDispatchInput {
   text: string;
   va_account_id?: string | null;
   payout_account?: string | null;
+}
+
+/* ---- 链上交易哈希校验（钱包运营登记链上出入款） ---- */
+
+/** 各网络交易哈希格式：TRC20（TRON）为 64 位十六进制（无 0x 前缀）；ERC20（ETH）为 0x + 64 位十六进制 */
+export const TX_HASH_PATTERNS: Record<string, RegExp> = {
+  TRC20: /^[0-9a-fA-F]{64}$/,
+  ERC20: /^0x[0-9a-fA-F]{64}$/,
+};
+
+/** 校验失败时的格式提示（前端经 localizeText 转繁体，后端直接用于错误信息） */
+export const TX_HASH_FORMAT_HINTS: Record<string, string> = {
+  TRC20: "TRC20（TRON）交易哈希应为 64 位十六进制字符，不带 0x 前缀",
+  ERC20: "ERC20（ETH）交易哈希应为 0x 开头 + 64 位十六进制字符（共 66 位）",
+};
+
+/** 未知网络只做非空校验（向后兼容自定义链） */
+export function isValidTxHash(chain: string | null | undefined, hash: string): boolean {
+  const pattern = TX_HASH_PATTERNS[chain ?? ""];
+  return pattern ? pattern.test(hash.trim()) : hash.trim().length > 0;
 }

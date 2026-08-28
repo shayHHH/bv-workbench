@@ -5,9 +5,10 @@ import {
   MaterialSourceLabel,
   ReviewTypeLabel,
   type AccessApplicationVO,
+  type AccessTimelineVO,
   type ApplicationMaterialVO,
 } from "@bv/shared";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
 import { useRoute, useRouter } from "vue-router";
@@ -29,6 +30,26 @@ async function load() {
     loading.value = false;
   }
 }
+
+/** 创建后随即提交（同人、相邻、间隔 ≤60s）属于同一次操作，展示上归并为一个活动 */
+const displayTimeline = computed<AccessTimelineVO[]>(() => {
+  const merged: AccessTimelineVO[] = [];
+  for (const entry of application.value?.timeline ?? []) {
+    const prev = merged[merged.length - 1];
+    if (
+      entry.action === "提交合规审核" &&
+      prev?.action === "创建申请" &&
+      prev.by_name === entry.by_name &&
+      !prev.note &&
+      new Date(entry.at).getTime() - new Date(prev.at).getTime() <= 60_000
+    ) {
+      merged[merged.length - 1] = { ...entry, action: "创建申请并提交合规审核" };
+      continue;
+    }
+    merged.push(entry);
+  }
+  return merged.reverse();
+});
 
 const materialTagType: Record<string, "success" | "warning" | "danger"> = {
   PENDING: "warning",
@@ -114,7 +135,7 @@ onMounted(load);
           </template>
           <el-timeline>
             <el-timeline-item
-              v-for="(entry, index) in [...application.timeline].reverse()"
+              v-for="(entry, index) in displayTimeline"
               :key="index"
               :timestamp="`${entry.by_name ? `${entry.by_name} · ` : ''}${formatDateTime(entry.at)}`"
             >
@@ -173,6 +194,13 @@ h1 {
 .strip-item span {
   color: #909399;
   font-size: 12px;
+}
+
+/* 容器不在 EP 组件内，不显式设置会继承浏览器 16px + 700，视觉上过大过黑 */
+.strip-item strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .layout {

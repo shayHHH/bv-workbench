@@ -10,7 +10,6 @@ import {
   CustomerStatusLabel,
   CustomerSubTypeLabel,
   RegionLabel,
-  RiskLevelLabel,
   type AccessApplicationVO,
   type ApplicationMaterialVO,
   type AccessStatus,
@@ -270,7 +269,6 @@ async function previewMaterial(material: CustomerMaterialVO, download = false) {
 
 const kindText = (c: CustomerVO) => localizeText(CustomerKindLabel[c.customer_kind]);
 const statusText = (c: CustomerVO) => localizeText(CustomerStatusLabel[c.customer_status]);
-const riskText = (c: CustomerVO) => localizeText(RiskLevelLabel[c.risk_level]);
 const regionText = (c: CustomerVO) => (c.region ? localizeText(RegionLabel[c.region]) : t("customer.drawer.regionEmpty"));
 const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTypeLabel[c.sub_type]) : t("customer.drawer.subTypeEmpty"));
 </script>
@@ -317,10 +315,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
               </el-descriptions-item>
               <el-descriptions-item :label="t('customer.drawer.subType')">{{ subTypeText(current) }}</el-descriptions-item>
             </template>
-            <el-descriptions-item :label="t('customer.common.riskLevel')">{{ riskText(current) }}</el-descriptions-item>
             <el-descriptions-item :label="t('customer.common.region')">{{ regionText(current) }}</el-descriptions-item>
-            <el-descriptions-item :label="t('customer.common.agent')">{{ current.agent_name || t("customer.common.unassigned") }}</el-descriptions-item>
-            <el-descriptions-item :label="t('customer.common.followTrader')">{{ current.follow_trader || "-" }}</el-descriptions-item>
             <el-descriptions-item :label="t('customer.common.phone')">{{ current.phone || "-" }}</el-descriptions-item>
             <el-descriptions-item :label="t('customer.common.lastUpdated')">{{ formatRelative(current.updated_at) }}</el-descriptions-item>
             <el-descriptions-item :label="t('customer.drawer.createdAt')" :span="2">{{ formatDateTime(current.created_at) }}</el-descriptions-item>

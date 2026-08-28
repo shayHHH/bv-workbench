@@ -17,7 +17,6 @@ import {
   CustomerVO,
   isValidCustomerCode,
   PageResult,
-  RiskLevelLabel,
 } from "@bv/shared";
 import { FilterQuery, Model, PipelineStage, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
@@ -211,7 +210,6 @@ export class CustomerService {
         { name: pattern },
         { customer_code: pattern },
         { phone: pattern },
-        { agent_name: pattern },
         { _id: { $in: matchedSubParents } },
       ];
     }
@@ -312,8 +310,6 @@ export class CustomerService {
         parent_id: parentId,
         sub_type: isSub ? (dto.sub_type ?? null) : null,
         region: dto.region ?? null,
-        agent_name: dto.agent_name?.trim() || null,
-        follow_trader: dto.follow_trader?.trim() || null,
         phone: dto.phone?.trim() || null,
         remark: dto.remark?.trim() || null,
         created_by: operator ? new Types.ObjectId(operator.sub) : null,
@@ -342,15 +338,12 @@ export class CustomerService {
     const before = {
       kind: doc.customer_kind,
       status: doc.customer_status,
-      risk: doc.risk_level,
       parent: doc.parent_id ? doc.parent_id.toString() : null,
       profile: {
         customer_code: doc.customer_code,
         name: doc.name,
         phone: doc.phone,
-        follow_trader: doc.follow_trader,
         region: doc.region,
-        agent_name: doc.agent_name,
         remark: doc.remark,
         sub_type: doc.sub_type,
       },
@@ -389,12 +382,9 @@ export class CustomerService {
       doc.sub_type = dto.sub_type ?? null;
     }
     if (dto.region !== undefined) doc.region = dto.region ?? null;
-    if (dto.agent_name !== undefined) doc.agent_name = dto.agent_name?.trim() || null;
-    if (dto.follow_trader !== undefined) doc.follow_trader = dto.follow_trader?.trim() || null;
     if (dto.phone !== undefined) doc.phone = dto.phone?.trim() || null;
     if (dto.remark !== undefined) doc.remark = dto.remark?.trim() || null;
     if (dto.customer_status !== undefined) doc.customer_status = dto.customer_status;
-    if (dto.risk_level !== undefined) doc.risk_level = dto.risk_level;
     if (operator) doc.set("updated_by", new Types.ObjectId(operator.sub));
 
     await doc.save();
@@ -432,22 +422,11 @@ export class CustomerService {
         operator,
       );
     }
-    if (doc.risk_level !== before.risk) {
-      await this.logEvent(
-        doc._id,
-        CustomerEventType.RISK_CHANGED,
-        "风险等级变更",
-        `${RiskLevelLabel[before.risk]} → ${RiskLevelLabel[doc.risk_level]}`,
-        operator,
-      );
-    }
     const profileFieldLabels: Record<keyof typeof before.profile, string> = {
       customer_code: "客户编号",
       name: "客户名称",
       phone: "联系电话",
-      follow_trader: "跟进交易员",
       region: "地区",
-      agent_name: "所属交易员",
       remark: "备注",
       sub_type: "下级主体类型",
     };
@@ -544,12 +523,9 @@ export class CustomerService {
       parent_name: parentId ? (parentNames.get(parentId) ?? null) : null,
       sub_type: doc.sub_type ?? null,
       region: doc.region ?? null,
-      agent_name: doc.agent_name ?? null,
-      follow_trader: doc.follow_trader ?? null,
       phone: doc.phone ?? null,
       remark: doc.remark ?? null,
       customer_status: doc.customer_status,
-      risk_level: doc.risk_level,
       created_at: doc.created_at?.toISOString?.() ?? String(doc.created_at),
       updated_at: doc.updated_at?.toISOString?.() ?? String(doc.updated_at),
     };

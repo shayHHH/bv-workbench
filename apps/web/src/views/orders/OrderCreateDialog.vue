@@ -33,9 +33,9 @@ const form = reactive({
   trade_type: "转账换U",
   custom_trade_type: "",
   sell_currency: "USD",
-  sell_amount: null as number | null,
+  sell_amount: "",
   buy_currency: "USDT",
-  buy_amount: null as number | null,
+  buy_amount: "",
   rate: "1.0020",
   pay_method: "银行转账",
   quote_record_id: "",
@@ -43,6 +43,23 @@ const form = reactive({
 });
 
 const PAY_METHODS = ["银行转账", "现金", "USDT 转入"];
+
+/* 金额输入千分位：展示层加 ","，模型值保持纯数字字符串 */
+const fmtThousands = (value: string) => {
+  if (!value) return "";
+  const [int, dec] = String(value).split(".");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return dec !== undefined ? `${grouped}.${dec}` : grouped;
+};
+const parseAmount = (value: string) =>
+  value
+    .replace(/[^\d.]/g, "")
+    .replace(/^\./, "")
+    .replace(/(\.\d*)\./g, "$1");
+const amountNumber = (value: string) => {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+};
 
 async function searchCustomers(keyword: string) {
   customerLoading.value = true;
@@ -90,8 +107,9 @@ function pickQuote(id: string) {
   form.rate = quote.result;
   /* 审计 1.2.4：带出汇率后联动金额（仅在买入额未填时按 卖出×汇率 预填，可修改） */
   const rate = Number(quote.result);
-  if (form.sell_amount && !form.buy_amount && Number.isFinite(rate) && rate > 0) {
-    form.buy_amount = Math.round(form.sell_amount * rate * 100) / 100;
+  const sell = amountNumber(form.sell_amount);
+  if (sell && !form.buy_amount && Number.isFinite(rate) && rate > 0) {
+    form.buy_amount = String(Math.round(sell * rate * 100) / 100);
   }
 }
 
@@ -99,8 +117,10 @@ async function submit() {
   const tradeType = form.trade_type === "自定义" ? form.custom_trade_type.trim() : form.trade_type;
   if (!form.customer_id) return ElMessage.warning(t("orders.create.selectCustomer"));
   if (!tradeType) return ElMessage.warning(t("orders.create.selectTradeType"));
-  if (!form.sell_amount) return ElMessage.warning(t("orders.create.fillSellAmount"));
-  if (!form.buy_amount) return ElMessage.warning(t("orders.create.fillBuyAmount"));
+  const sellAmount = amountNumber(form.sell_amount);
+  const buyAmount = amountNumber(form.buy_amount);
+  if (!sellAmount) return ElMessage.warning(t("orders.create.fillSellAmount"));
+  if (!buyAmount) return ElMessage.warning(t("orders.create.fillBuyAmount"));
   /* 审计 1.2.6：执行汇率与关联报价不一致时要求确认 */
   const pickedQuote = form.quote_record_id
     ? quotes.value.find(item => item.quote_record_id === form.quote_record_id)
@@ -126,9 +146,9 @@ async function submit() {
       person_name: form.person_name.trim() || null,
       trade_type: tradeType,
       sell_currency: form.sell_currency,
-      sell_amount: form.sell_amount,
+      sell_amount: sellAmount,
       buy_currency: form.buy_currency,
-      buy_amount: form.buy_amount,
+      buy_amount: buyAmount,
       rate: form.rate,
       pay_method: form.pay_method,
       remark: form.remark.trim() || null,
@@ -192,7 +212,13 @@ async function submit() {
       </div>
       <div class="grid legs">
         <el-form-item :label="t('orders.common.customerSell')" required>
-          <el-input v-model.number="form.sell_amount" type="number" :placeholder="t('orders.create.amountPlaceholder')">
+          <el-input
+            v-model="form.sell_amount"
+            inputmode="decimal"
+            :formatter="fmtThousands"
+            :parser="parseAmount"
+            :placeholder="t('orders.create.amountPlaceholder')"
+          >
             <template #prepend>
               <el-select v-model="form.sell_currency" style="width: 90px">
                 <el-option v-for="c in ORDER_CURRENCIES" :key="c" :value="c" :label="c" />
@@ -201,7 +227,13 @@ async function submit() {
           </el-input>
         </el-form-item>
         <el-form-item :label="t('orders.common.customerBuy')" required>
-          <el-input v-model.number="form.buy_amount" type="number" :placeholder="t('orders.create.amountPlaceholder')">
+          <el-input
+            v-model="form.buy_amount"
+            inputmode="decimal"
+            :formatter="fmtThousands"
+            :parser="parseAmount"
+            :placeholder="t('orders.create.amountPlaceholder')"
+          >
             <template #prepend>
               <el-select v-model="form.buy_currency" style="width: 90px">
                 <el-option v-for="c in ORDER_CURRENCIES" :key="c" :value="c" :label="c" />

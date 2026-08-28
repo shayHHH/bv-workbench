@@ -335,6 +335,13 @@ h1 {
   font-size: 12px;
 }
 
+/* 容器不在 EP 组件内，不显式设置会继承浏览器 16px + 700，视觉上过大过黑 */
+.strip-item strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;

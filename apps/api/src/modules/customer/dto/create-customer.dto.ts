@@ -42,16 +42,6 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   @MaxLength(50)
-  agent_name?: string | null;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  follow_trader?: string | null;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
   phone?: string | null;
 
   @IsOptional()

@@ -1,5 +1,5 @@
 import { PartialType, PickType } from "@nestjs/mapped-types";
-import { CustomerKind, CustomerStatus, RiskLevel } from "@bv/shared";
+import { CustomerKind, CustomerStatus } from "@bv/shared";
 import { IsIn, IsMongoId, IsOptional, IsString, MaxLength } from "class-validator";
 import { CreateCustomerDto } from "./create-customer.dto";
 
@@ -10,8 +10,6 @@ export class UpdateCustomerDto extends PartialType(
     "customer_code",
     "sub_type",
     "region",
-    "agent_name",
-    "follow_trader",
     "phone",
     "remark",
   ] as const),
@@ -27,10 +25,6 @@ export class UpdateCustomerDto extends PartialType(
   @IsOptional()
   @IsIn(Object.values(CustomerStatus))
   customer_status?: CustomerStatus;
-
-  @IsOptional()
-  @IsIn(Object.values(RiskLevel))
-  risk_level?: RiskLevel;
 
   /** 仅写入变更事件的备注（如暂停合作原因），不落客户主档 */
   @IsOptional()

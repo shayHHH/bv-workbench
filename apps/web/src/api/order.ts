@@ -21,7 +21,6 @@ export interface OrderListQuery {
   flag?: "exception" | "payment_rejected" | "dispatch_rejected" | "rejected";
   inflow_kind?: "fiat" | "chain";
   outflow_kind?: "fiat" | "chain";
-  kya_pending?: "1";
   page?: number;
   page_size?: number;
 }
@@ -80,11 +79,6 @@ export async function syncOrderKyc(id: string): Promise<TradeOrderVO> {
 
 export async function walletDepositAddress(id: string, address: string): Promise<TradeOrderVO> {
   const { data } = await http.post<TradeOrderVO>(`/orders/${id}/wallet/deposit-address`, { address });
-  return data;
-}
-
-export async function walletKya(id: string, address: string): Promise<TradeOrderVO> {
-  const { data } = await http.post<TradeOrderVO>(`/orders/${id}/wallet/kya`, { address });
   return data;
 }
 
