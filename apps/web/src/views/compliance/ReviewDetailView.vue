@@ -7,10 +7,8 @@ import {
   ReviewAuditTypeLabel,
   ReviewDecisionAction,
   ReviewFinalResultLabel,
-  RiskLevelLabel,
   type ReviewCaseVO,
   type ReviewMaterialVerdict,
-  type RiskLevel,
 } from "@bv/shared";
 import type { CustomerEventVO } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -170,11 +168,6 @@ const FINAL_TAG: Record<string, string> = {
   TERMINATED: "info",
 };
 
-const riskLabel = computed(() => {
-  const risk = reviewCase.value?.risk_level;
-  return risk ? localizeText(RiskLevelLabel[risk as RiskLevel] ?? risk) : t("compliance.detail.riskUnknown");
-});
-
 onMounted(load);
 </script>
 
@@ -194,8 +187,7 @@ onMounted(load);
             </el-tag>
           </h1>
           <p class="subtitle">
-            {{ t("compliance.detail.subtitle", { caseNo: reviewCase.case_no, appNo: reviewCase.application_no }) }}
-            <span v-if="reviewCase.customer_code">{{ t("compliance.detail.subtitleCode", { code: reviewCase.customer_code }) }}</span>
+            {{ t("compliance.detail.subtitleCode", { code: reviewCase.customer_code || "—" }) }}
           </p>
         </div>
         <el-button :icon="ArrowLeft" @click="router.push('/compliance/review')">{{ t("compliance.detail.back") }}</el-button>
@@ -204,26 +196,18 @@ onMounted(load);
       <div class="detail-layout">
         <div class="detail-main">
           <el-card shadow="never" class="block">
+            <h4 class="block-title">{{ t("compliance.detail.formTitle") }}</h4>
             <el-descriptions :column="4" border>
-              <el-descriptions-item :label="t('compliance.detail.customerCode')">{{ reviewCase.customer_code || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.auditType')">{{ localizeText(ReviewAuditTypeLabel[reviewCase.audit_type]) }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.risk')">{{ riskLabel }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.completeness')">
-                {{ reviewCase.completeness.done }} / {{ reviewCase.completeness.total }}
-              </el-descriptions-item>
               <el-descriptions-item :label="t('compliance.detail.scenario')">{{ reviewCase.scenario_name || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('compliance.detail.channel')">{{ reviewCase.channel_name || reviewCase.channel_code || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('compliance.detail.submittedBy')">{{ reviewCase.submitted_by_name || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('compliance.detail.submittedAt')">{{ new Date(reviewCase.submitted_at).toLocaleString() }}</el-descriptions-item>
-            </el-descriptions>
-          </el-card>
-
-          <el-card shadow="never" class="block">
-            <h4 class="block-title">{{ t("compliance.detail.formTitle") }}</h4>
-            <el-descriptions :column="2" border>
+              <el-descriptions-item :label="t('compliance.detail.completeness')">
+                {{ reviewCase.completeness.done }} / {{ reviewCase.completeness.total }}
+              </el-descriptions-item>
               <el-descriptions-item :label="t('compliance.detail.cnName')">{{ reviewCase.form_snapshot.customer_cn_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.enName')">{{ reviewCase.form_snapshot.customer_en_name || "—" }}</el-descriptions-item>
-              <el-descriptions-item :label="t('compliance.detail.businessNote')" :span="2">
+              <el-descriptions-item :label="t('compliance.detail.enName')" :span="2">{{ reviewCase.form_snapshot.customer_en_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('compliance.detail.businessNote')" :span="4">
                 {{ reviewCase.form_snapshot.business_note || "—" }}
               </el-descriptions-item>
             </el-descriptions>

@@ -338,12 +338,7 @@ export default {
     detail: {
       eyebrow: "COMPLIANCE REVIEW",
       back: "返回审核队列",
-      subtitle: "工单 {caseNo} · 申请 {appNo}",
-      subtitleCode: " · 客户编号 {code}",
-      customerCode: "客户编号",
-      auditType: "审核类型",
-      risk: "风险等级",
-      riskUnknown: "未评估",
+      subtitleCode: "客户编号 {code}",
       completeness: "材料完整度",
       scenario: "业务类型",
       channel: "渠道",
