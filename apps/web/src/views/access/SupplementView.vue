@@ -7,7 +7,7 @@ import {
   type AccessApplicationVO,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
@@ -21,13 +21,42 @@ const loading = ref(false);
 const items = ref<AccessApplicationVO[]>([]);
 const total = ref(0);
 const summary = reactive({ all: 0, draft: 0, supplement: 0, pending: 0 });
+const activeTab = ref<"ongoing" | "completed">("ongoing");
+
+const ONGOING_STATUSES: AccessStatus[] = [
+  AccessStatus.DRAFT,
+  AccessStatus.PENDING_REVIEW,
+  AccessStatus.SUPPLEMENT_REQUIRED,
+];
+const COMPLETED_STATUSES: AccessStatus[] = [
+  AccessStatus.APPROVED,
+  AccessStatus.REJECTED,
+  AccessStatus.EXPIRED,
+  AccessStatus.SUSPENDED,
+  AccessStatus.CANCELLED,
+];
 
 const query = reactive({
   keyword: "",
   status: "" as "" | AccessStatus,
+  range: null as [Date, Date] | null,
   page: 1,
   page_size: 10,
 });
+
+const tabStatuses = computed(() =>
+  activeTab.value === "ongoing" ? ONGOING_STATUSES : COMPLETED_STATUSES,
+);
+
+const statusOptions = computed(() =>
+  Object.entries(AccessStatusLabel).filter(([status]) =>
+    tabStatuses.value.includes(status as AccessStatus),
+  ),
+);
+
+function queryStatus(): string {
+  return query.status || tabStatuses.value.join(",");
+}
 
 async function load() {
   loading.value = true;
@@ -35,7 +64,9 @@ async function load() {
     const [pageResult, all, draft, supplement, pending] = await Promise.all([
       fetchApplications({
         keyword: query.keyword || undefined,
-        status: query.status || undefined,
+        status: queryStatus(),
+        updated_from: query.range?.[0]?.getTime(),
+        updated_to: query.range ? query.range[1].getTime() + 86_399_999 : undefined,
         page: query.page,
         page_size: query.page_size,
       }),
@@ -56,6 +87,12 @@ async function load() {
 }
 
 function search() {
+  query.page = 1;
+  load();
+}
+
+function onTabChange() {
+  if (query.status && !tabStatuses.value.includes(query.status)) query.status = "";
   query.page = 1;
   load();
 }
@@ -159,6 +196,11 @@ onMounted(load);
     </div>
 
     <el-card shadow="never">
+      <el-tabs v-model="activeTab" class="track-tabs" @tab-change="onTabChange">
+        <el-tab-pane :label="t('access.track.tabOngoing')" name="ongoing" />
+        <el-tab-pane :label="t('access.track.tabCompleted')" name="completed" />
+      </el-tabs>
+
       <div class="toolbar">
         <el-input
           v-model="query.keyword"
@@ -170,12 +212,21 @@ onMounted(load);
         />
         <el-select v-model="query.status" class="filter" :placeholder="t('access.track.allStatus')" clearable @change="search">
           <el-option
-            v-for="(label, value) in AccessStatusLabel"
+            v-for="[value, label] in statusOptions"
             :key="value"
             :label="localizeText(label)"
             :value="value"
           />
         </el-select>
+        <el-date-picker
+          v-model="query.range"
+          class="date-filter"
+          type="daterange"
+          unlink-panels
+          :start-placeholder="t('access.track.updatedFrom')"
+          :end-placeholder="t('access.track.updatedTo')"
+          @change="search"
+        />
         <span class="count">{{ t("access.track.countSummary", { total }) }}</span>
       </div>
 
@@ -303,9 +354,18 @@ h1 {
   font-size: 13px;
 }
 
+.track-tabs {
+  margin-bottom: 12px;
+}
+
+.track-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -316,6 +376,10 @@ h1 {
 
 .filter {
   width: 150px;
+}
+
+.date-filter {
+  width: 320px;
 }
 
 .count {

@@ -19,6 +19,8 @@ export interface ApplicationListQuery {
   status?: string;
   keyword?: string;
   customer_id?: string;
+  updated_from?: number;
+  updated_to?: number;
   page?: number;
   page_size?: number;
 }

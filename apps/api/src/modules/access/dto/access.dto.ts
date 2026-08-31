@@ -100,6 +100,14 @@ export class QueryApplicationDto {
   customer_id?: string;
 
   @IsOptional()
+  @IsNumber()
+  updated_from?: number;
+
+  @IsOptional()
+  @IsNumber()
+  updated_to?: number;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;

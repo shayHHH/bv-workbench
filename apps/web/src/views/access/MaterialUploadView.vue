@@ -77,6 +77,7 @@ const state = reactive({
 const createCustomerVisible = ref(false);
 const fileInput = ref<HTMLInputElement>();
 const dragActive = ref(false);
+const processExpanded = ref(false);
 
 /* ---------------- 客户 / 业务类型 / 渠道（第 1 区） ---------------- */
 
@@ -159,11 +160,13 @@ function relinkAll() {
 
 function onScenarioChange() {
   state.channelIndex = 0;
+  processExpanded.value = false;
   relinkAll();
 }
 
 function pickChannel(index: number) {
   state.channelIndex = index;
+  processExpanded.value = false;
   relinkAll();
 }
 
@@ -682,16 +685,23 @@ onMounted(async () => {
         </header>
 
         <div v-if="processLines.length" class="rule-card flow">
-          <header><strong>{{ t("access.upload.processTitle") }}</strong><em>{{ t("access.upload.processTag") }}</em></header>
+          <header>
+            <strong>{{ t("access.upload.processTitle") }}</strong>
+            <em>{{ t("access.upload.processTag") }}</em>
+          </header>
+          <div v-if="processLines.length > 3" class="flow-actions">
+            <button type="button" class="flow-toggle" @click="processExpanded = !processExpanded">
+              {{ processExpanded ? t("access.upload.processCollapse") : t("access.upload.processExpandShort", { count: processLines.length }) }}
+            </button>
+          </div>
           <ol>
-            <li v-for="line in processLines.slice(0, 3)" :key="line">{{ line }}</li>
+            <li
+              v-for="line in processExpanded ? processLines : processLines.slice(0, 3)"
+              :key="line"
+            >
+              {{ line }}
+            </li>
           </ol>
-          <details v-if="processLines.length > 3">
-            <summary>{{ t("access.upload.processExpand", { count: processLines.length }) }}</summary>
-            <ol start="4">
-              <li v-for="line in processLines.slice(3)" :key="line">{{ line }}</li>
-            </ol>
-          </details>
         </div>
 
         <div v-if="selectedChannel?.restrictions.length" class="rule-card danger">
@@ -825,7 +835,12 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 6px;
+}
+
+.rule-card header strong {
+  min-width: 0;
 }
 
 .rule-card em {
@@ -859,11 +874,29 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
-.rule-card details summary {
+.flow-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin: -1px 0 6px;
+}
+
+.flow-toggle {
+  appearance: none;
+  border: 1px solid #ffe0c2;
+  border-radius: 4px;
+  background: #fff8f1;
   color: #ff7a00;
   cursor: pointer;
   font-size: 12px;
-  margin: 4px 0;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.flow-toggle:hover {
+  border-color: #ffc58a;
+  color: #d96a00;
 }
 
 .checklist .check-item {

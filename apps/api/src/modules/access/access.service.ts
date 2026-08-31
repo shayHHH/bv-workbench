@@ -121,6 +121,12 @@ export class AccessService {
     const statuses = parseStatusList(query.status);
     if (statuses.length) filter.status = { $in: statuses };
     if (query.customer_id) filter.customer_id = new Types.ObjectId(query.customer_id);
+    if (query.updated_from || query.updated_to) {
+      filter.updated_at = {
+        ...(query.updated_from ? { $gte: new Date(query.updated_from) } : {}),
+        ...(query.updated_to ? { $lte: new Date(query.updated_to) } : {}),
+      };
+    }
     if (query.keyword) {
       const pattern = new RegExp(escapeRegExp(query.keyword.trim()), "i");
       filter.$or = [

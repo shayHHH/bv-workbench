@@ -43,13 +43,17 @@ const addGroupVisible = ref(false);
 const newGroupName = ref("");
 const editGroupVisible = ref(false);
 const editGroupName = ref("");
+const editingGroupId = ref<string | null>(null);
 const deleteGroupVisible = ref(false);
+const deletingGroupId = ref<string | null>(null);
 const menuOpenGroupId = ref<string | null>(null);
 const addCustomerVisible = ref(false);
 const customerSearch = ref("");
 const pickedCustomerIds = ref(new Set<string>());
 
 const currentGroup = computed(() => groups.value.find(g => g.id === currentGroupId.value) ?? null);
+const editingGroup = computed(() => groups.value.find(g => g.id === editingGroupId.value) ?? null);
+const deletingGroup = computed(() => groups.value.find(g => g.id === deletingGroupId.value) ?? null);
 
 const memberIds = computed(() => new Set(board.value?.members.map(m => m.customer_id) ?? []));
 
@@ -110,9 +114,24 @@ async function confirmAddGroup() {
   ElMessage.success(t("quote.batch.groupCreated", { name }));
 }
 
-function openEditGroup() {
-  editGroupName.value = currentGroup.value?.name ?? "";
+function handleGroupCommand(command: string, group: QuoteGroupVO) {
+  if (command === "edit") {
+    openEditGroup(group);
+    return;
+  }
+  openDeleteGroup(group);
+}
+
+function openEditGroup(group: QuoteGroupVO) {
+  editingGroupId.value = group.id;
+  editGroupName.value = group.name;
   editGroupVisible.value = true;
+  menuOpenGroupId.value = null;
+}
+
+function openDeleteGroup(group: QuoteGroupVO) {
+  deletingGroupId.value = group.id;
+  deleteGroupVisible.value = true;
   menuOpenGroupId.value = null;
 }
 
@@ -122,21 +141,24 @@ async function confirmEditGroup() {
     ElMessage.warning(t("quote.batch.nameRequired"));
     return;
   }
-  if (currentGroupId.value && name !== currentGroup.value?.name) {
-    await renameQuoteGroup(currentGroupId.value, name);
-    await loadGroups();
+  const group = editingGroup.value;
+  if (group && name !== group.name) {
+    await renameQuoteGroup(group.id, name);
+    await loadGroups(currentGroupId.value ?? undefined);
     ElMessage.success(t("quote.batch.groupRenamed", { name }));
   }
   editGroupVisible.value = false;
+  editingGroupId.value = null;
 }
 
 async function confirmDeleteGroup() {
-  const group = currentGroup.value;
+  const group = deletingGroup.value;
   if (!group) return;
   await deleteQuoteGroup(group.id);
   deleteGroupVisible.value = false;
-  currentGroupId.value = null;
-  await loadGroups();
+  deletingGroupId.value = null;
+  if (currentGroupId.value === group.id) currentGroupId.value = null;
+  await loadGroups(currentGroupId.value ?? undefined);
   ElMessage.success(t("quote.batch.groupDeleted", { name: group.name }));
 }
 
@@ -308,7 +330,7 @@ onMounted(async () => {
             <span class="group-badge">{{ group.customer_count }}</span>
             <el-dropdown
               trigger="click"
-              @command="(cmd: string) => (cmd === 'edit' ? openEditGroup() : (deleteGroupVisible = true))"
+              @command="(cmd: string) => handleGroupCommand(cmd, group)"
             >
               <el-button text size="small" :icon="MoreFilled" @click.stop />
               <template #dropdown>
@@ -479,7 +501,7 @@ onMounted(async () => {
 
     <!-- 删除报价组 -->
     <el-dialog v-model="deleteGroupVisible" :title="t('quote.batch.deleteGroupTitle')" width="440px">
-      <p>{{ t("quote.batch.deleteGroupConfirm", { name: currentGroup?.name ?? "" }) }}</p>
+      <p>{{ t("quote.batch.deleteGroupConfirm", { name: deletingGroup?.name ?? "" }) }}</p>
       <template #footer>
         <el-button @click="deleteGroupVisible = false">{{ t("quote.batch.cancel") }}</el-button>
         <el-button type="danger" @click="confirmDeleteGroup">{{ t("quote.batch.confirmDelete") }}</el-button>
