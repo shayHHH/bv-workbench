@@ -387,9 +387,23 @@ export class ReviewService {
       operator,
     );
 
-    // 准入通过后自动推进该客户就绪的待KYC交易订单（demo advanceOrdersAfterKyc）
+    // 合规结论联动交易订单时间线：通过→自动推进就绪的待KYC订单；驳回/终止→登记结论（合规官/时间/说明）
     if (dto.action === ReviewDecisionAction.APPROVE) {
-      await this.orderService.advanceAfterKyc(application.customer_id, "客户准入审核通过");
+      await this.orderService.advanceAfterKyc(application.customer_id, {
+        reviewer: operator.display_name,
+        reviewedAt: caseDoc.reviewed_at ?? new Date(),
+      });
+    } else {
+      await this.orderService.noteKycRejected(
+        application.customer_id,
+        { scenarioId: application.scenario_id ?? null, scenarioName: application.scenario_name ?? null },
+        {
+          action: dto.action === ReviewDecisionAction.REJECT ? "REJECT" : "TERMINATE",
+          reviewer: operator.display_name,
+          reviewedAt: caseDoc.reviewed_at ?? new Date(),
+          reason: dto.reason?.trim() || null,
+        },
+      );
     }
 
     return toVO(caseDoc.toObject());

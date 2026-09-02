@@ -33,6 +33,7 @@ import {
 } from "@bv/shared";
 import { Connection, FilterQuery, Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
+import { HandoffService } from "../department/handoff.service";
 import { nextBusinessNo } from "../../common/sequence";
 import { AccessApplication, AccessApplicationDocument } from "../access/access-application.schema";
 import { Customer, CustomerDocument } from "../customer/customer.schema";
@@ -83,6 +84,7 @@ export class OrderService {
     @InjectModel(CustomBusinessType.name)
     private readonly customBusinessTypeModel: Model<CustomBusinessTypeDocument>,
     @InjectConnection() private readonly connection: Connection,
+    private readonly handoffService: HandoffService,
   ) {}
 
   /* ---------------- 自定义准入业务类型 ---------------- */
@@ -265,15 +267,6 @@ export class OrderService {
       buyAmount: num(doc.buy_amount),
     };
 
-    if (dto.customer_id && String(doc.customer_id) !== dto.customer_id) {
-      const customer = await this.customerModel.findOne({ _id: dto.customer_id, is_deleted: false });
-      if (!customer) throw new NotFoundException("客户不存在");
-      changes.push(`客户 ${doc.customer_name} → ${customer.name}`);
-      doc.customer_id = customer._id;
-      doc.customer_name = customer.name;
-      doc.customer_code = customer.customer_code;
-    }
-
     /* 业务类型：传 scenario_id 时以 KYC 配置的名称为准，自定义类型只存名称 */
     if (dto.business_scenario_id !== undefined || dto.business_type !== undefined) {
       let scenarioId: Types.ObjectId | null = null;
@@ -444,15 +437,23 @@ export class OrderService {
         ],
       });
     }
-    const todoFilter = this.myTodoFilter(operator?.role_code);
+    /* 我的待办 = 本人岗位队列 ∪ 代班岗位队列（业务交接期间接手人在自己工作台看到对方的活） */
+    const actingRoles = [
+      ...new Set([
+        ...(operator?.role_code ? [operator.role_code] : []),
+        ...(await this.handoffService.activeRoleCodes(operator?.sub)),
+      ]),
+    ];
+    const todoFilter = this.myTodoFilter(actingRoles);
     if (query.scope === "mine") this.appendAnd(filter, todoFilter ?? { _id: null });
     /* 附加异常的订单不再同时出现在正常状态审核列表里，只在「附加异常」页签（flag=exception）
        和运营经理的异常待办（scope=mine）里可见；按状态筛选或个人待办时一律排除 */
-    const wantsExceptionOrders = query.flag === "exception" || (query.scope === "mine" && operator?.role_code === "MANAGER");
+    const actsAsManager = actingRoles.includes("MANAGER");
+    const wantsExceptionOrders = query.flag === "exception" || (query.scope === "mine" && actsAsManager);
     if (!wantsExceptionOrders && (query.status || query.scope === "mine")) filter.exception = null;
     const todoCountFilter: FilterQuery<TradeOrderDocument> = { is_deleted: false };
     if (todoFilter) this.appendAnd(todoCountFilter, todoFilter);
-    if (operator?.role_code !== "MANAGER") todoCountFilter.exception = null;
+    if (!actsAsManager) todoCountFilter.exception = null;
     const [items, total, statuses, all] = await Promise.all([
       this.orderModel
         .find(filter)
@@ -508,7 +509,16 @@ export class OrderService {
     filter.$and = [...existing, condition];
   }
 
-  private myTodoFilter(roleCode?: string): FilterQuery<TradeOrderDocument> | null {
+  /** 多个岗位（本人 + 代班）的待办并集；都没有队列时返回 null */
+  private myTodoFilter(roleCodes: string[]): FilterQuery<TradeOrderDocument> | null {
+    const filters = roleCodes
+      .map(code => this.roleTodoFilter(code))
+      .filter((item): item is FilterQuery<TradeOrderDocument> => !!item);
+    if (!filters.length) return null;
+    return filters.length === 1 ? filters[0] : { $or: filters };
+  }
+
+  private roleTodoFilter(roleCode?: string): FilterQuery<TradeOrderDocument> | null {
     switch (roleCode) {
       case "AGENT":
         return {
@@ -612,12 +622,17 @@ export class OrderService {
   }
 
   /** 准入通过后自动推进该客户就绪的待KYC订单（review.service APPROVE 时调用） */
-  async advanceAfterKyc(customerId: Types.ObjectId | string, reason = "客户准入审核通过"): Promise<number> {
+  async advanceAfterKyc(
+    customerId: Types.ObjectId | string,
+    decision: { reviewer?: string | null; reviewedAt?: Date } = {},
+  ): Promise<number> {
     const docs = await this.orderModel.find({
       customer_id: new Types.ObjectId(String(customerId)),
       status: TradeOrderStatus.PENDING_KYC,
       is_deleted: false,
     });
+    const reviewedAt = decision.reviewedAt ?? new Date();
+    const reviewer = decision.reviewer?.trim() || null;
     let advanced = 0;
     for (const doc of docs) {
       const kyc = await this.kycBadgeForDoc(doc);
@@ -625,10 +640,10 @@ export class OrderService {
       doc.status = TradeOrderStatus.AWAITING_INFLOW;
       doc.timeline = [
         {
-          at: new Date(),
+          at: reviewedAt,
           title: "KYC 审核通过",
-          detail: `${reason}，订单进入待客户入款（入款登记人：${this.inflowOwnerLabel(doc)}）`,
-          actor: "系统",
+          detail: `客户准入审核通过（${reviewer ? `合规官 ${reviewer} · ` : ""}审核通过时间 ${fmtTime(reviewedAt)}），订单进入待客户入款（入款登记人：${this.inflowOwnerLabel(doc)}）`,
+          actor: reviewer ? `合规官 ${reviewer}` : "系统",
         },
         ...doc.timeline,
       ];
@@ -638,7 +653,57 @@ export class OrderService {
     return advanced;
   }
 
+  /** 合规驳回/终止时，在受影响的待KYC订单时间线登记结论（合规官、时间、驳回说明；不改订单状态） */
+  async noteKycRejected(
+    customerId: Types.ObjectId | string,
+    scenario: { scenarioId?: Types.ObjectId | string | null; scenarioName?: string | null },
+    decision: { action: "REJECT" | "TERMINATE"; reviewer?: string | null; reviewedAt?: Date; reason?: string | null },
+  ): Promise<number> {
+    const docs = await this.orderModel.find({
+      customer_id: new Types.ObjectId(String(customerId)),
+      status: TradeOrderStatus.PENDING_KYC,
+      is_deleted: false,
+    });
+    const reviewedAt = decision.reviewedAt ?? new Date();
+    const reviewer = decision.reviewer?.trim() || null;
+    const rejected = decision.action === "REJECT";
+    let noted = 0;
+    for (const doc of docs) {
+      const matchesScenario = scenario.scenarioId && doc.business_scenario_id
+        ? String(doc.business_scenario_id) === String(scenario.scenarioId)
+        : !scenario.scenarioName || !doc.business_type || doc.business_type === scenario.scenarioName;
+      if (!matchesScenario) continue;
+      doc.timeline = [
+        {
+          at: reviewedAt,
+          title: rejected ? "KYC 审核驳回" : "KYC 审核终止",
+          detail: `客户准入审核${rejected ? "驳回" : "终止"}（${reviewer ? `合规官 ${reviewer} · ` : ""}${rejected ? "驳回" : "终止"}时间 ${fmtTime(reviewedAt)}）${decision.reason ? `，${rejected ? "驳回" : "终止"}说明：${decision.reason}` : ""}，订单继续停留在待KYC`,
+          actor: reviewer ? `合规官 ${reviewer}` : "系统",
+        },
+        ...doc.timeline,
+      ];
+      await doc.save();
+      noted += 1;
+    }
+    return noted;
+  }
+
   /* ---------------- 取消 / 风险终止 ---------------- */
+
+  /** 删除订单：与编辑同口径（排单审核前、无未解除异常），释放冻结资金后软删除 */
+  async softDelete(id: string, operator: JwtPayload): Promise<void> {
+    const doc = await this.findOrFail(id);
+    if (!OrderService.EDITABLE_STATUSES.includes(doc.status)) {
+      throw new ConflictException(`当前状态（${doc.status}）不允许删除订单；排单审核中或之后请走取消/风险终止`);
+    }
+    if (doc.exception) throw new ConflictException("订单存在未解除的附加异常，请先处理异常再删除");
+    await this.releaseFunds(doc);
+    this.log(doc, "订单删除", `删除前状态「${doc.status}」，订单从列表移除（软删除）`, operator);
+    doc.set("is_deleted", true);
+    doc.set("deleted_by", new Types.ObjectId(operator.sub));
+    doc.set("deleted_at", new Date());
+    await doc.save();
+  }
 
   async cancel(id: string, reason: string | undefined, operator: JwtPayload, riskStop = false): Promise<TradeOrderVO> {
     const doc = await this.findOrFail(id);
@@ -688,7 +753,7 @@ export class OrderService {
   async inflowConfirm(id: string, dto: FundingActionDto, operator: JwtPayload): Promise<TradeOrderVO> {
     const doc = await this.findOrFail(id);
     if (doc.status !== TradeOrderStatus.AWAITING_INFLOW) throw new ConflictException("订单不在待客户入款状态");
-    this.assertFundingOwner(doc, "inflow", operator);
+    await this.assertFundingOwner(doc, "inflow", operator);
     const kind = fundingKindOf(shape(doc), "inflow");
     if (kind === FundingKind.CHAIN) {
       if (!dto.hash?.trim()) throw new BadRequestException("请填写 Transaction Hash");
@@ -821,7 +886,7 @@ export class OrderService {
     if (doc.status !== TradeOrderStatus.AWAITING_PAYOUT) {
       throw new ConflictException(`订单不在待出款执行状态（当前：${doc.status}），请等待排单审核通过`);
     }
-    this.assertFundingOwner(doc, "outflow", operator);
+    await this.assertFundingOwner(doc, "outflow", operator);
     const kind = fundingKindOf(shape(doc), "outflow");
     if (kind === FundingKind.CHAIN) {
       if (!dto.hash?.trim()) throw new BadRequestException("请填写 Transaction Hash");
@@ -926,11 +991,17 @@ export class OrderService {
     return doc;
   }
 
-  private assertFundingOwner(doc: TradeOrderDocument, side: "inflow" | "outflow", operator: JwtPayload): void {
+  private async assertFundingOwner(
+    doc: TradeOrderDocument,
+    side: "inflow" | "outflow",
+    operator: JwtPayload,
+  ): Promise<void> {
     const owner = fundingOwnerRole(shape(doc), side);
-    if (operator.role_code !== owner && operator.role_code !== "ADMIN") {
-      throw new ForbiddenException(`该动作由${ROLE_NAME.get(owner) ?? owner}执行`);
-    }
+    if (operator.role_code === owner || operator.role_code === "ADMIN") return;
+    /* 代班期间按被交接岗位放行，与 RolesGuard 同口径 */
+    const delegated = await this.handoffService.activeRoleCodes(operator.sub);
+    if (delegated.includes(owner) || delegated.includes("ADMIN")) return;
+    throw new ForbiddenException(`该动作由${ROLE_NAME.get(owner) ?? owner}执行`);
   }
 
   /** 按所选网络校验交易哈希位数/前缀（TRC20 64 位十六进制；ERC20 0x+64 位） */
