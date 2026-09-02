@@ -88,6 +88,11 @@ export async function updateOrder(id: string, input: UpdateOrderInput): Promise<
   return data;
 }
 
+/** 删除订单：与编辑同口径（排单审核前），软删除 */
+export async function deleteOrder(id: string): Promise<void> {
+  await http.delete(`/orders/${id}`);
+}
+
 export async function cancelOrder(id: string, reason?: string): Promise<TradeOrderVO> {
   const { data } = await http.post<TradeOrderVO>(`/orders/${id}/cancel`, { reason });
   return data;

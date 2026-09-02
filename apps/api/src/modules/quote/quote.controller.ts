@@ -11,6 +11,7 @@ import {
   Query,
   Res,
 } from "@nestjs/common";
+import { QUOTE_ACCESS_ROLES } from "@bv/shared";
 import { Response } from "express";
 import { JwtPayload } from "../../auth/auth.types";
 import { CurrentUser, Roles } from "../../auth/decorators";
@@ -31,7 +32,7 @@ import { QuoteMarketService } from "./quote-market.service";
 import { QuoteService } from "./quote.service";
 
 @Controller("quote")
-@Roles("AGENT", "OPS")
+@Roles(...QUOTE_ACCESS_ROLES)
 export class QuoteController {
   constructor(
     private readonly quoteService: QuoteService,

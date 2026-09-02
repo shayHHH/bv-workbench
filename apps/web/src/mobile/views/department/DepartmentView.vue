@@ -15,8 +15,9 @@ import { Empty as VanEmpty, Loading as VanLoading, showSuccessToast, Tab as VanT
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
-import { fetchDepartmentOverview, markLeaveHandoff } from "@/api/department";
+import { fetchDepartmentOverview, revokeLeaveHandoff } from "@/api/department";
 import { formatRelative } from "@/utils/format";
+import HandoffTargetSheet from "../../components/HandoffTargetSheet.vue";
 import LeaveFormSheet from "../../components/LeaveFormSheet.vue";
 
 const { t } = useI18n();
@@ -65,15 +66,6 @@ function memberStatus(member: DepartmentMemberVO) {
   return { label: localizeText(LeaveTypeLabel[leave.leave_type]), leave };
 }
 
-function recommendedHandoff(member: DepartmentMemberVO): DepartmentMemberVO | null {
-  const onDuty = (item: DepartmentMemberVO) => item.user_id !== member.user_id && !memberStatus(item).leave;
-  const sameRole = members.value
-    .filter(item => onDuty(item) && item.role_code === member.role_code)
-    .sort((a, b) => a.pending - b.pending);
-  if (sameRole.length) return sameRole[0];
-  return members.value.filter(onDuty).sort((a, b) => a.pending - b.pending)[0] ?? null;
-}
-
 const focusOf = (member: DepartmentMemberVO) => {
   const focus = ROLE_FOCUS[member.role_code];
   return focus ? localizeText(focus) : member.role_name;
@@ -89,22 +81,20 @@ const handoffPendingCount = computed(() =>
 );
 
 const memberById = (id: string) => members.value.find(m => m.user_id === id) ?? null;
-const leaveRecommendedHandoff = (leave: LeaveRecordVO) => {
-  const member = memberById(leave.user_id);
-  return member ? recommendedHandoff(member) : null;
-};
+
+/* 接手人由经理在选人面板里从系统全部启用账号中指定（不做系统推荐） */
+const pickerLeaveId = ref("");
+const pickerLeave = computed(() => leaves.value.find(leave => leave.id === pickerLeaveId.value) ?? null);
+function openPicker(leave: LeaveRecordVO) {
+  pickerLeaveId.value = leave.id;
+}
 
 const handoffSubmitting = ref("");
-async function markHandoff(leave: LeaveRecordVO) {
-  const target = leaveRecommendedHandoff(leave);
+async function revokeHandoff(leave: LeaveRecordVO) {
   handoffSubmitting.value = leave.id;
   try {
-    await markLeaveHandoff(leave.id, target?.display_name ?? null);
-    showSuccessToast(
-      target
-        ? t("department.view.handoffMarkedTo", { name: leave.user_name, target: target.display_name })
-        : t("department.view.handoffMarkedPlain", { name: leave.user_name }),
-    );
+    await revokeLeaveHandoff(leave.id);
+    showSuccessToast(t("department.view.handoffRevoked", { name: leave.user_name }));
     await load();
   } finally {
     handoffSubmitting.value = "";
@@ -161,7 +151,7 @@ function openForm() {
           <footer>
             <span>{{ t("department.common.todayDone") }} {{ member.today_done }} · {{ t("department.view.colPending") }} {{ member.pending }}</span>
             <span v-if="memberStatus(member).leave" class="suggest">
-              {{ recommendedHandoff(member) ? t("department.view.suggestTakeover", { name: recommendedHandoff(member)!.display_name }) : t("department.view.pendingAssign") }}
+              {{ t("department.view.pendingAssign") }}
             </span>
             <span v-else class="muted">{{ t("department.view.lastActive", { time: formatRelative(member.last_login_at) }) }}</span>
           </footer>
@@ -182,8 +172,19 @@ function openForm() {
             <span>{{ t("department.common.currentPending", { count: memberById(leave.user_id)?.pending ?? 0 }) }}</span>
             <template v-if="leave.handoff_done">
               <span class="done">{{ leave.handoff_target ? t("department.view.handoffDoneTo", { name: leave.handoff_target }) : t("department.common.handoffDone") }}</span>
+              <span class="row-actions">
+                <button type="button" class="link-btn" @click="openPicker(leave)">{{ t("department.common.reassign") }}</button>
+                <button
+                  type="button"
+                  class="link-btn danger"
+                  :disabled="handoffSubmitting === leave.id"
+                  @click="revokeHandoff(leave)"
+                >
+                  {{ t("department.common.revokeHandoff") }}
+                </button>
+              </span>
             </template>
-            <button v-else type="button" class="handoff-btn" :disabled="handoffSubmitting === leave.id" @click="markHandoff(leave)">
+            <button v-else type="button" class="handoff-btn" @click="openPicker(leave)">
               {{ t("department.common.markHandoff") }}
             </button>
           </footer>
@@ -192,7 +193,8 @@ function openForm() {
       </template>
     </div>
 
-    <LeaveFormSheet v-model="formVisible" :members="members" :prefill="{}" :recommend="recommendedHandoff" @saved="load" />
+    <LeaveFormSheet v-model="formVisible" :members="members" :prefill="{}" @saved="load" />
+    <HandoffTargetSheet :leave="pickerLeave" @close="pickerLeaveId = ''" @saved="load" />
   </div>
 </template>
 
@@ -339,6 +341,24 @@ function openForm() {
   color: #3e8e52;
 }
 
+.row-actions {
+  display: inline-flex;
+  gap: 12px;
+  margin-left: 10px;
+}
+.link-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--bv-primary, #ff7a1a);
+  font-size: 12px;
+}
+.link-btn.danger {
+  color: #e45b5b;
+}
+.link-btn:disabled {
+  opacity: 0.5;
+}
 .handoff-btn {
   border: 1px solid #dcdfe6;
   background: #fff;

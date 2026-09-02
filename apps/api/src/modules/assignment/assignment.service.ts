@@ -10,6 +10,7 @@ import {
 } from "@bv/shared";
 import { Model, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
+import { HandoffService } from "../department/handoff.service";
 import { Role, RoleDocument } from "../user/role.schema";
 import { User, UserDocument } from "../user/user.schema";
 import { ReviewAssignment, ReviewAssignmentDocument } from "./review-assignment.schema";
@@ -23,6 +24,7 @@ export class AssignmentService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(Role.name)
     private readonly roleModel: Model<RoleDocument>,
+    private readonly handoffService: HandoffService,
   ) {}
 
   /** 分配总览：两种审核类型的负责人 + 可选合规账号池 */
@@ -115,7 +117,10 @@ export class AssignmentService {
       .findOne({ review_type: reviewType, is_deleted: false })
       .lean();
     if (!doc?.assignee_user_ids?.length) return true;
-    return doc.assignee_user_ids.some(id => String(id) === operator.sub);
+    if (doc.assignee_user_ids.some(id => String(id) === operator.sub)) return true;
+    /* 业务交接：代班期间承接被代班合规官的负责范围 */
+    const covered = await this.handoffService.activeCoveredUserIds(operator.sub);
+    return doc.assignee_user_ids.some(id => covered.includes(String(id)));
   }
 
   /** 供审核队列展示：某类型的负责人 ID 列表（空 = 未配置） */

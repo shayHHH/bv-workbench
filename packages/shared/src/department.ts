@@ -102,10 +102,41 @@ export interface LeaveRecordVO {
   /** 登记时勾选「需要任务交接提醒」 */
   handoff: boolean;
   handoff_done: boolean;
+  /** 接手人：姓名快照 + 用户 id + 代班岗位（交接后经理指定，非系统推荐） */
   handoff_target: string | null;
+  handoff_user_id: string | null;
+  handoff_role_code: string | null;
   handoff_at: string | null;
   registered_by: string;
   registered_at: string;
+}
+
+/** 交接接手人候选：系统全部启用账号（含 Admin），由经理自行指定 */
+export interface HandoffCandidateVO {
+  user_id: string;
+  username: string;
+  display_name: string;
+  title: string | null;
+  role_code: string;
+  role_name: string;
+  /** 今日本人也在请假（仅作提示，不禁选） */
+  on_leave_today: boolean;
+}
+
+/**
+ * 生效中的代班：接手人在请假区间内临时获得请假人的岗位权限
+ * （工作台待办与后端接口守卫都按此放行，区间结束自动失效）。
+ */
+export interface ActiveHandoffVO {
+  leave_id: string;
+  leave_no: string;
+  from_user_id: string;
+  from_user_name: string;
+  role_code: string;
+  role_name: string;
+  leave_type: LeaveType;
+  start_date: string;
+  end_date: string;
 }
 
 export interface DepartmentOverviewVO {

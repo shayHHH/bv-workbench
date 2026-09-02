@@ -55,9 +55,7 @@ export class CreateLeaveDto {
 }
 
 export class MarkHandoffDto {
-  /** 接手人姓名（可选，默认取系统建议） */
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  target_name?: string | null;
+  /** 接手人：系统任一启用账号，由经理在交接时指定 */
+  @IsMongoId()
+  target_user_id: string;
 }

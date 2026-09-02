@@ -16,6 +16,7 @@ import {
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
+import { QUOTE_ACCESS_ROLES } from "@bv/shared";
 import { type AppLocale, localizeText, setLocale } from "@/i18n";
 import { fetchApplications } from "@/api/access";
 import { fetchOrders } from "@/api/order";
@@ -46,7 +47,7 @@ const menu: MenuItem[] = [
     path: "/quote",
     titleKey: "layout.menu.quote",
     icon: PriceTag,
-    roles: ["AGENT", "OPS"],
+    roles: [...QUOTE_ACCESS_ROLES],
     children: [
       { path: "/quote/quick", titleKey: "layout.menu.quoteQuick" },
       { path: "/quote/batch", titleKey: "layout.menu.quoteBatch" },
@@ -58,7 +59,7 @@ const menu: MenuItem[] = [
     path: "/access",
     titleKey: "layout.menu.access",
     icon: FolderOpened,
-    roles: ["AGENT", "OPS"],
+    roles: [...QUOTE_ACCESS_ROLES],
     children: [
       { path: "/access/materials", titleKey: "layout.menu.accessMaterials" },
       { path: "/access/documents", titleKey: "layout.menu.accessDocuments" },
@@ -92,14 +93,13 @@ function switchLocale(target: AppLocale) {
   setLocale(target);
 }
 
-const visibleMenu = computed(() =>
-  menu.filter(item => !item.roles || item.roles.includes(auth.roleCode)),
-);
+/* 菜单按「本人角色 + 代班岗位」判定：业务交接期间接手人能进对方的功能面 */
+const visibleMenu = computed(() => menu.filter(item => auth.hasRole(item.roles)));
 const rejectedAccessCount = ref(0);
 const orderTodoCount = ref(0);
-const canViewAccess = computed(() => ["AGENT", "OPS"].includes(auth.roleCode));
-const canViewOrders = computed(() => ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"].includes(auth.roleCode));
-const canShowOrderBadge = computed(() => ["AGENT", "OPS", "FINANCE", "PAYOUT"].includes(auth.roleCode));
+const canViewAccess = computed(() => auth.hasRole(QUOTE_ACCESS_ROLES));
+const canViewOrders = computed(() => auth.hasRole(["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"]));
+const canShowOrderBadge = computed(() => auth.hasRole(["AGENT", "OPS", "FINANCE", "PAYOUT"]));
 
 async function loadAccessBadge() {
   if (!canViewAccess.value) {
@@ -175,6 +175,8 @@ function logout() {
 }
 
 onMounted(() => {
+  /* 代班岗位决定菜单可见范围，进壳时拉一次 */
+  void auth.ensureHandoffs();
   loadBadges();
   window.addEventListener("order-todo-count-updated", syncOrderBadge);
 });

@@ -9,16 +9,21 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
-import { cancelLeave, markLeaveHandoff } from "@/api/department";
+import { cancelLeave } from "@/api/department";
 import { formatDateTime } from "@/utils/format";
 
 const props = defineProps<{
   leave: LeaveRecordVO | null;
   member: DepartmentMemberVO | null;
-  target: DepartmentMemberVO | null;
 }>();
 
-const emit = defineEmits<{ close: []; changed: []; "go-handoff": [] }>();
+const emit = defineEmits<{
+  close: [];
+  changed: [];
+  "go-handoff": [];
+  /** 交给父级打开接手人选择弹窗（接手人由经理指定，不做系统推荐） */
+  "pick-target": [leave: LeaveRecordVO];
+}>();
 const { t } = useI18n();
 
 const visible = computed({
@@ -27,19 +32,6 @@ const visible = computed({
     if (!value) emit("close");
   },
 });
-
-const handoffSubmitting = ref(false);
-async function markHandoff() {
-  if (!props.leave) return;
-  handoffSubmitting.value = true;
-  try {
-    await markLeaveHandoff(props.leave.id, props.target?.display_name ?? null);
-    ElMessage.success(t("department.leaveDrawer.handoffMarked"));
-    emit("changed");
-  } finally {
-    handoffSubmitting.value = false;
-  }
-}
 
 const cancelSubmitting = ref(false);
 async function cancelRecord() {
@@ -98,39 +90,22 @@ async function cancelRecord() {
             <strong>{{ member?.pending ?? 0 }}</strong> {{ t("department.common.itemsUnit") }}
           </el-descriptions-item>
           <el-descriptions-item :label="t('department.common.todayDone')">{{ member?.today_done ?? 0 }} {{ t("department.common.itemsUnit") }}</el-descriptions-item>
-          <el-descriptions-item :label="t('department.leaveDrawer.suggestLabel')">
+          <el-descriptions-item :label="t('department.leaveDrawer.takeoverLabel')">
             <template v-if="leave.handoff_done">
               {{ leave.handoff_target || t("department.common.arranged") }}
               <el-tag type="success" size="small" effect="light" class="done-tag">{{ t("department.common.handoffDone") }}</el-tag>
             </template>
-            <template v-else-if="target">
-              <strong>{{ target.display_name }}</strong> · {{ target.role_name }} · {{ t("department.common.currentPending", { count: target.pending }) }}
-            </template>
-            <span v-else>{{ t("department.leaveDrawer.pendingNoSameRole") }}</span>
+            <span v-else>{{ t("department.leaveDrawer.notArranged") }}</span>
           </el-descriptions-item>
         </el-descriptions>
-        <div v-if="!leave.handoff_done" class="advice" :class="{ warn: !target }">
-          {{
-            target
-              ? t(
-                  target.role_code === member?.role_code
-                    ? "department.leaveDrawer.adviceSameRole"
-                    : "department.leaveDrawer.adviceAnyRole",
-                  { target: target.display_name, name: leave.user_name, count: member?.pending ?? 0 },
-                )
-              : t("department.leaveDrawer.adviceNone")
-          }}
+        <div v-if="!leave.handoff_done" class="advice warn">
+          {{ t("department.leaveDrawer.pickHint", { name: leave.user_name, count: member?.pending ?? 0 }) }}
         </div>
       </section>
 
       <footer class="actions">
-        <el-button
-          v-if="!leave.handoff_done"
-          type="primary"
-          :loading="handoffSubmitting"
-          @click="markHandoff"
-        >
-          {{ t("department.common.markHandoff") }}
+        <el-button type="primary" @click="emit('pick-target', leave)">
+          {{ leave.handoff_done ? t("department.common.reassign") : t("department.common.markHandoff") }}
         </el-button>
         <el-button @click="emit('go-handoff')">{{ t("department.leaveDrawer.goHandoff") }}</el-button>
         <el-button type="danger" plain :loading="cancelSubmitting" @click="cancelRecord">{{ t("department.leaveDrawer.cancelTitle") }}</el-button>

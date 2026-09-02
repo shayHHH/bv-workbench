@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { QUOTE_ACCESS_ROLES } from "@bv/shared";
 import { localizeText } from "@/i18n";
 import AppLayout from "@/layout/AppLayout.vue";
 import { useAuthStore } from "@/stores/auth";
@@ -75,55 +76,55 @@ export const router = createRouter({
           path: "quote/quick",
           name: "quoteQuick",
           component: () => import("@/views/quote/QuickQuoteView.vue"),
-          meta: { title: "快速报价", roles: ["AGENT", "OPS"] },
+          meta: { title: "快速报价", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "quote/batch",
           name: "quoteBatch",
           component: () => import("@/views/quote/BatchQuoteView.vue"),
-          meta: { title: "批量报价", roles: ["AGENT", "OPS"] },
+          meta: { title: "批量报价", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "quote/adjust",
           name: "quoteAdjust",
           component: () => import("@/views/quote/FormulaAdjustView.vue"),
-          meta: { title: "批量调整公式", roles: ["AGENT", "OPS"] },
+          meta: { title: "批量调整公式", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "quote/history",
           name: "quoteHistory",
           component: () => import("@/views/quote/QuoteHistoryView.vue"),
-          meta: { title: "往期报价", roles: ["AGENT", "OPS"] },
+          meta: { title: "往期报价", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "access/materials",
           name: "accessMaterials",
           component: () => import("@/views/access/MaterialUploadView.vue"),
-          meta: { title: "材料上传", roles: ["AGENT", "OPS"] },
+          meta: { title: "材料上传", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "access/materials/:id",
           name: "accessApplication",
           component: () => import("@/views/access/ApplicationWizardView.vue"),
-          meta: { title: "材料申报", roles: ["AGENT", "OPS"] },
+          meta: { title: "材料申报", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "access/documents",
           name: "accessDocuments",
           component: () => import("@/views/access/SupplementView.vue"),
-          meta: { title: "审核跟踪", roles: ["AGENT", "OPS"] },
+          meta: { title: "审核跟踪", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "access/documents/:id",
           name: "accessOrderDetail",
           component: () => import("@/views/access/OrderDetailView.vue"),
-          meta: { title: "审核工单", roles: ["AGENT", "OPS"] },
+          meta: { title: "审核工单", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "access/documents/:id/supplement",
           name: "accessSupplementWork",
           component: () => import("@/views/access/SupplementWorkView.vue"),
-          meta: { title: "补件处理", roles: ["AGENT", "OPS"] },
+          meta: { title: "补件处理", roles: [...QUOTE_ACCESS_ROLES] },
         },
         {
           path: "compliance/review",
@@ -179,7 +180,7 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach(to => {
+router.beforeEach(async to => {
   const auth = useAuthStore();
   if (to.meta.public) {
     if (auth.isLoggedIn && to.path === "/login") return defaultHomePath(auth.roleCode);
@@ -187,7 +188,11 @@ router.beforeEach(to => {
   }
   if (!auth.isLoggedIn) return { path: "/login", query: { redirect: to.fullPath } };
   const roles = to.meta.roles as string[] | undefined;
-  if (roles?.length && !roles.includes(auth.roleCode)) return "/dashboard";
+  if (roles?.length && !auth.hasRole(roles)) {
+    /* 本人角色不匹配时才去确认代班：交接期内接手人按被代班岗位放行（首次判定要等拉取完成） */
+    await auth.ensureHandoffs();
+    if (!auth.hasRole(roles)) return "/dashboard";
+  }
   /* 手机主力角色在手机设备上访问桌面路由时统一收口到移动壳；已登录期间切换设备/直接改地址栏都要收口，
      不只是登录那一刻——用户在「我的」里主动切换过桌面版后（prefersDesktop）不受此限制 */
   if (!to.path.startsWith("/m") && shouldEnterMobile(auth.roleCode)) return "/m/home";

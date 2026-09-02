@@ -16,7 +16,6 @@ import { createLeave } from "@/api/department";
 const props = defineProps<{
   members: DepartmentMemberVO[];
   prefill: { user_id?: string; date?: string };
-  recommend: (member: DepartmentMemberVO) => DepartmentMemberVO | null;
 }>();
 
 const visible = defineModel<boolean>({ required: true });
@@ -72,7 +71,6 @@ watch(
 );
 
 const selectedMember = computed(() => props.members.find(m => m.user_id === form.user_id) ?? null);
-const target = computed(() => (selectedMember.value ? props.recommend(selectedMember.value) : null));
 
 const submitting = ref(false);
 async function submit() {
@@ -167,7 +165,7 @@ async function submit() {
     <div v-if="selectedMember" class="impact">
       <strong>{{ t("department.leaveForm.impactTitle") }}</strong>
       <p>{{ t("department.leaveForm.impactLine", { name: selectedMember.display_name, pending: selectedMember.pending, done: selectedMember.today_done }) }}</p>
-      <span>{{ target ? t("department.leaveForm.suggestLine", { name: target.display_name, count: target.pending }) : t("department.leaveForm.noSuggest") }}</span>
+      <span>{{ t("department.leaveForm.handoffLine") }}</span>
     </div>
 
     <template #footer>

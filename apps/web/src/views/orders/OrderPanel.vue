@@ -370,7 +370,12 @@ const actionBlocks = computed<ActionBlock[]>(() => {
     });
   }
   if (["OPS", "FINANCE", "WALLET"].includes(role.value) && !o.exception && !([TradeOrderStatus.COMPLETED, TradeOrderStatus.CANCELLED] as TradeOrderStatus[]).includes(o.status) && role.value !== inflowInfo.ownerRole) {
-    // 非资金责任人的运营侧也可标记异常（demo 高级交易员标记金额不符）
+    /* 非资金责任人的运营侧也可标记异常（demo 高级交易员标记金额不符） */
+    blocks.push({
+      tone: "info",
+      text: t("orders.panel.actions.markExceptionText"),
+      buttons: [{ label: t("orders.panel.actions.markException"), run: doMarkException }],
+    });
   }
   if (!blocks.length) blocks.push({ tone: "info", text: statusHint.value, buttons: [] });
   return blocks;
@@ -440,6 +445,24 @@ async function doInflowException() {
     );
     applyUpdate(await markException(o.id, { kind: "业务异常", reason: "金额不符", detail: value?.trim() || "入款金额与应收不符" }));
     ElMessage.success(t("orders.panel.dialogs.inflowExcMarked"));
+  } catch { /* 取消 */ }
+}
+
+async function doMarkException() {
+  const o = order.value!;
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t("orders.panel.dialogs.markExcBody", { customer: o.customer_name }),
+      t("orders.panel.dialogs.markExcTitle", { orderNo: o.order_no }),
+      { inputPlaceholder: t("orders.panel.dialogs.markExcPlaceholder"), confirmButtonText: t("orders.panel.dialogs.confirmMark"), cancelButtonText: t("orders.common.cancel") },
+    );
+    const reason = value?.trim();
+    if (!reason) {
+      ElMessage.warning(t("orders.panel.dialogs.markExcReasonRequired"));
+      return;
+    }
+    applyUpdate(await markException(o.id, { kind: "业务异常", reason: reason.slice(0, 50), detail: reason }));
+    ElMessage.success(t("orders.panel.dialogs.markExcMarked"));
   } catch { /* 取消 */ }
 }
 

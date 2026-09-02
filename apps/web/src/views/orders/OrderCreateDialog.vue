@@ -18,6 +18,7 @@ import {
   createCustomBusinessType,
   createOrder,
   deleteCustomBusinessType,
+  deleteOrder,
   fetchCustomBusinessTypes,
   fetchQuoteCandidates,
   updateOrder,
@@ -27,13 +28,42 @@ import { formatDateTime } from "@/utils/format";
 const visible = defineModel<boolean>({ required: true });
 /** 传入 order 即进入编辑模式（排单审核前可改），不传为新建 */
 const props = defineProps<{ order?: TradeOrderVO | null }>();
-const emit = defineEmits<{ created: [order: TradeOrderVO]; updated: [order: TradeOrderVO] }>();
+const emit = defineEmits<{ created: [order: TradeOrderVO]; updated: [order: TradeOrderVO]; deleted: [orderId: string] }>();
 
 const { t } = useI18n();
 
 const isEdit = computed(() => !!props.order);
 
 const submitting = ref(false);
+const deleting = ref(false);
+
+/** 删除订单：可编辑场景同口径；冻结资金由服务端释放后软删除 */
+async function doDelete() {
+  const order = props.order;
+  if (!order) return;
+  try {
+    await ElMessageBox.confirm(
+      t("orders.edit.deleteConfirmBody", {
+        customer: order.customer_name,
+        sell: `${order.sell_currency} ${order.sell_amount.toLocaleString("en-US")}`,
+        buy: `${order.buy_currency} ${order.buy_amount.toLocaleString("en-US")}`,
+      }),
+      t("orders.edit.deleteConfirmTitle", { orderNo: order.order_no }),
+      { type: "warning", confirmButtonText: t("orders.edit.confirmDelete"), cancelButtonText: t("orders.common.cancel") },
+    );
+  } catch {
+    return;
+  }
+  deleting.value = true;
+  try {
+    await deleteOrder(order.id);
+    ElMessage.success(t("orders.edit.deleted", { orderNo: order.order_no }));
+    visible.value = false;
+    emit("deleted", order.id);
+  } finally {
+    deleting.value = false;
+  }
+}
 const customerLoading = ref(false);
 const customerOptions = ref<CustomerVO[]>([]);
 const scenarios = ref<KycScenarioVO[]>([]);
@@ -83,6 +113,64 @@ const amountNumber = (value: string) => {
   return Number.isFinite(num) && num > 0 ? num : null;
 };
 
+/**
+ * 金额与汇率三向联动（买入 = 卖出 × 汇率；卖出 = 买入 ÷ 汇率）。
+ * autoCalc 开时联动，关时买入/卖出可独立手动录入（对不规则收付、含手续费差额等场景）。
+ * lastEdited 记录用户最近手动改的是哪一腿，汇率变化时按它反推另一腿，避免互相覆盖成环。
+ * 联动写回走程序化赋值，不触发 @input，天然不会二次循环。
+ */
+const autoCalc = ref(true);
+const lastEdited = ref<"sell" | "buy">("sell");
+const rateNumber = () => {
+  const num = Number(form.rate);
+  return Number.isFinite(num) && num > 0 ? num : null;
+};
+const round2 = (num: number) => String(Math.round(num * 100) / 100);
+
+function recalcBuy() {
+  const sell = amountNumber(form.sell_amount);
+  const rate = rateNumber();
+  if (sell && rate) form.buy_amount = round2(sell * rate);
+}
+function recalcSell() {
+  const buy = amountNumber(form.buy_amount);
+  const rate = rateNumber();
+  if (buy && rate) form.sell_amount = round2(buy / rate);
+}
+function recalcByLast() {
+  if (!autoCalc.value) return;
+  if (lastEdited.value === "buy") recalcSell();
+  else recalcBuy();
+}
+function onSellInput() {
+  lastEdited.value = "sell";
+  if (autoCalc.value) recalcBuy();
+}
+function onBuyInput() {
+  lastEdited.value = "buy";
+  if (autoCalc.value) recalcSell();
+}
+function onRateInput() {
+  recalcByLast();
+}
+/** 从手动切回自动时，立即按最近编辑腿补算一次，避免两腿不自洽 */
+function onAutoCalcChange(on: boolean) {
+  if (on) recalcByLast();
+}
+
+/** 弹窗内展示的计算式：跟随最近编辑腿显示方向与实时代入值 */
+const calcExpr = computed(() => {
+  const rate = form.rate?.trim() || "汇率";
+  if (lastEdited.value === "buy") {
+    const buy = form.buy_amount ? fmtThousands(form.buy_amount) : "买入";
+    const sell = form.sell_amount ? fmtThousands(form.sell_amount) : "—";
+    return `卖出 = 买入 ÷ 汇率 = ${buy} ÷ ${rate} = ${sell} ${form.sell_currency}`;
+  }
+  const sell = form.sell_amount ? fmtThousands(form.sell_amount) : "卖出";
+  const buy = form.buy_amount ? fmtThousands(form.buy_amount) : "—";
+  return `买入 = 卖出 × 汇率 = ${sell} × ${rate} = ${buy} ${form.buy_currency}`;
+});
+
 async function searchCustomers(keyword: string) {
   customerLoading.value = true;
   try {
@@ -96,6 +184,9 @@ async function searchCustomers(keyword: string) {
 watch(visible, open => {
   if (!open) return;
   const order = props.order;
+  /* 每次打开复位联动态：默认自动计算；编辑模式两腿金额已定，不主动重算以免覆盖历史值 */
+  autoCalc.value = !order;
+  lastEdited.value = "sell";
   searchCustomers(order?.customer_name ?? "");
   fetchActiveScenarios().then(list => {
     scenarios.value = list;
@@ -197,6 +288,7 @@ function applyTradeTypePreset(type: string) {
     form.buy_currency = preset[1];
     form.rate = preset[2];
     form.pay_method = preset[0] === "USDT" ? "USDT 转入" : type.includes("现金") ? "现金" : "银行转账";
+    recalcByLast();
   }
 }
 
@@ -204,12 +296,8 @@ function pickQuote(id: string) {
   const quote = quotes.value.find(item => item.quote_record_id === id);
   if (!quote) return;
   form.rate = quote.result;
-  /* 审计 1.2.4：带出汇率后联动金额（仅在买入额未填时按 卖出×汇率 预填，可修改） */
-  const rate = Number(quote.result);
-  const sell = amountNumber(form.sell_amount);
-  if (sell && !form.buy_amount && Number.isFinite(rate) && rate > 0) {
-    form.buy_amount = String(Math.round(sell * rate * 100) / 100);
-  }
+  /* 审计 1.2.4：带出汇率后按最近编辑腿联动金额（买入=卖出×汇率 / 卖出=买入÷汇率） */
+  recalcByLast();
 }
 
 async function submit() {
@@ -238,7 +326,6 @@ async function submit() {
   submitting.value = true;
   try {
     const payload = {
-      customer_id: form.customer_id,
       business_type: pickedBusiness.value.business_type,
       business_scenario_id: pickedBusiness.value.business_scenario_id,
       trade_type: tradeType,
@@ -257,7 +344,7 @@ async function submit() {
       emit("updated", order);
       return;
     }
-    const order = await createOrder({ ...payload, quote_record_id: form.quote_record_id || null });
+    const order = await createOrder({ ...payload, customer_id: form.customer_id, quote_record_id: form.quote_record_id || null });
     ElMessage.success(t("orders.create.createdSuccess", {
       orderNo: order.order_no,
       next: order.status === "PENDING_KYC" ? t("orders.create.createdNextPendingKyc") : t("orders.create.createdNextInflow"),
@@ -288,6 +375,7 @@ async function submit() {
     <el-form label-position="top">
       <div class="grid">
         <el-form-item :label="t('orders.create.customer')" required>
+          <!-- 编辑模式锁定客户：客户是订单主体，换客户请删除后重建 -->
           <el-select
             v-model="form.customer_id"
             filterable
@@ -295,6 +383,7 @@ async function submit() {
             :remote-method="searchCustomers"
             :loading="customerLoading"
             :placeholder="t('orders.create.customerPlaceholder')"
+            :disabled="isEdit"
             style="width: 100%"
           >
             <el-option
@@ -362,6 +451,17 @@ async function submit() {
           </el-select>
         </el-form-item>
       </div>
+      <div class="legs-head">
+        <span class="legs-title">{{ t("orders.common.customerSell") }} / {{ t("orders.common.customerBuy") }}</span>
+        <el-switch
+          v-model="autoCalc"
+          inline-prompt
+          active-text="自动计算"
+          inactive-text="手动录入"
+          style="--el-switch-on-color: #ff7a00"
+          @change="onAutoCalcChange"
+        />
+      </div>
       <div class="grid legs">
         <el-form-item :label="t('orders.common.customerSell')" required>
           <el-input
@@ -370,6 +470,7 @@ async function submit() {
             :formatter="fmtThousands"
             :parser="parseAmount"
             :placeholder="t('orders.create.amountPlaceholder')"
+            @input="onSellInput"
           >
             <template #prepend>
               <el-select v-model="form.sell_currency" style="width: 90px">
@@ -385,6 +486,7 @@ async function submit() {
             :formatter="fmtThousands"
             :parser="parseAmount"
             :placeholder="t('orders.create.amountPlaceholder')"
+            @input="onBuyInput"
           >
             <template #prepend>
               <el-select v-model="form.buy_currency" style="width: 90px">
@@ -394,9 +496,15 @@ async function submit() {
           </el-input>
         </el-form-item>
       </div>
+      <div v-if="autoCalc" class="calc-expr">
+        <span class="calc-icon">∑</span>{{ calcExpr }}
+      </div>
+      <div v-else class="calc-expr manual">
+        手动录入模式：买入 / 卖出金额独立填写，不随汇率联动。
+      </div>
       <div class="grid">
         <el-form-item :label="t('orders.common.execRate')" required>
-          <el-input v-model="form.rate" maxlength="20" />
+          <el-input v-model="form.rate" maxlength="20" @input="onRateInput" />
         </el-form-item>
         <!-- 关联报价是建单时的一次性留档，编辑时不再改动 -->
         <el-form-item v-if="!isEdit" :label="t('orders.create.quoteLink')">
@@ -415,10 +523,17 @@ async function submit() {
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="visible = false">{{ t("orders.common.cancel") }}</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">
-        {{ isEdit ? t("orders.edit.submit") : t("orders.create.submit") }}
-      </el-button>
+      <div class="footer-row">
+        <!-- 可编辑的订单同样可删除（同一状态口径，服务端二次校验） -->
+        <el-button v-if="isEdit" type="danger" plain :loading="deleting" @click="doDelete">
+          {{ t("orders.edit.deleteAction") }}
+        </el-button>
+        <span class="footer-spacer" />
+        <el-button @click="visible = false">{{ t("orders.common.cancel") }}</el-button>
+        <el-button type="primary" :loading="submitting" @click="submit">
+          {{ isEdit ? t("orders.edit.submit") : t("orders.create.submit") }}
+        </el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -428,6 +543,43 @@ async function submit() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 14px;
+}
+
+.legs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.legs-title {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.calc-expr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff8f1;
+  border: 1px solid #ffe1c4;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #c2660a;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-expr.manual {
+  background: #f5f7fa;
+  border-color: #e4e7ed;
+  color: #909399;
+}
+
+.calc-icon {
+  font-weight: 700;
 }
 
 .biz-hint {
@@ -452,5 +604,15 @@ async function submit() {
   padding: 0 5px;
   font-size: 11px;
   margin-left: 6px;
+}
+
+.footer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.footer-spacer {
+  flex: 1;
 }
 </style>

@@ -28,7 +28,6 @@ const visible = defineModel<boolean>({ required: true });
 const props = defineProps<{
   members: DepartmentMemberVO[];
   prefill: { user_id?: string; date?: string };
-  recommend: (member: DepartmentMemberVO) => DepartmentMemberVO | null;
 }>();
 const emit = defineEmits<{ saved: [] }>();
 const { t } = useI18n();
@@ -84,7 +83,6 @@ watch(
 );
 
 const selectedMember = computed(() => props.members.find(m => m.user_id === form.user_id) ?? null);
-const target = computed(() => (selectedMember.value ? props.recommend(selectedMember.value) : null));
 
 const memberActions = computed(() =>
   props.members.map(m => ({ name: `${m.display_name} · ${m.role_name}`, user_id: m.user_id })),
@@ -191,7 +189,7 @@ async function submit() {
       <div v-if="selectedMember" class="impact">
         <strong>{{ t("department.leaveForm.impactTitle") }}</strong>
         <p>{{ t("department.leaveForm.impactLine", { name: selectedMember.display_name, pending: selectedMember.pending, done: selectedMember.today_done }) }}</p>
-        <span>{{ target ? t("department.leaveForm.suggestLine", { name: target.display_name, count: target.pending }) : t("department.leaveForm.noSuggest") }}</span>
+        <span>{{ t("department.leaveForm.handoffLine") }}</span>
       </div>
 
       <div class="buttons">

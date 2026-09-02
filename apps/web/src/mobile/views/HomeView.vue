@@ -53,6 +53,13 @@ onMounted(() => {
 
 <template>
   <div class="home-view">
+    <!-- 业务交接：代班期间待办已并入被代班岗位 -->
+    <div v-if="auth.handoffs.length" class="handoff-banner">
+      <strong>代班中</strong>
+      <span v-for="item in auth.handoffs" :key="item.leave_id">
+        {{ item.from_user_name }}（{{ item.role_name }}）· 至 {{ item.end_date }}
+      </span>
+    </div>
     <template v-if="isQueueRole">
       <p class="queue-greeting">{{ t("mobile.home.greeting", { name: auth.user?.display_name ?? "" }) }}</p>
       <OrderQueue :tabs="queueTabs" />
@@ -95,6 +102,21 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.handoff-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 12px 12px 0;
+  padding: 10px 12px;
+  background: #fff6ec;
+  border: 1px solid #f6dcbd;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #6b625a;
+}
+.handoff-banner strong {
+  color: #d97a1a;
+}
 .home-view {
   min-height: 100%;
   background: #f5f6f8;

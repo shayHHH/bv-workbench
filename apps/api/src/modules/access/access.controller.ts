@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { QUOTE_ACCESS_ROLES } from "@bv/shared";
 import { JwtPayload } from "../../auth/auth.types";
 import { CurrentUser, Roles } from "../../auth/decorators";
 import { AccessService } from "./access.service";
@@ -11,12 +12,12 @@ import {
   SubmitApplicationDto,
 } from "./dto/access.dto";
 
-/** 交易员侧准入申请（材料上传/补件处理）；合规与管理员可读 */
+/** 准入申请（材料上传/补件处理）：交易员与运营经理可写，合规与管理员可读 */
 @Controller("access")
 export class AccessController {
   constructor(private readonly accessService: AccessService) {}
 
-  /* 只读查看不设角色门槛（用户 2026-08-27：客户管理页与客户详情抽屉全员可看）；写操作仍限交易员 */
+  /* 只读查看不设角色门槛（用户 2026-08-27：客户管理页与客户详情抽屉全员可看）；写操作限交易员与运营经理 */
   @Get("applications")
   list(@Query() query: QueryApplicationDto) {
     return this.accessService.list(query);
@@ -28,13 +29,13 @@ export class AccessController {
   }
 
   @Post("applications")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   create(@Body() dto: CreateApplicationDto, @CurrentUser() operator: JwtPayload) {
     return this.accessService.create(dto, operator);
   }
 
   @Patch("applications/:id")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   saveDraft(
     @Param("id") id: string,
     @Body() dto: SaveDraftDto,
@@ -44,7 +45,7 @@ export class AccessController {
   }
 
   @Post("applications/:id/submit")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   submit(
     @Param("id") id: string,
     @Body() dto: SubmitApplicationDto,
@@ -55,13 +56,13 @@ export class AccessController {
 
   /** 重新提交（审核拒绝/已过期/已取消 → 重开为草稿） */
   @Post("applications/:id/reopen")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   reopen(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
     return this.accessService.reopen(id, operator);
   }
 
   @Post("applications/:id/cancel")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   cancel(
     @Param("id") id: string,
     @Body() dto: CancelApplicationDto,
@@ -79,7 +80,7 @@ export class AccessController {
   }
 
   @Post("customers/:customerId/materials")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   archiveMaterials(
     @Param("customerId") customerId: string,
     @Body() dto: ArchiveMaterialsDto,
@@ -89,7 +90,7 @@ export class AccessController {
   }
 
   @Delete("materials/:id")
-  @Roles("AGENT", "OPS")
+  @Roles(...QUOTE_ACCESS_ROLES)
   @HttpCode(204)
   async deleteMaterial(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
     await this.accessService.deleteCustomerMaterial(id, operator);

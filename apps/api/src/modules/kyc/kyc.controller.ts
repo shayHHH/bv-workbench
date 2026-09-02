@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
 import { JwtPayload } from "../../auth/auth.types";
-import { COMPLIANCE_DUTY_ROLES } from "@bv/shared";
+import { COMPLIANCE_DUTY_ROLES, QUOTE_ACCESS_ROLES } from "@bv/shared";
 import { CurrentUser, Roles } from "../../auth/decorators";
 import { SaveScenarioDto } from "./dto/save-scenario.dto";
 import { KycService } from "./kyc.service";
@@ -11,7 +11,7 @@ export class KycController {
 
   /** 材料上传页引用：已发布模板（交易员/合规/管理员可读） */
   @Get("active")
-  @Roles("AGENT", "OPS", ...COMPLIANCE_DUTY_ROLES, "ADMIN")
+  @Roles(...QUOTE_ACCESS_ROLES, ...COMPLIANCE_DUTY_ROLES, "ADMIN")
   listActive() {
     return this.kycService.listPublished();
   }

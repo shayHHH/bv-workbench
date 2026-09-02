@@ -186,6 +186,12 @@ function onUpdated() {
   panelRef.value?.reload();
 }
 
+/** 订单已删除：关掉指向它的详情面板并刷新列表（editOrder 留待下次 openEdit 覆盖，避免弹窗关闭过渡期闪成新建样式） */
+function onDeleted(orderId: string) {
+  if (panelOrderId.value === orderId) panelOrderId.value = "";
+  load();
+}
+
 function openFunding(order: TradeOrderVO, side: FundingSide) {
   fundingOrder.value = order;
   fundingSide.value = side;
@@ -349,7 +355,7 @@ onMounted(() => {
       @edit="openEdit"
     />
     <OrderCreateDialog v-model="createVisible" @created="onCreated" />
-    <OrderCreateDialog v-model="editVisible" :order="editOrder" @updated="onUpdated" />
+    <OrderCreateDialog v-model="editVisible" :order="editOrder" @updated="onUpdated" @deleted="onDeleted" />
     <FundingDialog v-model="fundingVisible" :order="fundingOrder" :side="fundingSide" @done="onActionDone" />
     <DispatchDialog v-model="dispatchVisible" :order="dispatchOrder" @done="onActionDone" />
   </div>

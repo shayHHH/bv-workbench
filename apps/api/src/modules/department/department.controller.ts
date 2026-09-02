@@ -20,6 +20,12 @@ export class DepartmentController {
     return this.departmentService.createLeave(dto, operator);
   }
 
+  /** 接手人候选：系统全部启用账号（含 Admin），经理自选 */
+  @Get("handoff-candidates")
+  handoffCandidates() {
+    return this.departmentService.handoffCandidates();
+  }
+
   @Post("leaves/:id/handoff")
   markHandoff(
     @Param("id") id: string,
@@ -27,6 +33,19 @@ export class DepartmentController {
     @CurrentUser() operator: JwtPayload,
   ) {
     return this.departmentService.markHandoff(id, dto, operator);
+  }
+
+  /** 撤销交接（接手人代班权限立即失效） */
+  @Delete("leaves/:id/handoff")
+  revokeHandoff(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
+    return this.departmentService.revokeHandoff(id, operator);
+  }
+
+  /** 我的代班（任意登录角色查自己）：工作台提示条与前端菜单按此扩展可见范围 */
+  @Get("my-handoffs")
+  @Roles()
+  myHandoffs(@CurrentUser() operator: JwtPayload) {
+    return this.departmentService.myHandoffs(operator);
   }
 
   @Delete("leaves/:id")

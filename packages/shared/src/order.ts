@@ -418,8 +418,8 @@ export interface CreateOrderInput {
  * 编辑交易订单入参（初级/高级交易员，排单进入审核前可改）。
  * 只提交需要变更的字段；改动买入金额/币种时后端会重算资金冻结。
  */
+/** 编辑不允许更换客户（客户是订单主体，换客户请删除后重建） */
 export interface UpdateOrderInput {
-  customer_id?: string;
   business_type?: string | null;
   business_scenario_id?: string | null;
   person_name?: string | null;

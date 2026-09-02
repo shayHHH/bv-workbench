@@ -2,10 +2,12 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { InjectModel } from "@nestjs/mongoose";
 import {
   AccessStatus,
+  ActiveHandoffVO,
   DonePeriod,
   DepartmentMemberVO,
   DepartmentOverviewVO,
   DispatchStatus,
+  HandoffCandidateVO,
   LEAVE_PART_DEFAULT_TIMES,
   LeavePart,
   LeaveRecordVO,
@@ -22,15 +24,8 @@ import { TradeOrder, TradeOrderDocument } from "../order/schemas/trade-order.sch
 import { Role, RoleDocument } from "../user/role.schema";
 import { User, UserDocument } from "../user/user.schema";
 import { CreateLeaveDto, MarkHandoffDto } from "./dto/department.dto";
+import { HandoffService, isoDate } from "./handoff.service";
 import { LeaveRecord, LeaveRecordDocument } from "./leave-record.schema";
-
-/** 本地日期 YYYY-MM-DD（出勤日历按天比对的统一口径） */
-function isoDate(date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function dayRange(date = new Date()): { from: Date; to: Date } {
   const from = new Date(date);
@@ -72,6 +67,7 @@ export class DepartmentService {
     @InjectModel(ReviewCase.name) private readonly reviewCaseModel: Model<ReviewCaseDocument>,
     @InjectModel(ReviewAssignment.name)
     private readonly assignmentModel: Model<ReviewAssignmentDocument>,
+    private readonly handoffService: HandoffService,
   ) {}
 
   async overview(start?: string, end?: string, donePeriod: DonePeriod = "today"): Promise<DepartmentOverviewVO> {
@@ -306,15 +302,82 @@ export class DepartmentService {
     return this.toLeaveVO(doc.toObject());
   }
 
+  /**
+   * 指定接手人（经理从系统全部启用账号里自选，不做岗位推荐）。
+   * 落库接手人 id 与被代班岗位后，接手人在请假区间内即获得该岗位的待办与操作权限。
+   */
   async markHandoff(id: string, dto: MarkHandoffDto, operator: JwtPayload): Promise<LeaveRecordVO> {
     const doc = await this.leaveModel.findOne({ _id: id, is_deleted: false });
     if (!doc) throw new NotFoundException("请假记录不存在");
+    if (String(doc.user_id) === dto.target_user_id)
+      throw new BadRequestException("接手人不能是请假人本人");
+    const target = await this.userModel
+      .findOne({ _id: dto.target_user_id, is_deleted: false, user_status: "ACTIVE" })
+      .lean();
+    if (!target) throw new NotFoundException("接手人不存在或已停用");
+    /* 代班岗位取请假人「当前」角色，而不是登记时的 role_name 快照（角色可能已调整） */
+    const absentee = await this.userModel.findOne({ _id: doc.user_id, is_deleted: false }).lean();
+    const absenteeRole = absentee
+      ? await this.roleModel.findOne({ _id: absentee.role_id }).lean()
+      : null;
+
     doc.handoff_done = true;
-    doc.handoff_target = dto.target_name?.trim() || null;
+    doc.handoff_target = target.display_name;
+    doc.handoff_user_id = new Types.ObjectId(String(target._id));
+    doc.handoff_role_code = absenteeRole?.role_code ?? null;
     doc.handoff_at = new Date();
     doc.set("updated_by", new Types.ObjectId(operator.sub));
     await doc.save();
     return this.toLeaveVO(doc.toObject());
+  }
+
+  /** 撤销交接：接手人的代班权限立即失效，记录回到「待交接」 */
+  async revokeHandoff(id: string, operator: JwtPayload): Promise<LeaveRecordVO> {
+    const doc = await this.leaveModel.findOne({ _id: id, is_deleted: false });
+    if (!doc) throw new NotFoundException("请假记录不存在");
+    doc.handoff_done = false;
+    doc.handoff_target = null;
+    doc.handoff_user_id = null;
+    doc.handoff_role_code = null;
+    doc.handoff_at = null;
+    doc.set("updated_by", new Types.ObjectId(operator.sub));
+    await doc.save();
+    return this.toLeaveVO(doc.toObject());
+  }
+
+  /** 接手人候选：系统全部启用账号（含 Admin），今日请假的只做标注不过滤 */
+  async handoffCandidates(): Promise<HandoffCandidateVO[]> {
+    const today = isoDate();
+    const [roles, users, leaves] = await Promise.all([
+      this.roleModel.find({ is_deleted: false }).lean(),
+      this.userModel
+        .find({ is_deleted: false, user_status: "ACTIVE" })
+        .sort({ created_at: 1 })
+        .lean(),
+      this.leaveModel
+        .find({ is_deleted: false, start_date: { $lte: today }, end_date: { $gte: today } })
+        .select({ user_id: 1 })
+        .lean(),
+    ]);
+    const roleById = new Map(roles.map(role => [String(role._id), role]));
+    const onLeave = new Set(leaves.map(leave => String(leave.user_id)));
+    return users.map(user => {
+      const role = roleById.get(String(user.role_id));
+      return {
+        user_id: String(user._id),
+        username: user.username,
+        display_name: user.display_name,
+        title: user.title ?? null,
+        role_code: role?.role_code ?? "",
+        role_name: role?.role_name ?? role?.role_code ?? "",
+        on_leave_today: onLeave.has(String(user._id)),
+      };
+    });
+  }
+
+  /** 当前登录用户今日生效中的代班（工作台提示条） */
+  myHandoffs(operator: JwtPayload): Promise<ActiveHandoffVO[]> {
+    return this.handoffService.activeHandoffs(operator.sub);
   }
 
   /** 取消登记：软删除，员工恢复「在岗」 */
@@ -345,6 +408,8 @@ export class DepartmentService {
       handoff: doc.handoff,
       handoff_done: doc.handoff_done,
       handoff_target: doc.handoff_target ?? null,
+      handoff_user_id: doc.handoff_user_id ? String(doc.handoff_user_id) : null,
+      handoff_role_code: doc.handoff_role_code ?? null,
       handoff_at: doc.handoff_at ? doc.handoff_at.toISOString() : null,
       registered_by: doc.registered_by,
       registered_at: doc.created_at ? doc.created_at.toISOString() : new Date().toISOString(),

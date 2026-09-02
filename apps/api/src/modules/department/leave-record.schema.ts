@@ -56,8 +56,17 @@ export class LeaveRecord {
   @Prop({ type: Boolean, default: false })
   handoff_done: boolean;
 
+  /** 接手人姓名快照（展示用） */
   @Prop({ type: String, default: null })
   handoff_target: string | null;
+
+  /** 接手人用户 id：代班授权的判定依据（经理指定，可为系统任一启用账号） */
+  @Prop({ type: Types.ObjectId, default: null })
+  handoff_user_id: Types.ObjectId | null;
+
+  /** 被代班的岗位（交接时的请假人角色快照）：接手人在请假区间内按此角色放行 */
+  @Prop({ type: String, default: null })
+  handoff_role_code: string | null;
 
   @Prop({ type: Date, default: null })
   handoff_at: Date | null;
@@ -79,4 +88,9 @@ LeaveRecordSchema.index({ leave_no: 1 }, { name: "uk_department_leaves_leave_no"
 LeaveRecordSchema.index(
   { is_deleted: 1, end_date: 1, start_date: 1 },
   { name: "idx_department_leaves_deleted_range" },
+);
+/* 代班授权判定：每次守卫兜底查询按「接手人 + 生效中」命中 */
+LeaveRecordSchema.index(
+  { handoff_user_id: 1, is_deleted: 1, handoff_done: 1, end_date: 1, start_date: 1 },
+  { name: "idx_department_leaves_handoff_user" },
 );

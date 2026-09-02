@@ -34,6 +34,12 @@ export const BUILTIN_ROLES: ReadonlyArray<{ code: string; name: string; descript
  */
 export const COMPLIANCE_DUTY_ROLES = ["COMPLIANCE", "RISK_OFFICER"] as const;
 
+/**
+ * 报价与业务准入的作业角色（2026-09-02 用户确认：运营经理业务面全开，与交易员同等可操作）。
+ * 菜单/路由与后端 @Roles 统一以此判定，勿在各处散写角色字符串。
+ */
+export const QUOTE_ACCESS_ROLES = ["AGENT", "OPS", "MANAGER"] as const;
+
 export interface RoleVO {
   id: string;
   role_code: string;

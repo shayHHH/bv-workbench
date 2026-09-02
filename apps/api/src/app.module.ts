@@ -9,6 +9,7 @@ import { AccessModule } from "./modules/access/access.module";
 import { AssignmentModule } from "./modules/assignment/assignment.module";
 import { CustomerModule } from "./modules/customer/customer.module";
 import { DepartmentModule } from "./modules/department/department.module";
+import { HandoffModule } from "./modules/department/handoff.module";
 import { FileModule } from "./modules/file/file.module";
 import { KycModule } from "./modules/kyc/kyc.module";
 import { OrderModule } from "./modules/order/order.module";
@@ -32,6 +33,7 @@ import { UserModule } from "./modules/user/user.module";
     }),
     // 内部数据仓库连接（预留：配置 INTERNAL_DW_MONGODB_URI 后启用）
     InternalWarehouseModule.forRoot(),
+    HandoffModule,
     AuthModule,
     UserModule,
     HealthModule,

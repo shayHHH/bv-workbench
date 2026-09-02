@@ -5,7 +5,7 @@
  */
 import "vant/lib/index.css";
 import { NavBar as VanNavBar, Tabbar as VanTabbar, TabbarItem as VanTabbarItem } from "vant";
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { localizeText } from "@/i18n";
@@ -21,6 +21,11 @@ const showBack = computed(() => !route.meta.tab);
 const title = computed(() => localizeText((route.meta.title as string | undefined) ?? ""));
 /* 部门管理只对运营经理开放，其余两个移动角色 tabbar 只有三项 */
 const isManager = computed(() => auth.roleCode === "MANAGER");
+
+/* 代班岗位决定首页待办范围，进壳时拉一次 */
+onMounted(() => {
+  void auth.ensureHandoffs();
+});
 
 function switchTab(name: string | number) {
   router.push(`/m/${name}`);

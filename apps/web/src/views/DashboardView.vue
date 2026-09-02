@@ -586,6 +586,15 @@ onMounted(() => {
       </div>
     </header>
 
+    <!-- 业务交接：代班期间本工作台的待办已并入被代班岗位 -->
+    <div v-if="auth.handoffs.length" class="handoff-banner">
+      <strong>代班中</strong>
+      <span v-for="item in auth.handoffs" :key="item.leave_id">
+        {{ item.from_user_name }}（{{ item.role_name }}）· 至 {{ item.end_date }}
+      </span>
+      <em>该岗位的待办与操作权限已并入你的工作台，交接结束后自动收回。</em>
+    </div>
+
     <div v-if="hasModule('metrics')" class="metric-grid">
       <article v-for="metric in dashboardMetrics" :key="metric.label" class="metric-card" :class="metric.tone">
         <div class="metric-top">
@@ -911,6 +920,29 @@ h1 {
   background: oklch(58% 0.183 51);
   box-shadow: 0 8px 18px -14px oklch(58% 0.183 51 / 0.75);
   font-weight: 700;
+}
+
+.handoff-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: var(--el-color-warning-light-9, #fdf6ec);
+  border: 1px solid var(--el-color-warning-light-7, #f5dab1);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.handoff-banner strong {
+  color: var(--el-color-warning);
+}
+.handoff-banner em {
+  flex-basis: 100%;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .metric-grid {

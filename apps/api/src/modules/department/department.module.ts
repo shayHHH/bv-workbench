@@ -9,10 +9,12 @@ import { Role, RoleSchema } from "../user/role.schema";
 import { User, UserSchema } from "../user/user.schema";
 import { DepartmentController } from "./department.controller";
 import { DepartmentService } from "./department.service";
+import { HandoffModule } from "./handoff.module";
 import { LeaveRecord, LeaveRecordSchema } from "./leave-record.schema";
 
 @Module({
   imports: [
+    HandoffModule,
     MongooseModule.forFeature([
       { name: LeaveRecord.name, schema: LeaveRecordSchema },
       { name: User.name, schema: UserSchema },

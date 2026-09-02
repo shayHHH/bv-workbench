@@ -16,8 +16,9 @@ import { ElMessage } from "element-plus";
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
-import { fetchDepartmentOverview, markLeaveHandoff } from "@/api/department";
+import { fetchDepartmentOverview, revokeLeaveHandoff } from "@/api/department";
 import { formatRelative } from "@/utils/format";
+import HandoffPickerDialog from "./HandoffPickerDialog.vue";
 import LeaveDetailDrawer from "./LeaveDetailDrawer.vue";
 import LeaveFormDialog from "./LeaveFormDialog.vue";
 
@@ -100,17 +101,6 @@ function memberStatus(member: DepartmentMemberVO, iso = todayIso) {
   return { label, tone: leave.leave_type === LeaveType.SICK ? ("danger" as const) : ("warning" as const), leave };
 }
 
-/** 建议接手人：同岗位、今日在岗、待办最少；无同岗位人选时放宽到任意在岗 */
-function recommendedHandoff(member: DepartmentMemberVO): DepartmentMemberVO | null {
-  const onDuty = (item: DepartmentMemberVO) =>
-    item.user_id !== member.user_id && !memberStatus(item).leave;
-  const sameRole = members.value
-    .filter(item => onDuty(item) && item.role_code === member.role_code)
-    .sort((a, b) => a.pending - b.pending);
-  if (sameRole.length) return sameRole[0];
-  return members.value.filter(onDuty).sort((a, b) => a.pending - b.pending)[0] ?? null;
-}
-
 const focusOf = (member: DepartmentMemberVO) => {
   const focus = ROLE_FOCUS[member.role_code];
   return focus ? localizeText(focus) : member.role_name;
@@ -143,24 +133,20 @@ const activeLeaves = computed(() => leaves.value.filter(leave => leave.end_date 
 
 const memberById = (id: string) => members.value.find(m => m.user_id === id) ?? null;
 const leavePendingCount = (leave: LeaveRecordVO) => memberById(leave.user_id)?.pending ?? 0;
-const leaveRecommendedHandoff = (leave: LeaveRecordVO) => {
-  const member = memberById(leave.user_id);
-  return member ? recommendedHandoff(member) : null;
-};
-const detailTarget = computed(() => detailLeave.value ? leaveRecommendedHandoff(detailLeave.value) : null);
+
+/* 交接接手人由经理在弹窗里从系统全部启用账号中指定（不做系统推荐） */
+const pickerLeaveId = ref("");
+const pickerLeave = computed(() => leaves.value.find(leave => leave.id === pickerLeaveId.value) ?? null);
+function openPicker(leave: LeaveRecordVO) {
+  pickerLeaveId.value = leave.id;
+}
 
 const handoffSubmitting = ref("");
-async function markHandoff(leave: LeaveRecordVO) {
-  const member = memberById(leave.user_id);
-  const target = member ? recommendedHandoff(member) : null;
+async function revokeHandoff(leave: LeaveRecordVO) {
   handoffSubmitting.value = leave.id;
   try {
-    await markLeaveHandoff(leave.id, target?.display_name ?? null);
-    ElMessage.success(
-      target
-        ? t("department.view.handoffMarkedTo", { name: leave.user_name, target: target.display_name })
-        : t("department.view.handoffMarkedPlain", { name: leave.user_name }),
-    );
+    await revokeLeaveHandoff(leave.id);
+    ElMessage.success(t("department.view.handoffRevoked", { name: leave.user_name }));
     await load();
   } finally {
     handoffSubmitting.value = "";
@@ -276,7 +262,7 @@ const weekLeaves = computed(() =>
           <el-table-column :label="t('department.view.colAdvice')" min-width="150">
             <template #default="{ row }">
               <el-button v-if="memberStatus(row).leave" link type="primary" @click="tab = 'handoff'">
-                {{ recommendedHandoff(row) ? t("department.view.suggestTakeover", { name: recommendedHandoff(row)!.display_name }) : t("department.view.pendingAssign") }}
+                {{ t("department.view.goArrangeHandoff") }}
               </el-button>
               <span v-else class="muted">{{ t("department.view.lastActive", { time: formatRelative(row.last_login_at) }) }}</span>
             </template>
@@ -355,9 +341,7 @@ const weekLeaves = computed(() =>
                 <b>{{
                   leave.handoff_done
                     ? (leave.handoff_target ? t("department.view.handoffDoneTo", { name: leave.handoff_target }) : t("department.common.handoffDone"))
-                    : leaveRecommendedHandoff(leave)
-                      ? t("department.view.suggestName", { name: leaveRecommendedHandoff(leave)!.display_name })
-                      : t("department.view.pendingAssign")
+                    : t("department.view.pendingAssign")
                 }}</b>
               </footer>
             </article>
@@ -385,31 +369,30 @@ const weekLeaves = computed(() =>
               <strong>{{ memberById(row.user_id)?.pending ?? 0 }}</strong> {{ t("department.common.itemsUnit") }}
             </template>
           </el-table-column>
-          <el-table-column :label="t('department.view.colSuggest')" min-width="160">
+          <el-table-column :label="t('department.view.colTakeover')" min-width="180">
             <template #default="{ row }">
               <template v-if="row.handoff_done">
                 <strong>{{ row.handoff_target || t("department.common.arranged") }}</strong>
                 <div class="muted">{{ t("department.view.handoffAtDone", { time: formatRelative(row.handoff_at) }) }}</div>
               </template>
-              <template v-else-if="leaveRecommendedHandoff(row)">
-                <strong>{{ leaveRecommendedHandoff(row)!.display_name }}</strong>
-                <div class="muted">
-                  {{ leaveRecommendedHandoff(row)!.role_name }} ·
-                  {{ t("department.common.currentPending", { count: leaveRecommendedHandoff(row)!.pending }) }}
-                </div>
-              </template>
               <span v-else class="muted">{{ t("department.view.pendingShort") }}</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('department.view.colActions')" width="120" align="right">
+          <el-table-column :label="t('department.view.colActions')" width="190" align="right">
             <template #default="{ row }">
-              <el-tag v-if="row.handoff_done" type="success" size="small" effect="light">{{ t("department.common.handoffDone") }}</el-tag>
-              <el-button
-                v-else
-                size="small"
-                :loading="handoffSubmitting === row.id"
-                @click="markHandoff(row)"
-              >
+              <template v-if="row.handoff_done">
+                <el-button size="small" @click="openPicker(row)">{{ t("department.common.reassign") }}</el-button>
+                <el-button
+                  size="small"
+                  text
+                  type="danger"
+                  :loading="handoffSubmitting === row.id"
+                  @click="revokeHandoff(row)"
+                >
+                  {{ t("department.common.revokeHandoff") }}
+                </el-button>
+              </template>
+              <el-button v-else size="small" type="primary" @click="openPicker(row)">
                 {{ t("department.common.markHandoff") }}
               </el-button>
             </template>
@@ -423,17 +406,17 @@ const weekLeaves = computed(() =>
       v-model="formVisible"
       :members="members"
       :prefill="formPrefill"
-      :recommend="recommendedHandoff"
       @saved="load"
     />
     <LeaveDetailDrawer
       :leave="detailLeave"
       :member="detailLeave ? memberById(detailLeave.user_id) : null"
-      :target="detailTarget"
       @close="detailLeaveId = ''"
       @changed="load"
       @go-handoff="tab = 'handoff'; detailLeaveId = ''"
+      @pick-target="leave => { detailLeaveId = ''; openPicker(leave); }"
     />
+    <HandoffPickerDialog :leave="pickerLeave" @close="pickerLeaveId = ''" @saved="load" />
   </div>
 </template>
 

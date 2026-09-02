@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { JwtPayload } from "../../auth/auth.types";
 import { CurrentUser, Roles } from "../../auth/decorators";
 import {
@@ -85,6 +85,14 @@ export class OrderController {
   @Roles("AGENT", "OPS")
   update(@Param("id") id: string, @Body() dto: UpdateOrderDto, @CurrentUser() operator: JwtPayload) {
     return this.orderService.update(id, dto, operator);
+  }
+
+  /** 删除订单：与编辑同口径（排单审核前，初级/高级交易员），软删除 */
+  @Delete(":id")
+  @Roles("AGENT", "OPS")
+  @HttpCode(204)
+  async remove(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
+    await this.orderService.softDelete(id, operator);
   }
 
   @Post(":id/cancel")

@@ -204,11 +204,8 @@ export class CreateCustomBusinessTypeDto {
  * 编辑交易订单（初级/高级交易员，排单进入审核前可改）。
  * 全部字段可选，只提交需要变更的部分；改动买入金额/币种时服务层会重算冻结。
  */
+/** 编辑不允许更换客户（客户是订单主体，换客户请删除后重建） */
 export class UpdateOrderDto {
-  @IsOptional()
-  @IsMongoId()
-  customer_id?: string;
-
   @IsOptional()
   @IsString()
   @MaxLength(60)
