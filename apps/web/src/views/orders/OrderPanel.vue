@@ -6,6 +6,7 @@ import {
   FundingOwnerLabel,
   fundingKindOf,
   fundingOwnerRole,
+  isOrderEditable,
   ORDER_STAGES,
   orderStageCurrent,
   TradeOrderStatus,
@@ -16,7 +17,7 @@ import {
   type TradeOrderVO,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Close, CopyDocument, Download, FullScreen, View } from "@element-plus/icons-vue";
+import { Close, CopyDocument, Download, EditPen, FullScreen, View } from "@element-plus/icons-vue";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
@@ -44,6 +45,7 @@ const emit = defineEmits<{
   changed: [order: TradeOrderVO];
   funding: [order: TradeOrderVO, side: FundingSide];
   dispatch: [order: TradeOrderVO];
+  edit: [order: TradeOrderVO];
 }>();
 
 const { t } = useI18n();
@@ -258,6 +260,7 @@ const actionBlocks = computed<ActionBlock[]>(() => {
   const outflowInfo = fundingState("outflow");
 
   if (role.value === "OPS" && o.exception) {
+    /* 异常未解除前只给异常处理动作，不再叠加正常状态的审核/排单操作 —— 需先解除/取消/升级 */
     blocks.push({
       tone: "danger",
       text: t("orders.panel.actions.exceptionText", { reason: o.exception.reason }),
@@ -267,6 +270,7 @@ const actionBlocks = computed<ActionBlock[]>(() => {
         ...(o.exception.escalated ? [] : [{ label: t("orders.panel.actions.escalateCompliance"), run: () => resolveExc("escalate") }]),
       ],
     });
+    return blocks;
   }
   if (isTrader.value) {
     if (o.status === TradeOrderStatus.PENDING_KYC) {
@@ -274,7 +278,24 @@ const actionBlocks = computed<ActionBlock[]>(() => {
         tone: "warning",
         text: t("orders.panel.actions.pendingKycText", { kyc: localizeText(o.kyc.label) }),
         buttons: [
-          { label: t("orders.panel.actions.gotoMaterials"), primary: true, run: () => router.push("/access/materials") },
+          {
+            label: t("orders.panel.actions.gotoMaterials"),
+            primary: true,
+            /* 带上客户与准入业务类型，材料上传页回显，免去重新选一遍。
+               自定义业务类型没有 scenario_id，改传名称，材料上传页据此不展示材料清单 */
+            run: () =>
+              router.push({
+                path: "/access/materials",
+                query: {
+                  customer_id: o.customer_id,
+                  ...(o.business_scenario_id
+                    ? { scenario_id: o.business_scenario_id }
+                    : o.business_type
+                      ? { custom_business_type: o.business_type }
+                      : {}),
+                },
+              }),
+          },
           { label: t("orders.panel.actions.syncKyc"), run: doKycSync },
           { label: t("orders.common.cancelOrder"), run: () => doCancel(false) },
         ],
@@ -490,7 +511,20 @@ async function copyPanelDispatchText() {
       <header class="panel-head">
         <div class="topline">
           <span class="eyebrow">TRADE ORDER · {{ order.trade_type }} · {{ order.order_no }}</span>
-          <el-button :icon="Close" text @click="emit('close')" />
+          <div class="topline-actions">
+            <!-- 排单进入审核前，初级/高级交易员可改单要素 -->
+            <el-button
+              v-if="isTrader && isOrderEditable(order)"
+              :icon="EditPen"
+              text
+              type="primary"
+              size="small"
+              @click="emit('edit', order)"
+            >
+              {{ t("orders.edit.action") }}
+            </el-button>
+            <el-button :icon="Close" text @click="emit('close')" />
+          </div>
         </div>
         <div class="title-row">
           <h2>{{ order.customer_name }}（{{ order.customer_code || t("orders.common.noCode") }}）</h2>
@@ -644,7 +678,7 @@ async function copyPanelDispatchText() {
                   <strong>{{ fmtMoney(dispatch.currency, dispatch.amount) }}</strong>
                   <small>{{ t("orders.panel.reviewMeta", { channel: dispatch.channel, payee: dispatch.payee }) }}</small>
                 </div>
-                <div v-if="role === 'OPS'" class="review-actions">
+                <div v-if="role === 'OPS' && !order.exception" class="review-actions">
                   <el-button size="small" type="primary" @click="doDispatchApprove">{{ t("orders.common.approve") }}</el-button>
                   <el-button size="small" @click="doDispatchReturn">{{ t("orders.common.reject") }}</el-button>
                 </div>
@@ -786,6 +820,12 @@ async function copyPanelDispatchText() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.topline-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .eyebrow {

@@ -193,3 +193,73 @@ export class ExceptionResolveDto {
   @MaxLength(300)
   note?: string;
 }
+
+export class CreateCustomBusinessTypeDto {
+  @IsString()
+  @MaxLength(60)
+  name: string;
+}
+
+/**
+ * 编辑交易订单（初级/高级交易员，排单进入审核前可改）。
+ * 全部字段可选，只提交需要变更的部分；改动买入金额/币种时服务层会重算冻结。
+ */
+export class UpdateOrderDto {
+  @IsOptional()
+  @IsMongoId()
+  customer_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  business_type?: string | null;
+
+  @IsOptional()
+  @IsMongoId()
+  business_scenario_id?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  person_name?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  trade_type?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  sell_currency?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  sell_amount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  buy_currency?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  buy_amount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  rate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  pay_method?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remark?: string | null;
+}

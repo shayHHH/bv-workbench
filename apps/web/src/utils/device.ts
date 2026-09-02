@@ -1,9 +1,9 @@
 /**
  * 移动端（H5）设备与角色判定。
- * 移动壳只对已有 H5 工作台的手机主力角色开放：
- * 钱包运营 WALLET / 高级交易员 OPS；其余角色始终使用桌面端。
+ * 移动壳只对手机主力三角色开放：钱包运营 WALLET / 高级交易员 OPS / 运营经理 MANAGER；
+ * 其余角色始终使用桌面端。
  */
-export const MOBILE_ROLES = ["WALLET", "OPS"] as const;
+export const MOBILE_ROLES = ["WALLET", "OPS", "MANAGER"] as const;
 
 const DESKTOP_PREF_KEY = "bv-prefer-desktop";
 

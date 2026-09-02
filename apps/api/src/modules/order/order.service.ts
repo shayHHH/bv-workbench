@@ -9,6 +9,7 @@ import { InjectConnection, InjectModel } from "@nestjs/mongoose";
 import {
   AccessToKycBadge,
   BUILTIN_ROLES,
+  CustomBusinessTypeVO,
   DispatchChannel,
   DispatchStatus,
   FreezeState,
@@ -44,7 +45,9 @@ import {
   ExceptionResolveDto,
   FundingActionDto,
   QueryOrderDto,
+  UpdateOrderDto,
 } from "./dto/order.dto";
+import { CustomBusinessType, CustomBusinessTypeDocument } from "./schemas/custom-business-type.schema";
 import { PayoutOrder, PayoutOrderDocument } from "./schemas/payout-order.schema";
 import { TradeOrder, TradeOrderDocument } from "./schemas/trade-order.schema";
 import { TreasuryAccount, TreasuryAccountDocument } from "./schemas/treasury-account.schema";
@@ -77,8 +80,68 @@ export class OrderService {
     private readonly applicationModel: Model<AccessApplicationDocument>,
     @InjectModel(QuoteRecord.name) private readonly quoteRecordModel: Model<QuoteRecordDocument>,
     @InjectModel(KycScenario.name) private readonly scenarioModel: Model<KycScenarioDocument>,
+    @InjectModel(CustomBusinessType.name)
+    private readonly customBusinessTypeModel: Model<CustomBusinessTypeDocument>,
     @InjectConnection() private readonly connection: Connection,
   ) {}
+
+  /* ---------------- 自定义准入业务类型 ---------------- */
+
+  /** 全员共享；order_count 供前端删除前二次确认展示 */
+  async listCustomBusinessTypes(): Promise<CustomBusinessTypeVO[]> {
+    const docs = await this.customBusinessTypeModel
+      .find({ is_deleted: false })
+      .sort({ created_at: -1 })
+      .lean();
+    if (!docs.length) return [];
+    const counts = await this.orderModel.aggregate<{ _id: string; count: number }>([
+      { $match: { is_deleted: false, business_type: { $in: docs.map(doc => doc.name) } } },
+      { $group: { _id: "$business_type", count: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map(row => [row._id, row.count]));
+    return docs.map(doc => ({
+      id: String(doc._id),
+      name: doc.name,
+      created_by_name: doc.created_by_name ?? null,
+      order_count: countMap.get(doc.name) ?? 0,
+      created_at: doc.created_at?.toISOString?.() ?? String(doc.created_at),
+    }));
+  }
+
+  async createCustomBusinessType(name: string, operator: JwtPayload): Promise<CustomBusinessTypeVO> {
+    const trimmed = name.trim();
+    if (!trimmed) throw new BadRequestException("请填写业务类型名称");
+    /* 与 KYC 业务类型重名会让下拉出现两条同名项，直接拒绝并提示改用已有配置 */
+    const scenario = await this.scenarioModel.findOne({ scenario_name: trimmed, is_deleted: false }).lean();
+    if (scenario) throw new ConflictException(`「${trimmed}」已是 KYC 配置的业务类型，请直接选择`);
+    const existing = await this.customBusinessTypeModel.findOne({ name: trimmed, is_deleted: false }).lean();
+    if (existing) throw new ConflictException(`自定义业务类型「${trimmed}」已存在`);
+    const doc = await this.customBusinessTypeModel.create({
+      name: trimmed,
+      created_by_name: operator.display_name ?? null,
+      created_by: new Types.ObjectId(operator.sub),
+    });
+    return {
+      id: String(doc._id),
+      name: doc.name,
+      created_by_name: doc.created_by_name ?? null,
+      order_count: 0,
+      created_at: doc.created_at?.toISOString?.() ?? String(doc.created_at),
+    };
+  }
+
+  /**
+   * 删除自定义业务类型。订单上的 business_type 是名称快照而非外键，
+   * 删除不影响历史订单展示，仅使其不再出现在新建订单的下拉里（前端按 order_count 做二次确认）。
+   */
+  async deleteCustomBusinessType(id: string, operator: JwtPayload): Promise<void> {
+    const doc = await this.customBusinessTypeModel.findOne({ _id: id, is_deleted: false });
+    if (!doc) throw new NotFoundException("自定义业务类型不存在");
+    doc.is_deleted = true;
+    doc.set("deleted_by", new Types.ObjectId(operator.sub));
+    doc.set("deleted_at", new Date());
+    await doc.save();
+  }
 
   /* ---------------- 建单 ---------------- */
 
@@ -174,6 +237,159 @@ export class OrderService {
     return this.toVO(doc.toObject(), kyc);
   }
 
+  /* ---------------- 编辑订单 ---------------- */
+
+  /** 排单进入审核后订单要素锁定，改动需先驳回排单 */
+  private static readonly EDITABLE_STATUSES: TradeOrderStatus[] = [
+    TradeOrderStatus.PENDING_KYC,
+    TradeOrderStatus.AWAITING_INFLOW,
+    TradeOrderStatus.AWAITING_DISPATCH,
+  ];
+
+  /**
+   * 编辑交易订单（初级/高级交易员）。
+   * 待出款排单状态下资金已冻结，改动买入金额/币种会先校验目标账户余额，再释放旧冻结并按新值重新冻结。
+   */
+  async update(id: string, dto: UpdateOrderDto, operator: JwtPayload): Promise<TradeOrderVO> {
+    const doc = await this.findOrFail(id);
+    if (!OrderService.EDITABLE_STATUSES.includes(doc.status)) {
+      throw new ConflictException(`当前状态（${doc.status}）不允许编辑订单；排单审核中或之后的订单需先驳回排单`);
+    }
+    if (doc.exception) throw new ConflictException("订单存在未解除的附加异常，请先处理异常再编辑");
+
+    const changes: string[] = [];
+    const before = {
+      sellCurrency: doc.sell_currency,
+      sellAmount: num(doc.sell_amount),
+      buyCurrency: doc.buy_currency,
+      buyAmount: num(doc.buy_amount),
+    };
+
+    if (dto.customer_id && String(doc.customer_id) !== dto.customer_id) {
+      const customer = await this.customerModel.findOne({ _id: dto.customer_id, is_deleted: false });
+      if (!customer) throw new NotFoundException("客户不存在");
+      changes.push(`客户 ${doc.customer_name} → ${customer.name}`);
+      doc.customer_id = customer._id;
+      doc.customer_name = customer.name;
+      doc.customer_code = customer.customer_code;
+    }
+
+    /* 业务类型：传 scenario_id 时以 KYC 配置的名称为准，自定义类型只存名称 */
+    if (dto.business_scenario_id !== undefined || dto.business_type !== undefined) {
+      let scenarioId: Types.ObjectId | null = null;
+      let businessType = dto.business_type ?? null;
+      if (dto.business_scenario_id) {
+        const scenario = await this.scenarioModel
+          .findOne({ _id: dto.business_scenario_id, is_deleted: false })
+          .lean();
+        if (scenario) {
+          scenarioId = scenario._id;
+          businessType = scenario.scenario_name;
+        }
+      }
+      if (doc.business_type !== businessType) {
+        changes.push(`业务类型 ${doc.business_type || "未选"} → ${businessType || "未选"}`);
+      }
+      doc.business_type = businessType;
+      doc.business_scenario_id = scenarioId;
+    }
+
+    if (dto.person_name !== undefined) doc.person_name = dto.person_name?.trim() || null;
+    if (dto.remark !== undefined) doc.remark = dto.remark?.trim() || null;
+    if (dto.trade_type !== undefined && dto.trade_type !== doc.trade_type) {
+      changes.push(`交易类型 ${doc.trade_type} → ${dto.trade_type}`);
+      doc.trade_type = dto.trade_type;
+    }
+    if (dto.pay_method !== undefined && dto.pay_method !== doc.pay_method) {
+      changes.push(`收款方式 ${doc.pay_method} → ${dto.pay_method}`);
+      doc.pay_method = dto.pay_method;
+    }
+    if (dto.rate !== undefined && dto.rate !== doc.rate) {
+      changes.push(`执行汇率 ${doc.rate} → ${dto.rate}`);
+      doc.rate = dto.rate;
+    }
+    if (dto.sell_currency !== undefined) doc.sell_currency = dto.sell_currency;
+    if (dto.sell_amount !== undefined) doc.sell_amount = Types.Decimal128.fromString(String(dto.sell_amount));
+    if (dto.buy_currency !== undefined) doc.buy_currency = dto.buy_currency;
+    if (dto.buy_amount !== undefined) doc.buy_amount = Types.Decimal128.fromString(String(dto.buy_amount));
+
+    const sellChanged =
+      doc.sell_currency !== before.sellCurrency || Math.abs(num(doc.sell_amount) - before.sellAmount) > 0.009;
+    const buyChanged =
+      doc.buy_currency !== before.buyCurrency || Math.abs(num(doc.buy_amount) - before.buyAmount) > 0.009;
+    if (sellChanged) {
+      changes.push(`客户卖出 ${before.sellCurrency} ${fmt(before.sellAmount)} → ${doc.sell_currency} ${fmt(num(doc.sell_amount))}`);
+    }
+    if (buyChanged) {
+      changes.push(`客户买入 ${before.buyCurrency} ${fmt(before.buyAmount)} → ${doc.buy_currency} ${fmt(num(doc.buy_amount))}`);
+    }
+
+    if (!changes.length && dto.person_name === undefined && dto.remark === undefined) {
+      throw new BadRequestException("没有需要保存的改动");
+    }
+
+    /* 已冻结且买入侧有变化时重算冻结：先确认目标账户余额够，再释放旧冻结并重新冻结 */
+    if (buyChanged && doc.freeze?.state === FreezeState.FROZEN) {
+      await this.refreezeForEdit(doc, before, operator);
+    }
+
+    /* 待客户入款状态改了应收金额时，此前登记的付款驳回标记失去意义 */
+    if (sellChanged && doc.status === TradeOrderStatus.AWAITING_INFLOW) doc.payment_rejected = null;
+
+    this.log(doc, "订单信息修改", changes.join("；"), operator);
+    doc.set("updated_by", new Types.ObjectId(operator.sub));
+    await doc.save();
+    return this.toVO(doc.toObject(), await this.kycBadgeForDoc(doc));
+  }
+
+  /**
+   * 编辑导致买入侧变化时重算冻结。数据库为单机部署无事务，
+   * 因此先做余额预检，再释放旧冻结、冻结新金额；重新冻结失败会补偿回滚到原冻结额，避免资金账户悬空。
+   */
+  private async refreezeForEdit(
+    doc: TradeOrderDocument,
+    before: { buyCurrency: string; buyAmount: number },
+    operator: JwtPayload,
+  ): Promise<void> {
+    const oldFreeze = { ...doc.freeze! };
+    const oldAmount = num(oldFreeze.amount);
+    const newAmount = num(doc.buy_amount);
+    const targetKey = await this.payoutAccountKeyFor(doc);
+    const target = targetKey ? await this.treasuryModel.findOne({ key: targetKey, is_deleted: false }) : null;
+    if (!target) {
+      throw new BadRequestException(`未找到可冻结的 ${doc.buy_currency} 出款账户，请先在资金账户中配置后再修改金额`);
+    }
+    /* 同账户时释放的旧冻结会回到可用余额，一并计入预检 */
+    const availableAfterRelease =
+      num(target.available) + (target.key === oldFreeze.account_key ? oldAmount : 0);
+    if (availableAfterRelease < newAmount) {
+      throw new BadRequestException(
+        `${target.name} 可用余额不足（调整后可用 ${fmt(availableAfterRelease)}，需冻结 ${fmt(newAmount)}），请先补仓或调整金额`,
+      );
+    }
+
+    await this.releaseFunds(doc);
+    try {
+      await this.freezeFunds(doc, operator);
+    } catch (error) {
+      /* 预检后仍失败（并发改动余额）：把旧冻结原样恢复，避免订单处于已释放但未重新冻结的悬空状态 */
+      const source = await this.treasuryModel.findOne({ key: oldFreeze.account_key, is_deleted: false });
+      if (source) {
+        source.available = Types.Decimal128.fromString(String(round2(num(source.available) - oldAmount)));
+        source.frozen = Types.Decimal128.fromString(String(round2(num(source.frozen) + oldAmount)));
+        await source.save();
+      }
+      doc.freeze = { ...oldFreeze, state: FreezeState.FROZEN };
+      throw error;
+    }
+    this.log(
+      doc,
+      "冻结金额调整",
+      `随订单修改由 ${before.buyCurrency} ${fmt(oldAmount)} 调整为 ${doc.buy_currency} ${fmt(newAmount)}（${doc.freeze?.account_name ?? "-"}）`,
+      operator,
+    );
+  }
+
   /** 建单弹窗：客户近期报价记录（真实 quote_records） */
   async quoteCandidates(customerId: string): Promise<QuoteCandidateVO[]> {
     if (!Types.ObjectId.isValid(customerId)) return [];
@@ -230,9 +446,14 @@ export class OrderService {
     }
     const todoFilter = this.myTodoFilter(operator?.role_code);
     if (query.scope === "mine") this.appendAnd(filter, todoFilter ?? { _id: null });
+    /* 附加异常的订单不再同时出现在正常状态审核列表里，只在「附加异常」页签（flag=exception）
+       和运营经理的异常待办（scope=mine）里可见；按状态筛选或个人待办时一律排除 */
+    const wantsExceptionOrders = query.flag === "exception" || (query.scope === "mine" && operator?.role_code === "MANAGER");
+    if (!wantsExceptionOrders && (query.status || query.scope === "mine")) filter.exception = null;
     const todoCountFilter: FilterQuery<TradeOrderDocument> = { is_deleted: false };
     if (todoFilter) this.appendAnd(todoCountFilter, todoFilter);
-    const [items, total, statuses] = await Promise.all([
+    if (operator?.role_code !== "MANAGER") todoCountFilter.exception = null;
+    const [items, total, statuses, all] = await Promise.all([
       this.orderModel
         .find(filter)
         .sort({ created_at: -1 })
@@ -241,9 +462,10 @@ export class OrderService {
         .lean(),
       this.orderModel.countDocuments(filter),
       this.orderModel.aggregate<{ _id: string; count: number }>([
-        { $match: { is_deleted: false } },
+        { $match: { is_deleted: false, exception: null } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
+      this.orderModel.countDocuments({ is_deleted: false }),
     ]);
     const [todo, exceptions, paymentRejected, dispatchRejected, inflowFiat, inflowChain, outflowFiat, outflowChain] = await Promise.all([
       todoFilter ? this.orderModel.countDocuments(todoCountFilter) : Promise.resolve(0),
@@ -268,6 +490,7 @@ export class OrderService {
       stats: {
         todo,
         active,
+        all,
         by_status: byStatus,
         exceptions,
         payment_rejected: paymentRejected,

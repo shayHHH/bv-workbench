@@ -1,6 +1,7 @@
 import type {
   CreateDispatchInput,
   CreateOrderInput,
+  CustomBusinessTypeVO,
   InflowConfirmInput,
   OrderListStatsVO,
   OutflowExecuteInput,
@@ -9,6 +10,7 @@ import type {
   QuoteCandidateVO,
   TradeOrderVO,
   TreasuryAccountVO,
+  UpdateOrderInput,
   VaAccountVO,
 } from "@bv/shared";
 import { http } from "./http";
@@ -53,6 +55,22 @@ export async function fetchDispatchContext(id: string): Promise<{
   return data;
 }
 
+/* ---- 自定义准入业务类型（全员共享，无材料清单） ---- */
+
+export async function fetchCustomBusinessTypes(): Promise<CustomBusinessTypeVO[]> {
+  const { data } = await http.get<CustomBusinessTypeVO[]>("/orders/custom-business-types");
+  return data;
+}
+
+export async function createCustomBusinessType(name: string): Promise<CustomBusinessTypeVO> {
+  const { data } = await http.post<CustomBusinessTypeVO>("/orders/custom-business-types", { name });
+  return data;
+}
+
+export async function deleteCustomBusinessType(id: string): Promise<void> {
+  await http.delete(`/orders/custom-business-types/${id}`);
+}
+
 export async function fetchQuoteCandidates(customerId: string): Promise<QuoteCandidateVO[]> {
   const { data } = await http.get<QuoteCandidateVO[]>("/orders/quote-candidates", {
     params: { customer_id: customerId },
@@ -62,6 +80,11 @@ export async function fetchQuoteCandidates(customerId: string): Promise<QuoteCan
 
 export async function createOrder(input: CreateOrderInput): Promise<TradeOrderVO> {
   const { data } = await http.post<TradeOrderVO>("/orders", input);
+  return data;
+}
+
+export async function updateOrder(id: string, input: UpdateOrderInput): Promise<TradeOrderVO> {
+  const { data } = await http.patch<TradeOrderVO>(`/orders/${id}`, input);
   return data;
 }
 

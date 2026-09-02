@@ -23,8 +23,7 @@ export interface MobileTodoTab {
 
 const sumStatus = (s: OrderListStatsVO, ...statuses: string[]) =>
   statuses.reduce((n, status) => n + (s.by_status[status] ?? 0), 0);
-const allCount = (s: OrderListStatsVO) =>
-  Object.values(s.by_status).reduce((a, b) => a + b, 0);
+const allCount = (s: OrderListStatsVO) => s.all;
 
 export const MOBILE_TODO_TABS: Record<string, MobileTodoTab[]> = {
   WALLET: [

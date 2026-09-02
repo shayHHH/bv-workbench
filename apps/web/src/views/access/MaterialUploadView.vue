@@ -20,7 +20,7 @@ import { ElMessage } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   archiveCustomerMaterials,
   createApplication,
@@ -30,11 +30,12 @@ import {
   submitApplication,
   uploadFile,
 } from "@/api/access";
-import { fetchCustomers } from "@/api/customer";
+import { fetchCustomer, fetchCustomers } from "@/api/customer";
 import { fetchActiveScenarios } from "@/api/kyc";
 import CustomerCreateDialog from "@/views/customer/CustomerCreateDialog.vue";
 
 const router = useRouter();
+const route = useRoute();
 const { t } = useI18n();
 
 /* ---------------- 数据 ---------------- */
@@ -73,6 +74,9 @@ const state = reactive({
   destination: "complianceFx" as "library" | "complianceFx" | "complianceU",
   submitting: false,
 });
+
+/** 从自定义业务类型的订单跳来时记录其名称，用于提示"该类型无材料清单" */
+const customBusinessType = ref("");
 
 const createCustomerVisible = ref(false);
 const fileInput = ref<HTMLInputElement>();
@@ -455,8 +459,28 @@ function viewCustomer() {
 
 onMounted(async () => {
   scenarios.value = await fetchActiveScenarios();
-  state.scenarioId = scenarios.value[0]?.id ?? "";
-  searchCustomers("");
+  /* 从交易订单「前往材料上传」跳来时带 customer_id / scenario_id，回显订单上已选的客户与业务类型 */
+  const preselectScenario = route.query.scenario_id as string | undefined;
+  /* 自定义业务类型没有 KYC 配置，业务类型留空、不展示材料清单，页面给出说明 */
+  customBusinessType.value = (route.query.custom_business_type as string | undefined) ?? "";
+  state.scenarioId = customBusinessType.value
+    ? ""
+    : (preselectScenario && scenarios.value.some(item => item.id === preselectScenario) ? preselectScenario : "") ||
+      scenarios.value[0]?.id ||
+      "";
+  await searchCustomers("");
+  const preselectCustomer = route.query.customer_id as string | undefined;
+  if (preselectCustomer) {
+    try {
+      const customer = await fetchCustomer(preselectCustomer);
+      if (!state.candidates.some(item => item.id === customer.id)) {
+        state.candidates = [customer, ...state.candidates];
+      }
+      selectCustomer(customer.id);
+    } catch {
+      /* 客户已删除或无权限时保持空选，用户可自行搜索 */
+    }
+  }
 });
 </script>
 
@@ -517,6 +541,9 @@ onMounted(async () => {
               :label="`#${scenario.scenario_code} - ${scenario.scenario_name}`"
             />
           </el-select>
+          <div v-if="customBusinessType" class="custom-biz-hint">
+            {{ t("access.upload.customBizHint", { name: customBusinessType }) }}
+          </div>
         </div>
       </div>
 
@@ -987,6 +1014,17 @@ h1 {
 
 .pair-grid .field {
   margin-bottom: 0;
+}
+
+.custom-biz-hint {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #fff7f0;
+  border: 1px solid #ffe2c4;
+  border-radius: 6px;
+  color: #b06a1f;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .field label {

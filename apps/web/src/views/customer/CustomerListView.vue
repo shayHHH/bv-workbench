@@ -43,7 +43,7 @@ const query = reactive({
   page_size: 8,
 });
 
-const canManage = computed(() => ["AGENT", "OPS", "ADMIN"].includes(auth.roleCode));
+const canManage = computed(() => ["AGENT", "OPS", "MANAGER", "ADMIN"].includes(auth.roleCode));
 
 async function load() {
   loading.value = true;
@@ -142,6 +142,10 @@ function openDrawer(row: TableRow) {
   drawerVisible.value = true;
 }
 
+function openRowDrawer(row: TableRow) {
+  openDrawer(row);
+}
+
 function onDrawerEdit(customer: CustomerVO) {
   drawerVisible.value = false;
   editTarget.value = customer;
@@ -204,6 +208,7 @@ onMounted(load);
         :data="rows"
         :row-key="(row: TableRow) => `${row.rowType}-${row.c.id}`"
         :row-class-name="({ row }: { row: TableRow }) => (row.rowType === 'sub' ? 'sub-row' : '')"
+        @row-click="openRowDrawer"
       >
         <el-table-column :label="t('customer.list.colCustomer')" min-width="220">
           <template #default="{ row }">
@@ -239,6 +244,16 @@ onMounted(load);
         <el-table-column :label="t('customer.list.colSubjectType')" min-width="110">
           <template #default="{ row }">
             {{ subjectTypeText(row) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="已完成交易" min-width="110" align="center">
+          <template #default="{ row }">
+            <span class="trade-count completed">{{ row.c.completed_trade_count ?? 0 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="在途交易" min-width="100" align="center">
+          <template #default="{ row }">
+            <span class="trade-count in-transit">{{ row.c.in_transit_trade_count ?? 0 }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('customer.common.currentStatus')" min-width="100">
@@ -433,6 +448,27 @@ h1 {
   font-size: 12px;
 }
 
+.trade-count {
+  display: inline-flex;
+  min-width: 30px;
+  justify-content: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.trade-count.completed {
+  color: #3f8f45;
+  background: #eff8ec;
+}
+
+.trade-count.in-transit {
+  color: #b76513;
+  background: #fff4e6;
+}
+
 .sub-type {
   color: #c2660a;
   font-weight: 600;
@@ -441,6 +477,14 @@ h1 {
 
 :deep(.sub-row) {
   background: #fafbfc;
+}
+
+:deep(.el-table__body tr) {
+  cursor: pointer;
+}
+
+:deep(.el-table__body tr:hover > td.el-table__cell) {
+  background: #fff8ef;
 }
 
 .pager {

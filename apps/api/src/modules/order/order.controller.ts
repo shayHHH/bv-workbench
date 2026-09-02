@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { JwtPayload } from "../../auth/auth.types";
 import { CurrentUser, Roles } from "../../auth/decorators";
 import {
+  CreateCustomBusinessTypeDto,
   CreateDispatchDto,
   CreateOrderDto,
   ExceptionMarkDto,
@@ -9,6 +10,7 @@ import {
   FundingActionDto,
   QueryOrderDto,
   ReasonDto,
+  UpdateOrderDto,
   WalletAddressDto,
 } from "./dto/order.dto";
 import { OrderService } from "./order.service";
@@ -30,6 +32,28 @@ export class OrderController {
   @Roles("AGENT", "OPS")
   quoteCandidates(@Query("customer_id") customerId: string) {
     return this.orderService.quoteCandidates(customerId);
+  }
+
+  /* 自定义准入业务类型（全员共享）。须声明在 :id 路由之前，否则会被 @Get(":id") 抢先匹配 */
+  @Get("custom-business-types")
+  @Roles(...ORDER_VIEW_ROLES)
+  listCustomBusinessTypes() {
+    return this.orderService.listCustomBusinessTypes();
+  }
+
+  @Post("custom-business-types")
+  @Roles("AGENT", "OPS")
+  createCustomBusinessType(
+    @Body() dto: CreateCustomBusinessTypeDto,
+    @CurrentUser() operator: JwtPayload,
+  ) {
+    return this.orderService.createCustomBusinessType(dto.name, operator);
+  }
+
+  @Delete("custom-business-types/:id")
+  @Roles("AGENT", "OPS")
+  deleteCustomBusinessType(@Param("id") id: string, @CurrentUser() operator: JwtPayload) {
+    return this.orderService.deleteCustomBusinessType(id, operator);
   }
 
   @Get(":id")
@@ -54,6 +78,13 @@ export class OrderController {
   @Roles("AGENT", "OPS")
   create(@Body() dto: CreateOrderDto, @CurrentUser() operator: JwtPayload) {
     return this.orderService.create(dto, operator);
+  }
+
+  /** 编辑订单：排单进入审核前，初级/高级交易员可改（服务层校验状态与冻结） */
+  @Patch(":id")
+  @Roles("AGENT", "OPS")
+  update(@Param("id") id: string, @Body() dto: UpdateOrderDto, @CurrentUser() operator: JwtPayload) {
+    return this.orderService.update(id, dto, operator);
   }
 
   @Post(":id/cancel")

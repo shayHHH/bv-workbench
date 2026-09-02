@@ -26,6 +26,8 @@ import { CreateCustomerDto } from "./dto/create-customer.dto";
 import { QueryAuditDto } from "./dto/query-audit.dto";
 import { QueryCustomerDto } from "./dto/query-customer.dto";
 import { UpdateCustomerDto } from "./dto/update-customer.dto";
+import { TradeOrder, TradeOrderDocument } from "../order/schemas/trade-order.schema";
+import { TradeOrderStatus } from "@bv/shared";
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -37,6 +39,7 @@ export class CustomerService {
     @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerEvent.name)
     private readonly eventModel: Model<CustomerEventDocument>,
+    @InjectModel(TradeOrder.name) private readonly orderModel: Model<TradeOrderDocument>,
   ) {}
 
   /** 供其他业务模块（如准入）写入客户档案事件的公开入口 */
@@ -238,6 +241,8 @@ export class CustomerService {
           .sort({ created_at: -1 })
           .lean()
       : [];
+    const allCustomerIds = [...items.map(item => item._id), ...subs.map(sub => sub._id)];
+    const orderCounts = await this.getOrderCounts(allCustomerIds);
     const subGroups = new Map<string, CustomerVO[]>();
     const parentNames = new Map(items.map(item => [item._id.toString(), item.name]));
     for (const sub of subs) {
@@ -249,8 +254,12 @@ export class CustomerService {
     return {
       items: items.map(item => ({
         ...this.toVO(item, parentNames),
+        ...orderCounts.get(item._id.toString()),
         ...(item.customer_kind === CustomerKind.INTERMEDIARY
-          ? { sub_customers: subGroups.get(item._id.toString()) ?? [] }
+          ? { sub_customers: (subGroups.get(item._id.toString()) ?? []).map(sub => ({
+              ...sub,
+              ...orderCounts.get(sub.id),
+            })) }
           : {}),
       })),
       total,
@@ -526,8 +535,30 @@ export class CustomerService {
       phone: doc.phone ?? null,
       remark: doc.remark ?? null,
       customer_status: doc.customer_status,
+      completed_trade_count: doc.completed_trade_count ?? 0,
+      in_transit_trade_count: doc.in_transit_trade_count ?? 0,
       created_at: doc.created_at?.toISOString?.() ?? String(doc.created_at),
       updated_at: doc.updated_at?.toISOString?.() ?? String(doc.updated_at),
     };
+  }
+
+  private async getOrderCounts(customerIds: Types.ObjectId[]): Promise<Map<string, Pick<CustomerVO, "completed_trade_count" | "in_transit_trade_count">>> {
+    const counts = new Map<string, Pick<CustomerVO, "completed_trade_count" | "in_transit_trade_count">>();
+    if (!customerIds.length) return counts;
+    const rows = await this.orderModel.aggregate<{ _id: Types.ObjectId; completed: number; in_transit: number }>([
+      { $match: { is_deleted: false, customer_id: { $in: customerIds } } },
+      { $group: {
+        _id: "$customer_id",
+        completed: { $sum: { $cond: [{ $eq: ["$status", TradeOrderStatus.COMPLETED] }, 1, 0] } },
+        in_transit: { $sum: { $cond: [{ $not: [{ $in: ["$status", [TradeOrderStatus.COMPLETED, TradeOrderStatus.CANCELLED]] }] }, 1, 0] } },
+      } },
+    ]);
+    for (const row of rows) {
+      counts.set(row._id.toString(), {
+        completed_trade_count: row.completed ?? 0,
+        in_transit_trade_count: row.in_transit ?? 0,
+      });
+    }
+    return counts;
   }
 }

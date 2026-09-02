@@ -2,23 +2,36 @@
 import {
   ORDER_CURRENCIES,
   TRADE_TYPE_PRESETS,
+  type CustomBusinessTypeVO,
   type CustomerVO,
   type KycScenarioVO,
   type QuoteCandidateVO,
   type TradeOrderVO,
 } from "@bv/shared";
+import { Delete } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { fetchCustomers } from "@/api/customer";
 import { fetchActiveScenarios } from "@/api/kyc";
-import { createOrder, fetchQuoteCandidates } from "@/api/order";
+import {
+  createCustomBusinessType,
+  createOrder,
+  deleteCustomBusinessType,
+  fetchCustomBusinessTypes,
+  fetchQuoteCandidates,
+  updateOrder,
+} from "@/api/order";
 import { formatDateTime } from "@/utils/format";
 
 const visible = defineModel<boolean>({ required: true });
-const emit = defineEmits<{ created: [order: TradeOrderVO] }>();
+/** 传入 order 即进入编辑模式（排单审核前可改），不传为新建 */
+const props = defineProps<{ order?: TradeOrderVO | null }>();
+const emit = defineEmits<{ created: [order: TradeOrderVO]; updated: [order: TradeOrderVO] }>();
 
 const { t } = useI18n();
+
+const isEdit = computed(() => !!props.order);
 
 const submitting = ref(false);
 const customerLoading = ref(false);
@@ -26,9 +39,19 @@ const customerOptions = ref<CustomerVO[]>([]);
 const scenarios = ref<KycScenarioVO[]>([]);
 const quotes = ref<QuoteCandidateVO[]>([]);
 
+const customTypes = ref<CustomBusinessTypeVO[]>([]);
+
+/**
+ * 准入业务类型下拉同时容纳两类来源：
+ * `scenario:<id>` — KYC 配置的业务类型（带渠道与材料清单）
+ * 名称原文        — 交易员手填的自定义类型（无材料清单，建单时 business_scenario_id 留空）
+ * 自定义项的 value 刻意与 allow-create 生成的临时选项一致，避免选中后还要改值导致输入框显示为空。
+ */
+const SCENARIO_PREFIX = "scenario:";
+
 const form = reactive({
   customer_id: "",
-  business_scenario_id: "",
+  business_option: "",
   trade_type: "转账换U",
   custom_trade_type: "",
   sell_currency: "USD",
@@ -72,12 +95,89 @@ async function searchCustomers(keyword: string) {
 
 watch(visible, open => {
   if (!open) return;
-  searchCustomers("");
+  const order = props.order;
+  searchCustomers(order?.customer_name ?? "");
   fetchActiveScenarios().then(list => {
     scenarios.value = list;
-    if (!form.business_scenario_id && list.length) form.business_scenario_id = list[0].id;
+    /* 编辑模式回填订单已选业务类型：有 scenario_id 走 KYC 配置，否则按自定义类型名称回填 */
+    if (order) {
+      form.business_option = order.business_scenario_id
+        ? `${SCENARIO_PREFIX}${order.business_scenario_id}`
+        : (order.business_type ?? "");
+      return;
+    }
+    if (!form.business_option && list.length) form.business_option = `${SCENARIO_PREFIX}${list[0].id}`;
   });
+  loadCustomTypes();
+  if (order) prefillFromOrder(order);
 });
+
+/** 编辑模式：把订单值回填进表单（业务类型在 scenarios 加载后单独回填） */
+function prefillFromOrder(order: TradeOrderVO) {
+  const preset = Object.keys(TRADE_TYPE_PRESETS).includes(order.trade_type);
+  Object.assign(form, {
+    customer_id: order.customer_id,
+    trade_type: preset ? order.trade_type : "自定义",
+    custom_trade_type: preset ? "" : order.trade_type,
+    sell_currency: order.sell_currency,
+    sell_amount: String(order.sell_amount),
+    buy_currency: order.buy_currency,
+    buy_amount: String(order.buy_amount),
+    rate: order.rate,
+    pay_method: order.pay_method,
+    quote_record_id: "",
+    remark: order.remark ?? "",
+  });
+}
+
+async function loadCustomTypes() {
+  customTypes.value = await fetchCustomBusinessTypes();
+}
+
+/** 已选业务类型解析为建单入参：自定义类型只留名称，不带 scenario_id */
+const pickedBusiness = computed<{ business_type: string | null; business_scenario_id: string | null }>(() => {
+  const value = form.business_option.trim();
+  if (!value) return { business_type: null, business_scenario_id: null };
+  if (value.startsWith(SCENARIO_PREFIX)) {
+    const id = value.slice(SCENARIO_PREFIX.length);
+    const scenario = scenarios.value.find(item => item.id === id) ?? null;
+    return { business_type: scenario?.scenario_name ?? null, business_scenario_id: scenario ? id : null };
+  }
+  return { business_type: value, business_scenario_id: null };
+});
+
+/** allow-create：选中值不是 KYC 业务类型、也不在已有自定义列表里时，落库为新的自定义类型 */
+async function onBusinessOptionChange(value: string) {
+  const name = (value ?? "").trim();
+  if (!name || name.startsWith(SCENARIO_PREFIX)) return;
+  if (customTypes.value.some(item => item.name === name)) return;
+  try {
+    const created = await createCustomBusinessType(name);
+    customTypes.value = [created, ...customTypes.value];
+    ElMessage.success(t("orders.create.customBizAdded", { name: created.name }));
+  } catch {
+    /* 重名等错误由 http 拦截器提示，回退到未选中 */
+    form.business_option = "";
+  }
+}
+
+async function removeCustomType(item: CustomBusinessTypeVO) {
+  try {
+    await ElMessageBox.confirm(
+      item.order_count > 0
+        ? t("orders.create.customBizDeleteInUse", { name: item.name, count: item.order_count })
+        : t("orders.create.customBizDeleteBody", { name: item.name }),
+      t("orders.create.customBizDeleteTitle"),
+      { confirmButtonText: t("orders.create.customBizDeleteOk"), cancelButtonText: t("orders.common.cancel"), type: "warning" },
+    );
+  } catch {
+    return;
+  }
+  await deleteCustomBusinessType(item.id);
+  customTypes.value = customTypes.value.filter(row => row.id !== item.id);
+  if (form.business_option === item.name) form.business_option = "";
+  ElMessage.success(t("orders.create.customBizDeleted", { name: item.name }));
+}
 
 watch(() => form.customer_id, id => {
   quotes.value = [];
@@ -135,13 +235,12 @@ async function submit() {
       return;
     }
   }
-  const pickedScenario = scenarios.value.find(item => item.id === form.business_scenario_id) ?? null;
   submitting.value = true;
   try {
-    const order = await createOrder({
+    const payload = {
       customer_id: form.customer_id,
-      business_type: pickedScenario?.scenario_name ?? null,
-      business_scenario_id: form.business_scenario_id || null,
+      business_type: pickedBusiness.value.business_type,
+      business_scenario_id: pickedBusiness.value.business_scenario_id,
       trade_type: tradeType,
       sell_currency: form.sell_currency,
       sell_amount: sellAmount,
@@ -150,8 +249,15 @@ async function submit() {
       rate: form.rate,
       pay_method: form.pay_method,
       remark: form.remark.trim() || null,
-      quote_record_id: form.quote_record_id || null,
-    });
+    };
+    if (props.order) {
+      const order = await updateOrder(props.order.id, payload);
+      ElMessage.success(t("orders.edit.saved", { orderNo: order.order_no }));
+      visible.value = false;
+      emit("updated", order);
+      return;
+    }
+    const order = await createOrder({ ...payload, quote_record_id: form.quote_record_id || null });
     ElMessage.success(t("orders.create.createdSuccess", {
       orderNo: order.order_no,
       next: order.status === "PENDING_KYC" ? t("orders.create.createdNextPendingKyc") : t("orders.create.createdNextInflow"),
@@ -165,7 +271,20 @@ async function submit() {
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="t('orders.create.title')" width="640px" :close-on-click-modal="false">
+  <el-dialog
+    v-model="visible"
+    :title="isEdit ? t('orders.edit.title', { orderNo: props.order?.order_no }) : t('orders.create.title')"
+    width="640px"
+    :close-on-click-modal="false"
+  >
+    <el-alert
+      v-if="isEdit && props.order?.freeze?.state === 'FROZEN'"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="edit-freeze-tip"
+      :title="t('orders.edit.frozenTip', { amount: `${props.order.freeze.currency} ${Number(props.order.freeze.amount).toLocaleString('en-US')}` })"
+    />
     <el-form label-position="top">
       <div class="grid">
         <el-form-item :label="t('orders.create.customer')" required>
@@ -187,9 +306,44 @@ async function submit() {
           </el-select>
         </el-form-item>
         <el-form-item :label="t('orders.create.bizScenario')">
-          <el-select v-model="form.business_scenario_id" clearable :placeholder="t('orders.create.bizScenarioPlaceholder')" style="width: 100%">
-            <el-option v-for="s in scenarios" :key="s.id" :value="s.id" :label="`#${s.scenario_code} · ${s.scenario_name}`" />
+          <el-select
+            v-model="form.business_option"
+            clearable
+            filterable
+            allow-create
+            default-first-option
+            :placeholder="t('orders.create.bizScenarioPlaceholder')"
+            style="width: 100%"
+            @change="onBusinessOptionChange"
+          >
+            <el-option
+              v-for="s in scenarios"
+              :key="s.id"
+              :value="`scenario:${s.id}`"
+              :label="`#${s.scenario_code} · ${s.scenario_name}`"
+            />
+            <el-option
+              v-for="item in customTypes"
+              :key="item.id"
+              :value="item.name"
+              :label="item.name"
+            >
+              <span class="custom-option">
+                <span class="custom-name">
+                  {{ item.name }}
+                  <em>{{ t("orders.create.customBizTag") }}</em>
+                </span>
+                <el-button
+                  :icon="Delete"
+                  link
+                  size="small"
+                  :title="t('orders.create.customBizDeleteTitle')"
+                  @click.stop="removeCustomType(item)"
+                />
+              </span>
+            </el-option>
           </el-select>
+          <div class="biz-hint">{{ t("orders.create.bizScenarioHint") }}</div>
         </el-form-item>
       </div>
       <div class="grid">
@@ -244,7 +398,8 @@ async function submit() {
         <el-form-item :label="t('orders.common.execRate')" required>
           <el-input v-model="form.rate" maxlength="20" />
         </el-form-item>
-        <el-form-item :label="t('orders.create.quoteLink')">
+        <!-- 关联报价是建单时的一次性留档，编辑时不再改动 -->
+        <el-form-item v-if="!isEdit" :label="t('orders.create.quoteLink')">
           <el-select v-model="form.quote_record_id" clearable :placeholder="t('orders.create.quoteLinkPlaceholder')" style="width: 100%" @change="pickQuote">
             <el-option
               v-for="quote in quotes"
@@ -261,7 +416,9 @@ async function submit() {
     </el-form>
     <template #footer>
       <el-button @click="visible = false">{{ t("orders.common.cancel") }}</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">{{ t("orders.create.submit") }}</el-button>
+      <el-button type="primary" :loading="submitting" @click="submit">
+        {{ isEdit ? t("orders.edit.submit") : t("orders.create.submit") }}
+      </el-button>
     </template>
   </el-dialog>
 </template>
@@ -271,5 +428,29 @@ async function submit() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 14px;
+}
+
+.biz-hint {
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+.custom-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-name em {
+  font-style: normal;
+  color: #ff7a00;
+  background: #fff4e8;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 11px;
+  margin-left: 6px;
 }
 </style>

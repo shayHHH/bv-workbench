@@ -101,7 +101,7 @@ export const RegionLabel: Record<Region, string> = {
   OTHER: "其他",
 };
 
-/** 中介下级客户主体类型 */
+/** 客户主体类型（直客 / 中介 / 中介推荐商户均适用，建档与编辑表单对全部客户类型开放） */
 export const CustomerSubType = {
   PERSONAL: "PERSONAL",
   CORPORATE: "CORPORATE",
@@ -136,6 +136,9 @@ export interface CustomerVO {
   phone: string | null;
   remark: string | null;
   customer_status: CustomerStatus;
+  /** 交易订单概览，仅客户列表及详情相关接口按需返回 */
+  completed_trade_count: number;
+  in_transit_trade_count: number;
   created_at: string;
   updated_at: string;
   /** 列表接口为中介行内联返回的下级客户 */

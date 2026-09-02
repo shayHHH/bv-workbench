@@ -367,6 +367,9 @@ export interface QuoteCandidateVO {
 export interface OrderListStatsVO {
   todo: number;
   active: number;
+  /** 全部订单数（不受任何筛选影响，含附加异常订单；用于「全部订单」页签计数） */
+  all: number;
+  /** 按状态计数，不含附加异常订单（异常订单只计入 exceptions，不重复计入原状态） */
   by_status: Record<string, number>;
   exceptions: number;
   payment_rejected: number;
@@ -375,6 +378,22 @@ export interface OrderListStatsVO {
   inflow_chain: number;
   outflow_fiat: number;
   outflow_chain: number;
+}
+
+/* ---------------- 自定义准入业务类型 ---------------- */
+
+/**
+ * 交易员在新建订单时手填的业务类型，全员共享。
+ * 与 KYC 业务类型（KycScenarioVO）的区别：没有渠道与材料清单，
+ * 因此用它建单的订单 business_scenario_id 为空，材料上传页不显示材料项。
+ */
+export interface CustomBusinessTypeVO {
+  id: string;
+  name: string;
+  created_by_name: string | null;
+  /** 已使用该类型的订单数（删除前二次确认用） */
+  order_count: number;
+  created_at: string;
 }
 
 /* ---------------- 输入 ---------------- */
@@ -393,6 +412,36 @@ export interface CreateOrderInput {
   pay_method: string;
   remark?: string | null;
   quote_record_id?: string | null;
+}
+
+/**
+ * 编辑交易订单入参（初级/高级交易员，排单进入审核前可改）。
+ * 只提交需要变更的字段；改动买入金额/币种时后端会重算资金冻结。
+ */
+export interface UpdateOrderInput {
+  customer_id?: string;
+  business_type?: string | null;
+  business_scenario_id?: string | null;
+  person_name?: string | null;
+  trade_type?: string;
+  sell_currency?: string;
+  sell_amount?: number;
+  buy_currency?: string;
+  buy_amount?: number;
+  rate?: string;
+  pay_method?: string;
+  remark?: string | null;
+}
+
+/** 排单进入审核前可编辑：待KYC / 待客户入款 / 待出款排单 */
+export const ORDER_EDITABLE_STATUSES: readonly TradeOrderStatus[] = [
+  TradeOrderStatus.PENDING_KYC,
+  TradeOrderStatus.AWAITING_INFLOW,
+  TradeOrderStatus.AWAITING_DISPATCH,
+];
+
+export function isOrderEditable(order: Pick<TradeOrderVO, "status" | "exception">): boolean {
+  return ORDER_EDITABLE_STATUSES.includes(order.status) && !order.exception;
 }
 
 export interface InflowConfirmInput {

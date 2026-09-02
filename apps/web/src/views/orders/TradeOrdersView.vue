@@ -44,7 +44,7 @@ interface TodoTab {
 
 const sumStatus = (s: OrderListStatsVO, ...statuses: string[]) =>
   statuses.reduce((n, status) => n + (s.by_status[status] ?? 0), 0);
-const allCount = (s: OrderListStatsVO) => Object.values(s.by_status).reduce((a, b) => a + b, 0);
+const allCount = (s: OrderListStatsVO) => s.all;
 
 const todoTabs = computed<TodoTab[]>(() => {
   const tabs: TodoTab[] = [
@@ -158,6 +158,8 @@ const fmtMoney = (currency: string, amount: number) => `${currency} ${amount.toL
 
 const panelOrderId = ref("");
 const createVisible = ref(false);
+const editVisible = ref(false);
+const editOrder = ref<TradeOrderVO | null>(null);
 const fundingVisible = ref(false);
 const fundingSide = ref<FundingSide>("inflow");
 const fundingOrder = ref<TradeOrderVO | null>(null);
@@ -172,6 +174,16 @@ function openPanel(order: TradeOrderVO) {
 function onCreated(order: TradeOrderVO) {
   load();
   panelOrderId.value = order.id;
+}
+
+function openEdit(order: TradeOrderVO) {
+  editOrder.value = order;
+  editVisible.value = true;
+}
+
+function onUpdated() {
+  load();
+  panelRef.value?.reload();
 }
 
 function openFunding(order: TradeOrderVO, side: FundingSide) {
@@ -334,8 +346,10 @@ onMounted(() => {
       @changed="load"
       @funding="openFunding"
       @dispatch="openDispatch"
+      @edit="openEdit"
     />
     <OrderCreateDialog v-model="createVisible" @created="onCreated" />
+    <OrderCreateDialog v-model="editVisible" :order="editOrder" @updated="onUpdated" />
     <FundingDialog v-model="fundingVisible" :order="fundingOrder" :side="fundingSide" @done="onActionDone" />
     <DispatchDialog v-model="dispatchVisible" :order="dispatchOrder" @done="onActionDone" />
   </div>

@@ -499,8 +499,10 @@ onMounted(async () => {
   customers.value = options;
   benchmark.value = benchmarkState;
   channels.value = channelRates;
-  const preferred =
-    options.find(option => option.id === route.query.customer) ?? options[0] ?? null;
+  /* 只在带 ?customer=（如从交易订单跳转报价）时预选客户；直接进入页面不默认选中，避免误改到别人的报价配置 */
+  const preferred = route.query.customer
+    ? (options.find(option => option.id === route.query.customer) ?? null)
+    : null;
   if (preferred) await selectCustomer(preferred);
 });
 
@@ -827,7 +829,10 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
             <el-button :icon="Plus" @click="addItem">{{ t("quote.quick.addItem") }}</el-button>
           </div>
         </div>
-        <el-card v-else v-loading="true" shadow="never" class="config-card loading-card" />
+        <el-card v-else-if="loadingConfig" v-loading="true" shadow="never" class="config-card loading-card" />
+        <el-card v-else shadow="never" class="config-card empty-card">
+          <el-empty :description="t('quote.quick.pickCustomerFirst')" />
+        </el-card>
       </div>
 
       <!-- 右侧辅助面板 -->
@@ -1437,8 +1442,15 @@ h1 {
   margin-top: 14px;
 }
 
-.loading-card {
+.loading-card,
+.empty-card {
   min-height: 320px;
+}
+
+.empty-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .side-col {

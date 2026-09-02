@@ -6,6 +6,7 @@ import { KycScenario, KycScenarioSchema } from "../kyc/kyc-scenario.schema";
 import { QuoteRecord, QuoteRecordSchema } from "../quote/schemas/quote-record.schema";
 import { OrderController } from "./order.controller";
 import { OrderService } from "./order.service";
+import { CustomBusinessType, CustomBusinessTypeSchema } from "./schemas/custom-business-type.schema";
 import { PayoutOrder, PayoutOrderSchema } from "./schemas/payout-order.schema";
 import { TradeOrder, TradeOrderSchema } from "./schemas/trade-order.schema";
 import { TreasuryAccount, TreasuryAccountSchema } from "./schemas/treasury-account.schema";
@@ -22,6 +23,7 @@ import { VaAccount, VaAccountSchema } from "./schemas/va-account.schema";
       { name: AccessApplication.name, schema: AccessApplicationSchema },
       { name: QuoteRecord.name, schema: QuoteRecordSchema },
       { name: KycScenario.name, schema: KycScenarioSchema },
+      { name: CustomBusinessType.name, schema: CustomBusinessTypeSchema },
     ]),
   ],
   controllers: [OrderController],

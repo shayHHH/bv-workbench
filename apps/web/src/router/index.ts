@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { localizeText } from "@/i18n";
 import AppLayout from "@/layout/AppLayout.vue";
 import { useAuthStore } from "@/stores/auth";
+import { defaultHomePath, MOBILE_ROLES, shouldEnterMobile } from "@/utils/device";
 
 /** meta.roles 为空表示所有登录用户可见 */
 export const router = createRouter({
@@ -14,8 +15,43 @@ export const router = createRouter({
       meta: { title: "登录", public: true },
     },
     {
-      path: "/m/home",
-      redirect: "/dashboard",
+      path: "/m",
+      component: () => import("@/mobile/MobileLayout.vue"),
+      /* 移动壳只对手机主力三角色开放（MOBILE_ROLES：WALLET/OPS/MANAGER） */
+      meta: { roles: [...MOBILE_ROLES] },
+      children: [
+        { path: "", redirect: "/m/home" },
+        {
+          path: "home",
+          name: "mobileHome",
+          component: () => import("@/mobile/views/HomeView.vue"),
+          meta: { title: "工作台", tab: "home" },
+        },
+        {
+          path: "orders",
+          name: "mobileOrders",
+          component: () => import("@/mobile/views/orders/OrderListView.vue"),
+          meta: { title: "交易订单", tab: "orders" },
+        },
+        {
+          path: "orders/:id",
+          name: "mobileOrderDetail",
+          component: () => import("@/mobile/views/orders/OrderDetailView.vue"),
+          meta: { title: "订单详情" },
+        },
+        {
+          path: "department",
+          name: "mobileDepartment",
+          component: () => import("@/mobile/views/department/DepartmentView.vue"),
+          meta: { title: "部门管理", tab: "department", roles: ["MANAGER"] },
+        },
+        {
+          path: "profile",
+          name: "mobileProfile",
+          component: () => import("@/mobile/views/ProfileView.vue"),
+          meta: { title: "我的", tab: "profile" },
+        },
+      ],
     },
     {
       path: "/",
@@ -146,12 +182,15 @@ export const router = createRouter({
 router.beforeEach(to => {
   const auth = useAuthStore();
   if (to.meta.public) {
-    if (auth.isLoggedIn && to.path === "/login") return "/dashboard";
+    if (auth.isLoggedIn && to.path === "/login") return defaultHomePath(auth.roleCode);
     return true;
   }
   if (!auth.isLoggedIn) return { path: "/login", query: { redirect: to.fullPath } };
   const roles = to.meta.roles as string[] | undefined;
   if (roles?.length && !roles.includes(auth.roleCode)) return "/dashboard";
+  /* 手机主力角色在手机设备上访问桌面路由时统一收口到移动壳；已登录期间切换设备/直接改地址栏都要收口，
+     不只是登录那一刻——用户在「我的」里主动切换过桌面版后（prefersDesktop）不受此限制 */
+  if (!to.path.startsWith("/m") && shouldEnterMobile(auth.roleCode)) return "/m/home";
   return true;
 });
 
