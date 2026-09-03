@@ -108,7 +108,7 @@ await db.collection("customers").insertMany([
   { _id: chenJianingId, ...customer("20001", "陈嘉宁", CustomerKind.DIRECT, { sub_type: "PERSONAL", region: "HK", phone: "+852 6123 4567", customer_status: "ACTIVE" }), ...base(24 * 18, 2) },
   { _id: northstarId, ...customer("20002", "Northstar Trading Limited", CustomerKind.INTERMEDIARY, { sub_type: "CORPORATE", region: "HK", customer_status: "ACTIVE", remark: "企业中介，可挂载下级客户" }), ...base(24 * 16, 5) },
   { _id: new ObjectId(), ...customer("22156", "Northstar 贸易联系人 A", CustomerKind.SUB_CUSTOMER, { parent_id: northstarId, sub_type: "PERSONAL", region: "HK" }), ...base(24 * 10, 24) },
-  { _id: new ObjectId(), ...customer("2000201", "Northstar 付款人 B", CustomerKind.SUB_CUSTOMER, { parent_id: northstarId, sub_type: "CORPORATE", region: "HK" }), ...base(24 * 9, 30) },
+  { _id: new ObjectId(), ...customer("20002-01", "Northstar 付款人 B", CustomerKind.SUB_CUSTOMER, { parent_id: northstarId, sub_type: "CORPORATE", region: "HK" }), ...base(24 * 9, 30) },
   { _id: brokerLinId, ...customer("20005", "中介林", CustomerKind.INTERMEDIARY, { sub_type: "PERSONAL", region: "HK", customer_status: "ACTIVE", remark: "中介报价源" }), ...base(24 * 14, 8) },
   { _id: raviId, ...customer("22001", "ravi", CustomerKind.SUB_CUSTOMER, { parent_id: brokerLinId, sub_type: "PERSONAL", region: "HK", customer_status: "ACTIVE" }), ...base(24 * 12, 6) },
   { _id: linYawenId, ...customer("20003", "林雅雯", CustomerKind.DIRECT, { sub_type: "PERSONAL", region: "CN_MAINLAND", phone: "+86 138 0013 8000", customer_status: "ACTIVE" }), ...base(24 * 13, 10) },

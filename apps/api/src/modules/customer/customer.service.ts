@@ -343,18 +343,18 @@ export class CustomerService {
     }
   }
 
-  /** 中介下级派生编号：中介编号+01-99 中最小空位；中介本身无编号时维持无编号 */
+  /** 中介下级派生编号：中介编号-01~99 最小空位（如 20011-01）；中介本身无编号时维持无编号 */
   private async deriveSubCode(parentId: Types.ObjectId): Promise<string | null> {
     const parent = await this.customerModel.findOne({ _id: parentId }).select("customer_code").lean();
     const base = parent?.customer_code;
     if (!base) return null;
     const siblings = await this.customerModel
-      .find({ customer_code: new RegExp(`^${base}\\d{2}$`), is_deleted: false })
+      .find({ customer_code: new RegExp(`^${base}-\\d{2}$`), is_deleted: false })
       .select("customer_code")
       .lean();
     const used = new Set(siblings.map(item => item.customer_code));
     for (let i = 1; i <= 99; i++) {
-      const candidate = `${base}${String(i).padStart(2, "0")}`;
+      const candidate = `${base}-${String(i).padStart(2, "0")}`;
       if (!used.has(candidate)) return candidate;
     }
     throw new ConflictException(`中介 ${base} 的下级编号后缀已用满（01-99）`);
