@@ -259,6 +259,12 @@ onMounted(load);
         <el-table-column :label="t('customer.common.currentStatus')" min-width="100">
           <template #default="{ row }">
             <el-tag :type="statusType(row)" effect="light">{{ statusText(row) }}</el-tag>
+            <el-tag v-if="row.c.deferral_overdue" type="danger" effect="dark" class="deferral-tag">
+              {{ t("customer.common.deferralOverdue") }}
+            </el-tag>
+            <el-tag v-else-if="row.c.deferral_pending" type="warning" effect="plain" class="deferral-tag">
+              {{ t("customer.common.deferralPending") }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('customer.common.lastUpdated')" min-width="100">
@@ -491,5 +497,8 @@ h1 {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+.deferral-tag {
+  margin-left: 6px;
 }
 </style>

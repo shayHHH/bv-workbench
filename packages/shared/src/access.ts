@@ -127,6 +127,10 @@ export const AccessStatus = {
   SUPPLEMENT_REQUIRED: "SUPPLEMENT_REQUIRED",
   REJECTED: "REJECTED",
   APPROVED: "APPROVED",
+  /** 条件性放行：核心材料无误、辅助材料延期补件（带截止时间与临时限制） */
+  APPROVED_CONDITIONAL: "APPROVED_CONDITIONAL",
+  /** 延期补件逾期：超过截止时间仍未补齐，业务受限直至合规复核 */
+  DEFERRAL_OVERDUE: "DEFERRAL_OVERDUE",
   EXPIRED: "EXPIRED",
   SUSPENDED: "SUSPENDED",
   CANCELLED: "CANCELLED",
@@ -143,6 +147,8 @@ export const AccessStatusLabel: Record<AccessStatus, string> = {
   SUPPLEMENT_REQUIRED: "被驳回",
   REJECTED: "审核拒绝",
   APPROVED: "审核通过",
+  APPROVED_CONDITIONAL: "附条件通过",
+  DEFERRAL_OVERDUE: "逾期受限",
   EXPIRED: "已过期",
   SUSPENDED: "已暂停",
   CANCELLED: "已取消",
@@ -155,6 +161,8 @@ export const AccessStatusDesc: Record<AccessStatus, string> = {
   SUPPLEMENT_REQUIRED: "审核被驳回，需补充/修改材料后重新上传",
   REJECTED: "合规明确拒绝该业务准入",
   APPROVED: "合规审核已通过",
+  APPROVED_CONDITIONAL: "条件性放行，需在截止时间前补齐缺失材料",
+  DEFERRAL_OVERDUE: "延期补件已逾期，业务受限，补齐材料并经合规复核后恢复",
   EXPIRED: "曾经通过，有效期过期，需重新提交",
   SUSPENDED: "风控或人工暂停该业务准入",
   CANCELLED: "申请已取消或作废",
@@ -279,6 +287,8 @@ export interface AccessApplicationVO {
     reviewer_name: string | null;
   } | null;
   timeline: AccessTimelineVO[];
+  /** 条件性放行的延期补件设置（无则 null） */
+  deferral: AccessDeferralVO | null;
   submitted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -330,12 +340,15 @@ export interface ArchiveMaterialsInput {
 export const ReviewAuditType = {
   NEW: "NEW",
   RESUBMIT: "RESUBMIT",
+  /** 条件性放行后的延期补件重提 */
+  DEFERRAL_REVIEW: "DEFERRAL_REVIEW",
 } as const;
 export type ReviewAuditType = (typeof ReviewAuditType)[keyof typeof ReviewAuditType];
 
 export const ReviewAuditTypeLabel: Record<ReviewAuditType, string> = {
   NEW: "新提交",
   RESUBMIT: "驳回重审",
+  DEFERRAL_REVIEW: "补件复核",
 };
 
 export const ReviewCaseStatus = {
@@ -351,6 +364,7 @@ export const ReviewCaseStatusLabel: Record<ReviewCaseStatus, string> = {
 
 export const ReviewFinalResult = {
   APPROVED: "APPROVED",
+  APPROVED_CONDITIONAL: "APPROVED_CONDITIONAL",
   UNRESOLVED: "UNRESOLVED",
   TERMINATED: "TERMINATED",
 } as const;
@@ -358,6 +372,7 @@ export type ReviewFinalResult = (typeof ReviewFinalResult)[keyof typeof ReviewFi
 
 export const ReviewFinalResultLabel: Record<ReviewFinalResult, string> = {
   APPROVED: "审核通过",
+  APPROVED_CONDITIONAL: "附条件通过",
   UNRESOLVED: "未完结",
   TERMINATED: "审核终止",
 };
@@ -368,6 +383,8 @@ export const ReviewFinalResultLabel: Record<ReviewFinalResult, string> = {
  */
 export const ReviewDecisionAction = {
   APPROVE: "APPROVE",
+  /** 条件性放行：材料无误但暂不完整，限制条件放行 + 延期补件闭环 */
+  CONDITIONAL: "CONDITIONAL",
   REJECT: "REJECT",
   TERMINATE: "TERMINATE",
 } as const;
@@ -375,15 +392,45 @@ export type ReviewDecisionAction =
   (typeof ReviewDecisionAction)[keyof typeof ReviewDecisionAction];
 
 export const ReviewDecisionActionLabel: Record<ReviewDecisionAction, string> = {
-  APPROVE: "审核通过",
-  REJECT: "驳回",
-  TERMINATE: "终止",
+  APPROVE: "通过",
+  CONDITIONAL: "条件性放行",
+  REJECT: "退回补件",
+  TERMINATE: "拒绝",
 };
 
 /** 历史数据中可能存在的已废弃动作代码 → 展示文案兜底 */
 export const LEGACY_DECISION_ACTION_LABEL: Record<string, string> = {
   REQUEST_SUPPLEMENT: "要求补件（已废弃）",
 };
+
+/** 延期补件设置（条件性放行落库；申请与工单 decision 各存一份快照） */
+export interface AccessDeferralVO {
+  /** 补件截止时间 ISO */
+  due_at: string;
+  missing_item_ids: string[];
+  missing_item_names: string[];
+  /** 临时交易限额（仅提示，不硬阻断） */
+  limit_amount: number | null;
+  limit_currency: string | null;
+  /** 限制大额提现/提币卡点 */
+  restrict_large_outflow: boolean;
+  /** 合规备注（审计痕迹） */
+  notes: string;
+  decided_by: string | null;
+  decided_at: string;
+  /** 已发送的催办档位（"7d"/"3d"/"1d"） */
+  reminded: string[];
+  overdue_at: string | null;
+}
+
+export interface ReviewDeferralInput {
+  /** ISO 字符串或毫秒时间戳 */
+  due_at: string | number;
+  missing_item_ids: string[];
+  limit_amount?: number | null;
+  limit_currency?: string | null;
+  restrict_large_outflow?: boolean;
+}
 
 export interface ReviewMaterialVerdict {
   material_key: string;
@@ -423,6 +470,8 @@ export interface ReviewCaseVO {
     action: ReviewDecisionAction;
     reason: string | null;
     rejected_item_ids: string[];
+    /** 条件性放行的延期设置快照 */
+    deferral?: AccessDeferralVO | null;
   } | null;
   material_verdicts: ReviewMaterialVerdict[];
   submitted_by_name: string | null;
@@ -469,10 +518,12 @@ export interface ReviewStatsVO {
 
 export interface ReviewDecisionInput {
   action: ReviewDecisionAction;
-  /** REQUEST_SUPPLEMENT / REJECT / TERMINATE 必填 */
+  /** 非 APPROVE 必填（CONDITIONAL 时即合规备注） */
   reason?: string | null;
   /** 要求补件/驳回时指定需重传的材料 */
   material_verdicts?: ReviewMaterialVerdict[];
+  /** action=CONDITIONAL 时必填 */
+  deferral?: ReviewDeferralInput | null;
 }
 
 /* ---------------- 上传约束（前后端共用） ---------------- */

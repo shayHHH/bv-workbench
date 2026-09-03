@@ -141,6 +141,73 @@ async function approve() {
   await decide(ReviewDecisionAction.APPROVE, null);
 }
 
+/* ---- 条件性放行（延期补件设置）需求 §3 ---- */
+const conditionalDialog = reactive({
+  visible: false,
+  due_at: null as Date | null,
+  missing: [] as string[],
+  limit_amount: null as number | null,
+  limit_currency: "USD",
+  restrict: true,
+  notes: "",
+});
+
+function quickDue(days: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function setQuickDue(days: number) {
+  conditionalDialog.due_at = quickDue(days);
+}
+
+function openConditional() {
+  Object.assign(conditionalDialog, {
+    visible: true,
+    due_at: quickDue(7),
+    missing: [],
+    limit_amount: null,
+    limit_currency: "USD",
+    restrict: true,
+    notes: "",
+  });
+}
+
+/** 缺失材料候选：本渠道 KYC 清单项 */
+const deferralOptions = computed(() => reviewCase.value?.requirements ?? []);
+
+const LIMIT_CURRENCIES = ["USD", "HKD", "USDT", "CNY", "EUR"];
+
+async function confirmConditional() {
+  const due = conditionalDialog.due_at;
+  if (!due || due.getTime() <= Date.now()) return ElMessage.warning(t("compliance.detail.condDueInvalid"));
+  if (!conditionalDialog.missing.length) return ElMessage.warning(t("compliance.detail.condMissingRequired"));
+  if (!conditionalDialog.notes.trim()) return ElMessage.warning(t("compliance.detail.condNotesRequired"));
+  submitting.value = true;
+  try {
+    reviewCase.value = await decideReviewCase(caseId, {
+      action: ReviewDecisionAction.CONDITIONAL,
+      reason: conditionalDialog.notes.trim(),
+      material_verdicts: [],
+      deferral: {
+        due_at: due.getTime(),
+        missing_item_ids: [...conditionalDialog.missing],
+        limit_amount: conditionalDialog.limit_amount || null,
+        limit_currency: conditionalDialog.limit_currency,
+        restrict_large_outflow: conditionalDialog.restrict,
+      },
+    });
+    conditionalDialog.visible = false;
+    ElMessage.success(t("compliance.detail.decided"));
+  } finally {
+    submitting.value = false;
+  }
+}
+
+/** 已处理工单的延期设置快照（结论卡展示） */
+const caseDeferral = computed(() => reviewCase.value?.decision?.deferral ?? null);
+
 function openDecision(action: ReviewDecisionAction) {
   decisionDialog.action = action;
   decisionDialog.reason = "";
@@ -280,6 +347,7 @@ const MATERIAL_TAG: Record<string, string> = {
 
 const FINAL_TAG: Record<string, string> = {
   APPROVED: "success",
+  APPROVED_CONDITIONAL: "warning",
   UNRESOLVED: "warning",
   TERMINATED: "info",
 };
@@ -430,6 +498,7 @@ onMounted(load);
           <el-card v-if="pending" shadow="never" class="block actions-card">
             <div class="actions-row">
               <el-button type="success" :loading="submitting" @click="approve">{{ t("compliance.detail.approve") }}</el-button>
+              <el-button type="warning" :loading="submitting" @click="openConditional">{{ t("compliance.detail.conditional") }}</el-button>
               <el-button type="danger" :loading="submitting" @click="openDecision(ReviewDecisionAction.REJECT)">{{ t("compliance.detail.reject") }}</el-button>
               <el-button :loading="submitting" @click="openDecision(ReviewDecisionAction.TERMINATE)">{{ t("compliance.detail.terminate") }}</el-button>
             </div>
@@ -442,6 +511,15 @@ onMounted(load);
               <span class="muted"> · {{ reviewCase.reviewer_name }} · {{ reviewCase.reviewed_at ? new Date(reviewCase.reviewed_at).toLocaleString() : "" }}</span>
             </p>
             <p v-if="reviewCase.decision.reason" class="decision-reason">{{ reviewCase.decision.reason }}</p>
+            <div v-if="caseDeferral" class="deferral-summary">
+              <h5>{{ t("compliance.detail.deferralTitle") }}</h5>
+              <p>{{ t("compliance.detail.deferralDue") }}：<strong>{{ formatDateTime(caseDeferral.due_at) }}</strong></p>
+              <p>{{ t("compliance.detail.deferralMissing") }}：{{ caseDeferral.missing_item_names.join("、") }}</p>
+              <p v-if="caseDeferral.limit_amount">
+                {{ t("compliance.detail.deferralLimit") }}：{{ caseDeferral.limit_currency }} {{ caseDeferral.limit_amount.toLocaleString("en-US") }}
+              </p>
+              <p v-if="caseDeferral.restrict_large_outflow">{{ t("compliance.detail.deferralRestrict") }}</p>
+            </div>
           </el-card>
         </div>
 
@@ -471,6 +549,55 @@ onMounted(load);
           </el-card>
         </aside>
       </div>
+
+      <el-dialog v-model="conditionalDialog.visible" :title="t('compliance.detail.condTitle')" width="560px" :close-on-click-modal="false">
+        <p class="dialog-hint">{{ t("compliance.detail.condHint") }}</p>
+        <el-form label-position="top">
+          <el-form-item :label="t('compliance.detail.condDueLabel')" required>
+            <div class="due-row">
+              <el-date-picker
+                v-model="conditionalDialog.due_at"
+                type="datetime"
+                :placeholder="t('compliance.detail.condDuePh')"
+                style="flex: 1"
+              />
+              <el-button size="small" @click="setQuickDue(7)">+7{{ t("compliance.detail.condDays") }}</el-button>
+              <el-button size="small" @click="setQuickDue(14)">+14{{ t("compliance.detail.condDays") }}</el-button>
+              <el-button size="small" @click="setQuickDue(30)">+30{{ t("compliance.detail.condDays") }}</el-button>
+            </div>
+          </el-form-item>
+          <el-form-item :label="t('compliance.detail.condMissingLabel')" required>
+            <el-checkbox-group v-model="conditionalDialog.missing" class="missing-group">
+              <el-checkbox v-for="item in deferralOptions" :key="item.item_id" :value="item.item_id">
+                {{ item.name }}
+              </el-checkbox>
+            </el-checkbox-group>
+            <p v-if="!deferralOptions.length" class="muted small">{{ t("compliance.detail.condNoOptions") }}</p>
+          </el-form-item>
+          <el-form-item :label="t('compliance.detail.condLimitLabel')">
+            <div class="due-row">
+              <el-input-number v-model="conditionalDialog.limit_amount" :min="0" :step="10000" style="flex: 1" :placeholder="t('compliance.detail.condLimitPh')" />
+              <el-select v-model="conditionalDialog.limit_currency" style="width: 90px">
+                <el-option v-for="c in LIMIT_CURRENCIES" :key="c" :value="c" :label="c" />
+              </el-select>
+            </div>
+            <el-checkbox v-model="conditionalDialog.restrict">{{ t("compliance.detail.condRestrictLabel") }}</el-checkbox>
+          </el-form-item>
+          <el-form-item :label="t('compliance.detail.condNotesLabel')" required>
+            <el-input
+              v-model="conditionalDialog.notes"
+              type="textarea"
+              :rows="3"
+              maxlength="500"
+              :placeholder="t('compliance.detail.condNotesPh')"
+            />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="conditionalDialog.visible = false">{{ t("compliance.detail.cancel") }}</el-button>
+          <el-button type="warning" :loading="submitting" @click="confirmConditional">{{ t("compliance.detail.condSubmit") }}</el-button>
+        </template>
+      </el-dialog>
 
       <el-dialog v-model="decisionDialog.visible" :title="DIALOG_TITLE[decisionDialog.action]" width="500px">
         <p class="dialog-hint">{{ DIALOG_HINT[decisionDialog.action] }}</p>
@@ -761,5 +888,38 @@ h1 {
 .return-option small {
   color: #909399;
   font-size: 12px;
+}
+.due-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.missing-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-height: 180px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.deferral-summary {
+  margin-top: 10px;
+  border: 1px solid #faecd8;
+  background: #fdf6ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.deferral-summary h5 {
+  margin: 0 0 6px;
+  color: #b88230;
+}
+
+.deferral-summary p {
+  margin: 2px 0;
 }
 </style>

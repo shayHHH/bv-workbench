@@ -8,6 +8,7 @@ import { OrderModule } from "../order/order.module";
 import { AccessApplication, AccessApplicationSchema } from "./access-application.schema";
 import { AccessController } from "./access.controller";
 import { AccessService } from "./access.service";
+import { DeferralScheduler } from "./deferral.scheduler";
 import { CustomerMaterial, CustomerMaterialSchema } from "./customer-material.schema";
 import { ReviewCase, ReviewCaseSchema } from "./review-case.schema";
 import { ReviewController } from "./review.controller";
@@ -27,6 +28,6 @@ import { ReviewService } from "./review.service";
     ]),
   ],
   controllers: [AccessController, ReviewController],
-  providers: [AccessService, ReviewService],
+  providers: [AccessService, ReviewService, DeferralScheduler],
 })
 export class AccessModule {}

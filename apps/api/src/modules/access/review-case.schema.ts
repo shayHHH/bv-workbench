@@ -93,6 +93,7 @@ export class ReviewCase {
     action: ReviewDecisionAction;
     reason: string | null;
     rejected_item_ids: string[];
+    deferral?: Record<string, unknown> | null;
   } | null;
 
   @Prop({ type: Array, default: [] })

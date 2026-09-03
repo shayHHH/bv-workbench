@@ -141,6 +141,8 @@ export interface OrderKycBadge {
 /** access_applications 状态 → 订单 KYC 徽标 */
 export const AccessToKycBadge: Record<string, OrderKycBadge> = {
   APPROVED: { label: "KYC已通过", tone: "success", ready: true },
+  APPROVED_CONDITIONAL: { label: "附条件通过", tone: "warning", ready: true },
+  DEFERRAL_OVERDUE: { label: "延期补件逾期", tone: "danger", ready: false },
   PENDING_REVIEW: { label: "合规审核中", tone: "info", ready: false },
   SUPPLEMENT_REQUIRED: { label: "KYC被驳回", tone: "warning", ready: false },
   EXPIRED: { label: "KYC已过期", tone: "warning", ready: false },

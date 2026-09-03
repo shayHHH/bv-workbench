@@ -26,7 +26,7 @@ const query = reactive({
   audit_type: "" as "" | ReviewAuditType,
   review_type: "" as "" | ReviewType,
   final_result: "" as "" | ReviewFinalResult,
-  decision_action: "" as "" | "APPROVE" | "REJECT" | "TERMINATE",
+  decision_action: "" as "" | "APPROVE" | "CONDITIONAL" | "REJECT" | "TERMINATE",
   range: null as [Date, Date] | null,
   sort_by: "submitted_at" as "submitted_at" | "reviewed_at",
   sort_order: "desc" as "asc" | "desc",
@@ -38,6 +38,7 @@ const query = reactive({
 /** demo 已处理工具栏「我的结论」筛选项 */
 const DECISION_OPTIONS = computed(() => [
   { value: "APPROVE", label: t("compliance.queue.decision.APPROVE") },
+  { value: "CONDITIONAL", label: t("compliance.queue.decision.CONDITIONAL") },
   { value: "REJECT", label: t("compliance.queue.decision.REJECT") },
   { value: "TERMINATE", label: t("compliance.queue.decision.TERMINATE") },
 ]);
@@ -106,6 +107,7 @@ function subjectTypeText(row: ReviewCaseVO): string {
 
 const FINAL_TAG: Record<string, "success" | "warning" | "info"> = {
   APPROVED: "success",
+  APPROVED_CONDITIONAL: "warning",
   UNRESOLVED: "warning",
   TERMINATED: "info",
 };
@@ -206,7 +208,7 @@ onMounted(load);
           </el-table-column>
           <el-table-column :label="t('compliance.queue.colAuditType')" min-width="100">
             <template #default="{ row }">
-              <el-tag :type="row.audit_type === 'RESUBMIT' ? 'warning' : 'primary'" size="small" effect="light">
+              <el-tag :type="row.audit_type === 'RESUBMIT' ? 'warning' : row.audit_type === 'DEFERRAL_REVIEW' ? 'success' : 'primary'" size="small" effect="light">
                 {{ localizeText(ReviewAuditTypeLabel[row.audit_type as ReviewAuditType]) }}
               </el-tag>
             </template>

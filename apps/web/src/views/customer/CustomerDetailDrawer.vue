@@ -224,6 +224,8 @@ const accessStatusTagType: Record<AccessStatus, "primary" | "success" | "warning
   SUPPLEMENT_REQUIRED: "warning",
   REJECTED: "danger",
   APPROVED: "success",
+  APPROVED_CONDITIONAL: "warning",
+  DEFERRAL_OVERDUE: "danger",
   EXPIRED: "info",
   SUSPENDED: "info",
   CANCELLED: "info",
@@ -410,6 +412,12 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
             {{ current.name }}
             <el-tag :type="statusTagType[current.customer_status]" effect="light">
               {{ statusText(current) }}
+            </el-tag>
+            <el-tag v-if="current.deferral_overdue" type="danger" effect="dark">
+              {{ t("customer.common.deferralOverdue") }}
+            </el-tag>
+            <el-tag v-else-if="current.deferral_pending" type="warning" effect="plain">
+              {{ t("customer.common.deferralPending") }}
             </el-tag>
           </h2>
           <p class="sub-line">

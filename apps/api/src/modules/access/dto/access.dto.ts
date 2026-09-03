@@ -1,12 +1,15 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
+  IsDefined,
   IsIn,
   IsInt,
   IsMongoId,
   IsNumber,
   IsObject,
   IsOptional,
+  IsPositive,
   IsString,
   MaxLength,
   Min,
@@ -166,6 +169,30 @@ export class MaterialVerdictDto {
   reason?: string | null;
 }
 
+export class ReviewDeferralDto {
+  /** ISO 字符串或毫秒时间戳 */
+  @IsDefined()
+  due_at: string | number;
+
+  @IsArray()
+  @IsString({ each: true })
+  missing_item_ids: string[];
+
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  limit_amount?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  limit_currency?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  restrict_large_outflow?: boolean;
+}
+
 export class ReviewDecisionDto {
   @IsIn(Object.values(ReviewDecisionAction))
   action: ReviewDecisionAction;
@@ -180,6 +207,12 @@ export class ReviewDecisionDto {
   @ValidateNested({ each: true })
   @Type(() => MaterialVerdictDto)
   material_verdicts?: MaterialVerdictDto[];
+
+  /** 条件性放行的延期补件设置（action=CONDITIONAL 时必填） */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ReviewDeferralDto)
+  deferral?: ReviewDeferralDto | null;
 }
 
 export class QueryReviewDto {

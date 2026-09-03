@@ -139,6 +139,10 @@ export interface CustomerVO {
   /** 交易订单概览，仅客户列表及详情相关接口按需返回 */
   completed_trade_count: number;
   in_transit_trade_count: number;
+  /** 存在「逾期受限」的准入申请（列表/抽屉醒目提示） */
+  deferral_overdue?: boolean;
+  /** 存在「附条件通过」（延期补件进行中）的准入申请 */
+  deferral_pending?: boolean;
   created_at: string;
   updated_at: string;
   /** 列表接口为中介行内联返回的下级客户 */

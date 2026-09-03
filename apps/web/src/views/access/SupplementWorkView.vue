@@ -56,6 +56,16 @@ const returnedMaterials = computed(
     ) ?? [],
 );
 
+/** 延期补件模式（条件性放行/逾期受限）：补的是缺失清单项而非被退回材料 */
+const deferralMode = computed(
+  () =>
+    !!application.value &&
+    (application.value.status === "APPROVED_CONDITIONAL" || application.value.status === "DEFERRAL_OVERDUE") &&
+    !!application.value.deferral,
+);
+
+const deferralMissingIds = computed(() => application.value?.deferral?.missing_item_ids ?? []);
+
 const selectedScenario = computed(
   () => scenarios.value.find(item => item.id === application.value?.scenario_id) ?? null,
 );
@@ -111,7 +121,10 @@ async function addFiles(list: FileList | File[]) {
   }
   const usedTargets = new Set(uploads.value.map(row => row.targetKey).filter(Boolean));
   for (const file of accepted) {
-    const target = materialOptions.value.find(m => !usedTargets.has(m.item_id));
+    const candidates = deferralMode.value
+      ? materialOptions.value.filter(m => deferralMissingIds.value.includes(m.item_id))
+      : materialOptions.value;
+    const target = (candidates.length ? candidates : materialOptions.value).find(m => !usedTargets.has(m.item_id));
     if (target) usedTargets.add(target.item_id);
     const row: SupplementRow = {
       key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -260,14 +273,24 @@ onMounted(load);
         <div class="main-col">
           <el-card shadow="never" class="reject-card">
             <div class="reject-head">
-              <el-tag type="danger" effect="light">{{ localizeText(AccessStatusLabel[application.status]) }}</el-tag>
-              <strong>{{ t("access.supplement.rejectTitle") }}</strong>
+              <el-tag :type="deferralMode ? 'warning' : 'danger'" effect="light">{{ localizeText(AccessStatusLabel[application.status]) }}</el-tag>
+              <strong>{{ deferralMode ? t("access.supplement.deferralTitle") : t("access.supplement.rejectTitle") }}</strong>
               <span class="muted">
-                {{ t("access.supplement.complianceReturned") }}{{ application.latest_review ? ` · ${application.latest_review.reviewer_name ?? ""} ${formatDateTime(application.latest_review.reviewed_at)}` : "" }}
+                {{ deferralMode ? t("access.supplement.deferralBy") : t("access.supplement.complianceReturned") }}{{ application.latest_review ? ` · ${application.latest_review.reviewer_name ?? ""} ${formatDateTime(application.latest_review.reviewed_at)}` : "" }}
               </span>
             </div>
+            <p v-if="deferralMode && application.deferral" class="deferral-due-line">
+              {{ t("access.supplement.deferralDueLine", { time: formatDateTime(application.deferral.due_at) }) }}
+              <template v-if="application.deferral.limit_amount">
+                · {{ t("access.supplement.deferralLimitLine", { limit: `${application.deferral.limit_currency} ${application.deferral.limit_amount.toLocaleString("en-US")}` }) }}
+              </template>
+            </p>
             <p class="reject-note">{{ application.latest_review?.reason || t("access.supplement.rejectFallback") }}</p>
-            <div v-if="returnedMaterials.length" class="target-chips">
+            <div v-if="deferralMode && application.deferral" class="target-chips">
+              <span class="chips-label">{{ t("access.supplement.deferralNeeded") }}</span>
+              <span v-for="name in application.deferral.missing_item_names" :key="name" class="material-chip static">{{ name }}</span>
+            </div>
+            <div v-if="!deferralMode && returnedMaterials.length" class="target-chips">
               <span class="chips-label">{{ t("access.supplement.neededItems") }}</span>
               <button
                 v-for="material in returnedMaterials"
@@ -589,5 +612,15 @@ h1 {
 
 .history li {
   margin-bottom: 6px;
+}
+.material-chip.static {
+  cursor: default;
+}
+
+.deferral-due-line {
+  margin: 4px 0 6px;
+  color: #b88230;
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>

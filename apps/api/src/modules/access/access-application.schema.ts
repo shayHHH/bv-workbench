@@ -83,6 +83,22 @@ export class AccessApplication {
   @Prop({ type: Array, default: [] })
   timeline: Array<Omit<AccessTimelineVO, "at"> & { at: Date }>;
 
+  /** 条件性放行的延期补件设置（合规出具 CONDITIONAL 结论时写入，正式通过后清空） */
+  @Prop({ type: Object, default: null })
+  deferral: {
+    due_at: Date;
+    missing_item_ids: string[];
+    missing_item_names: string[];
+    limit_amount: number | null;
+    limit_currency: string | null;
+    restrict_large_outflow: boolean;
+    notes: string;
+    decided_by: string | null;
+    decided_at: Date;
+    reminded: string[];
+    overdue_at: Date | null;
+  } | null;
+
   @Prop({ type: Date, default: null })
   submitted_at: Date | null;
 }

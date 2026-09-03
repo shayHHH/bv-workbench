@@ -1,4 +1,6 @@
 import type {
+  ReviewAuditType,
+  ReviewFinalResult,
   AccessApplicationVO,
   ArchiveMaterialsInput,
   CustomerMaterialVO,
@@ -135,11 +137,11 @@ export async function deleteCustomerMaterial(id: string): Promise<void> {
 export interface ReviewListQuery {
   status?: "PENDING" | "PROCESSED";
   keyword?: string;
-  audit_type?: "NEW" | "RESUBMIT";
+  audit_type?: ReviewAuditType;
   review_type?: ReviewType;
-  final_result?: "APPROVED" | "UNRESOLVED" | "TERMINATED";
+  final_result?: ReviewFinalResult;
   /** 已处理页签「我的结论」筛选 */
-  decision_action?: "APPROVE" | "REJECT" | "TERMINATE";
+  decision_action?: "APPROVE" | "CONDITIONAL" | "REJECT" | "TERMINATE";
   submitted_from?: number;
   submitted_to?: number;
   sort_by?: "submitted_at" | "reviewed_at";

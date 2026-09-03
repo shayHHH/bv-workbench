@@ -60,8 +60,10 @@ const ROLE_NAME = new Map(BUILTIN_ROLES.map(role => [role.code, role.name]));
 /** demo 表2 归一后的排序：同客户同业务类型取最优状态 */
 const ADMISSION_RANK: string[] = [
   "APPROVED",
+  "APPROVED_CONDITIONAL",
   "PENDING_REVIEW",
   "SUPPLEMENT_REQUIRED",
+  "DEFERRAL_OVERDUE",
   "EXPIRED",
   "SUSPENDED",
   "REJECTED",
@@ -624,7 +626,12 @@ export class OrderService {
   /** 准入通过后自动推进该客户就绪的待KYC订单（review.service APPROVE 时调用） */
   async advanceAfterKyc(
     customerId: Types.ObjectId | string,
-    decision: { reviewer?: string | null; reviewedAt?: Date } = {},
+    decision: {
+      reviewer?: string | null;
+      reviewedAt?: Date;
+      /** 条件性放行信息：时间线注明限期/缺失材料/临时限额 */
+      conditional?: { dueAt: Date; missingNames: string[]; limitText: string | null } | null;
+    } = {},
   ): Promise<number> {
     const docs = await this.orderModel.find({
       customer_id: new Types.ObjectId(String(customerId)),
@@ -638,11 +645,14 @@ export class OrderService {
       const kyc = await this.kycBadgeForDoc(doc);
       if (!kyc.ready) continue;
       doc.status = TradeOrderStatus.AWAITING_INFLOW;
+      const conditional = decision.conditional ?? null;
       doc.timeline = [
         {
           at: reviewedAt,
-          title: "KYC 审核通过",
-          detail: `客户准入审核通过（${reviewer ? `合规官 ${reviewer} · ` : ""}审核通过时间 ${fmtTime(reviewedAt)}），订单进入待客户入款（入款登记人：${this.inflowOwnerLabel(doc)}）`,
+          title: conditional ? "KYC 条件性放行" : "KYC 审核通过",
+          detail: conditional
+            ? `客户准入条件性放行（${reviewer ? `合规官 ${reviewer} · ` : ""}${fmtTime(reviewedAt)}），限期 ${fmtTime(conditional.dueAt)} 前补齐：${conditional.missingNames.join("、")}${conditional.limitText ? `，期间临时限额 ${conditional.limitText}（提示性，不阻断）` : ""}，订单进入待客户入款（入款登记人：${this.inflowOwnerLabel(doc)}）`
+            : `客户准入审核通过（${reviewer ? `合规官 ${reviewer} · ` : ""}审核通过时间 ${fmtTime(reviewedAt)}），订单进入待客户入款（入款登记人：${this.inflowOwnerLabel(doc)}）`,
           actor: reviewer ? `合规官 ${reviewer}` : "系统",
         },
         ...doc.timeline,

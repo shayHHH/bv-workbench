@@ -27,6 +27,9 @@ const ONGOING_STATUSES: AccessStatus[] = [
   AccessStatus.DRAFT,
   AccessStatus.PENDING_REVIEW,
   AccessStatus.SUPPLEMENT_REQUIRED,
+  /* 延期补件（条件性放行/逾期受限）是待办，归进行中 */
+  AccessStatus.APPROVED_CONDITIONAL,
+  AccessStatus.DEFERRAL_OVERDUE,
 ];
 const COMPLETED_STATUSES: AccessStatus[] = [
   AccessStatus.APPROVED,
@@ -103,6 +106,8 @@ const statusTagType: Record<AccessStatus, "primary" | "success" | "warning" | "i
   SUPPLEMENT_REQUIRED: "warning",
   REJECTED: "danger",
   APPROVED: "success",
+  APPROVED_CONDITIONAL: "warning",
+  DEFERRAL_OVERDUE: "danger",
   EXPIRED: "info",
   SUSPENDED: "info",
   CANCELLED: "info",
@@ -115,6 +120,9 @@ function primaryAction(row: AccessApplicationVO): { label: string; run: () => vo
       return { label: t("access.track.continueSubmit"), run: () => router.push(`/access/materials/${row.id}`) };
     case AccessStatus.SUPPLEMENT_REQUIRED:
       return { label: t("access.track.handleSupplement"), run: () => router.push(`/access/documents/${row.id}/supplement`) };
+    case AccessStatus.APPROVED_CONDITIONAL:
+    case AccessStatus.DEFERRAL_OVERDUE:
+      return { label: t("access.track.handleDeferral"), run: () => router.push(`/access/documents/${row.id}/supplement`) };
     case AccessStatus.REJECTED:
     case AccessStatus.EXPIRED:
     case AccessStatus.CANCELLED:
@@ -122,6 +130,19 @@ function primaryAction(row: AccessApplicationVO): { label: string; run: () => vo
     default:
       return { label: t("access.track.viewDetail"), run: () => router.push(`/access/documents/${row.id}`) };
   }
+}
+
+/** 延期补件倒计时：>7 天灰、≤7 天橙、≤3 天红、逾期深红 */
+function deferralCountdown(row: AccessApplicationVO): { text: string; cls: string } | null {
+  const deferral = row.deferral;
+  if (!deferral) return null;
+  const diff = new Date(deferral.due_at).getTime() - Date.now();
+  if (row.status === "DEFERRAL_OVERDUE" || diff <= 0) {
+    return { text: t("access.track.deferralOverdue"), cls: "overdue" };
+  }
+  const days = Math.ceil(diff / 86_400_000);
+  const cls = days <= 1 ? "d1" : days <= 3 ? "d3" : days <= 7 ? "d7" : "far";
+  return { text: t("access.track.deferralLeft", { days }), cls };
 }
 
 function initials(name: string): string {
@@ -254,6 +275,14 @@ onMounted(load);
           <template #default="{ row }">
             <el-tag :type="statusType(row)" effect="light">{{ statusText(row) }}</el-tag>
             <div class="muted">{{ statusDesc(row) }}</div>
+            <div v-if="row.deferral && deferralCountdown(row)" class="deferral-card" :class="deferralCountdown(row)!.cls">
+              <strong>{{ deferralCountdown(row)!.text }}</strong>
+              <span>{{ t("access.track.deferralDue", { time: formatDate(row.deferral.due_at) }) }}</span>
+              <span>{{ t("access.track.deferralMissing", { names: row.deferral.missing_item_names.join("、") }) }}</span>
+              <span v-if="row.deferral.limit_amount">
+                {{ t("access.track.deferralLimit", { limit: `${row.deferral.limit_currency} ${row.deferral.limit_amount.toLocaleString("en-US")}` }) }}
+              </span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column :label="t('access.common.completeness')" min-width="100">
@@ -427,5 +456,42 @@ h1 {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+.deferral-card {
+  margin-top: 6px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid #ebeef5;
+  background: #fafbfc;
+  color: #606266;
+}
+
+.deferral-card.d7 {
+  border-color: #faecd8;
+  background: #fdf6ec;
+}
+
+.deferral-card.d3,
+.deferral-card.d1 {
+  border-color: #fde2e2;
+  background: #fef0f0;
+}
+
+.deferral-card.d1 strong,
+.deferral-card.d3 strong {
+  color: #f56c6c;
+}
+
+.deferral-card.overdue {
+  border-color: #f56c6c;
+  background: #fef0f0;
+}
+
+.deferral-card.overdue strong {
+  color: #c45656;
 }
 </style>

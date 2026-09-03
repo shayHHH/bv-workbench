@@ -3,6 +3,7 @@ import {
   ORDER_CURRENCIES,
   TRADE_TYPE_PRESETS,
   type CustomBusinessTypeVO,
+  type AccessApplicationVO,
   type CustomerVO,
   type KycScenarioVO,
   type QuoteCandidateVO,
@@ -12,6 +13,7 @@ import { Delete } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { fetchApplications } from "@/api/access";
 import { fetchCustomers } from "@/api/customer";
 import { fetchActiveScenarios } from "@/api/kyc";
 import {
@@ -237,6 +239,43 @@ const pickedBusiness = computed<{ business_type: string | null; business_scenari
   return { business_type: value, business_scenario_id: null };
 });
 
+/* 条件性放行提醒（提示性，不阻断建单）：该客户+业务类型存在附条件通过/逾期受限的准入申请时展示 */
+const deferralNotice = ref<AccessApplicationVO | null>(null);
+
+watch(
+  () => [form.customer_id, form.business_option],
+  async () => {
+    deferralNotice.value = null;
+    const scenarioId = pickedBusiness.value.business_scenario_id;
+    if (!form.customer_id || !scenarioId) return;
+    try {
+      const page = await fetchApplications({ customer_id: form.customer_id, page_size: 50 });
+      deferralNotice.value =
+        page.items.find(
+          app =>
+            app.scenario_id === scenarioId &&
+            (app.status === "APPROVED_CONDITIONAL" || app.status === "DEFERRAL_OVERDUE") &&
+            app.deferral,
+        ) ?? null;
+    } catch {
+      deferralNotice.value = null;
+    }
+  },
+);
+
+const deferralNoticeText = computed(() => {
+  const app = deferralNotice.value;
+  if (!app?.deferral) return "";
+  const key = app.status === "DEFERRAL_OVERDUE" ? "orders.create.deferralOverdue" : "orders.create.deferralConditional";
+  return t(key, {
+    due: formatDateTime(app.deferral.due_at),
+    missing: app.deferral.missing_item_names.join("、"),
+    limit: app.deferral.limit_amount
+      ? t("orders.create.deferralLimit", { limit: `${app.deferral.limit_currency} ${app.deferral.limit_amount.toLocaleString("en-US")}` })
+      : "",
+  });
+});
+
 /** allow-create：选中值不是 KYC 业务类型、也不在已有自定义列表里时，落库为新的自定义类型 */
 async function onBusinessOptionChange(value: string) {
   const name = (value ?? "").trim();
@@ -371,6 +410,14 @@ async function submit() {
       show-icon
       class="edit-freeze-tip"
       :title="t('orders.edit.frozenTip', { amount: `${props.order.freeze.currency} ${Number(props.order.freeze.amount).toLocaleString('en-US')}` })"
+    />
+    <el-alert
+      v-if="deferralNotice"
+      :type="deferralNotice.status === 'DEFERRAL_OVERDUE' ? 'error' : 'warning'"
+      :closable="false"
+      show-icon
+      class="deferral-alert"
+      :title="deferralNoticeText"
     />
     <el-form label-position="top">
       <div class="grid">
@@ -614,5 +661,8 @@ async function submit() {
 
 .footer-spacer {
   flex: 1;
+}
+.deferral-alert {
+  margin-bottom: 12px;
 }
 </style>

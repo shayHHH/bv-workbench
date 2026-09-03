@@ -20,6 +20,7 @@ import {
 } from "@bv/shared";
 import { FilterQuery, Model, PipelineStage, Types } from "mongoose";
 import { JwtPayload } from "../../auth/auth.types";
+import { AccessApplication, AccessApplicationDocument } from "../access/access-application.schema";
 import { CustomerEvent, CustomerEventDocument } from "./customer-event.schema";
 import { Customer, CustomerDocument, CUSTOMER_COLLECTION } from "./customer.schema";
 import { CreateCustomerDto } from "./dto/create-customer.dto";
@@ -36,6 +37,8 @@ function escapeRegExp(text: string): string {
 @Injectable()
 export class CustomerService {
   constructor(
+    @InjectModel(AccessApplication.name)
+    private readonly accessApplicationModel: Model<AccessApplicationDocument>,
     @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(CustomerEvent.name)
     private readonly eventModel: Model<CustomerEventDocument>,
@@ -243,18 +246,20 @@ export class CustomerService {
       : [];
     const allCustomerIds = [...items.map(item => item._id), ...subs.map(sub => sub._id)];
     const orderCounts = await this.getOrderCounts(allCustomerIds);
+    const deferralFlags = await this.getDeferralFlags(allCustomerIds);
     const subGroups = new Map<string, CustomerVO[]>();
     const parentNames = new Map(items.map(item => [item._id.toString(), item.name]));
     for (const sub of subs) {
       const key = sub.parent_id!.toString();
       if (!subGroups.has(key)) subGroups.set(key, []);
-      subGroups.get(key)!.push(this.toVO(sub, parentNames));
+      subGroups.get(key)!.push({ ...this.toVO(sub, parentNames), ...deferralFlags.get(sub._id.toString()) });
     }
 
     return {
       items: items.map(item => ({
         ...this.toVO(item, parentNames),
         ...orderCounts.get(item._id.toString()),
+        ...deferralFlags.get(item._id.toString()),
         ...(item.customer_kind === CustomerKind.INTERMEDIARY
           ? { sub_customers: (subGroups.get(item._id.toString()) ?? []).map(sub => ({
               ...sub,
@@ -559,6 +564,30 @@ export class CustomerService {
       created_at: doc.created_at?.toISOString?.() ?? String(doc.created_at),
       updated_at: doc.updated_at?.toISOString?.() ?? String(doc.updated_at),
     };
+  }
+
+  /** 延期补件标记：逾期受限（醒目提示）/ 附条件通过（进行中） */
+  private async getDeferralFlags(
+    customerIds: Types.ObjectId[],
+  ): Promise<Map<string, { deferral_overdue?: boolean; deferral_pending?: boolean }>> {
+    const flags = new Map<string, { deferral_overdue?: boolean; deferral_pending?: boolean }>();
+    if (!customerIds.length) return flags;
+    const apps = await this.accessApplicationModel
+      .find({
+        is_deleted: false,
+        customer_id: { $in: customerIds },
+        status: { $in: ["APPROVED_CONDITIONAL", "DEFERRAL_OVERDUE"] },
+      })
+      .select("customer_id status")
+      .lean();
+    for (const app of apps) {
+      const key = String(app.customer_id);
+      const entry = flags.get(key) ?? {};
+      if (app.status === "DEFERRAL_OVERDUE") entry.deferral_overdue = true;
+      else entry.deferral_pending = true;
+      flags.set(key, entry);
+    }
+    return flags;
   }
 
   private async getOrderCounts(customerIds: Types.ObjectId[]): Promise<Map<string, Pick<CustomerVO, "completed_trade_count" | "in_transit_trade_count">>> {

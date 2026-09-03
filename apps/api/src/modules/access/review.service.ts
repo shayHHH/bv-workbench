@@ -35,12 +35,14 @@ import { QueryReviewDto, ReviewDecisionDto } from "./dto/access.dto";
  */
 const ACTION_TO_STATUS: Record<ReviewDecisionAction, AccessStatus> = {
   APPROVE: AccessStatus.APPROVED,
+  CONDITIONAL: AccessStatus.APPROVED_CONDITIONAL,
   REJECT: AccessStatus.SUPPLEMENT_REQUIRED,
   TERMINATE: AccessStatus.REJECTED,
 };
 
 const ACTION_TO_FINAL: Record<ReviewDecisionAction, ReviewFinalResult> = {
   APPROVE: ReviewFinalResult.APPROVED,
+  CONDITIONAL: ReviewFinalResult.APPROVED_CONDITIONAL,
   REJECT: ReviewFinalResult.UNRESOLVED,
   TERMINATE: ReviewFinalResult.TERMINATED,
 };
@@ -48,6 +50,7 @@ const ACTION_TO_FINAL: Record<ReviewDecisionAction, ReviewFinalResult> = {
 /** demo 工单 history 文案口径 */
 const ACTION_LABEL: Record<ReviewDecisionAction, string> = {
   APPROVE: "合规审核通过",
+  CONDITIONAL: "合规条件性放行，需在截止时间前补齐缺失材料",
   REJECT: "合规审核驳回，等待交易员补充后重新提交",
   TERMINATE: "合规审核终止，需重新发起新申请",
 };
@@ -284,6 +287,35 @@ export class ReviewService {
       throw new BadRequestException("请填写审核意见/原因");
     }
 
+    /* 条件性放行：校验延期补件设置并构建落库结构（需求：截止时间/缺失清单/备注必填，限额与卡点可选） */
+    let deferral: NonNullable<AccessApplicationDocument["deferral"]> | null = null;
+    if (dto.action === ReviewDecisionAction.CONDITIONAL) {
+      const input = dto.deferral;
+      if (!input) throw new BadRequestException("条件性放行需要填写延期补件设置");
+      const dueAt = new Date(input.due_at);
+      if (Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+        throw new BadRequestException("补件截止时间必须晚于当前系统时间");
+      }
+      const missingIds = [...new Set(input.missing_item_ids ?? [])].filter(Boolean);
+      if (!missingIds.length) throw new BadRequestException("请勾选本次允许延期补充的缺失材料");
+      const requirements = await this.requirementsOf(caseDoc);
+      const nameById = new Map(requirements.map(item => [item.item_id, item.name]));
+      const limitAmount = input.limit_amount ?? null;
+      deferral = {
+        due_at: dueAt,
+        missing_item_ids: missingIds,
+        missing_item_names: missingIds.map(id => nameById.get(id) ?? id),
+        limit_amount: limitAmount,
+        limit_currency: limitAmount ? input.limit_currency?.trim() || "USD" : input.limit_currency?.trim() || null,
+        restrict_large_outflow: input.restrict_large_outflow !== false,
+        notes: dto.reason?.trim() ?? "",
+        decided_by: operator.display_name,
+        decided_at: new Date(),
+        reminded: [],
+        overdue_at: null,
+      };
+    }
+
     const application = await this.applicationModel.findOne({
       _id: caseDoc.application_id,
       is_deleted: false,
@@ -305,7 +337,7 @@ export class ReviewService {
     const applyVerdicts = (materials: typeof application.materials) =>
       materials.map(material => {
         const verdict = verdictMap.get(material.material_key);
-        if (dto.action === ReviewDecisionAction.APPROVE) {
+        if (dto.action === ReviewDecisionAction.APPROVE || dto.action === ReviewDecisionAction.CONDITIONAL) {
           return { ...material, status: ApplicationMaterialStatus.ACCEPTED, return_reason: null };
         }
         if (!verdict) return material;
@@ -336,6 +368,7 @@ export class ReviewService {
       action: dto.action,
       reason: dto.reason?.trim() || null,
       rejected_item_ids: rejectedItemIds,
+      deferral: deferral ? { ...deferral } : null,
     };
     caseDoc.material_verdicts = verdicts.map(v => ({
       material_key: v.material_key,
@@ -350,6 +383,7 @@ export class ReviewService {
 
     const fromStatus = application.status;
     application.status = ACTION_TO_STATUS[dto.action];
+    application.deferral = dto.action === ReviewDecisionAction.CONDITIONAL ? deferral : null;
     application.latest_review = {
       case_id: String(caseDoc._id),
       action: dto.action,
@@ -373,25 +407,39 @@ export class ReviewService {
     application.set("updated_by", new Types.ObjectId(operator.sub));
     await application.save();
 
-    const eventTitle =
-      dto.action === ReviewDecisionAction.APPROVE
-        ? "准入审核通过"
-        : dto.action === ReviewDecisionAction.REJECT
-          ? "准入审核驳回"
-          : "准入审核终止";
+    const EVENT_TITLE: Record<ReviewDecisionAction, string> = {
+      APPROVE: "准入审核通过",
+      CONDITIONAL: "准入条件性放行",
+      REJECT: "准入审核驳回",
+      TERMINATE: "准入审核终止",
+    };
+    const deferralDetail = deferral
+      ? `，限期 ${fmtDate(deferral.due_at)} 前补齐：${deferral.missing_item_names.join("、")}` +
+        (deferral.limit_amount ? `，临时限额 ${deferral.limit_currency} ${deferral.limit_amount.toLocaleString("en-US")}` : "") +
+        (deferral.restrict_large_outflow ? "，限制大额提现/提币" : "")
+      : "";
     await this.customerService.recordEvent(
       application.customer_id,
       CustomerEventType.ACCESS,
-      eventTitle,
-      `${application.scenario_name ?? "-"} · ${application.channel_name ?? "-"} · 申请 ${application.application_no}${caseDoc.decision?.reason ? `：${caseDoc.decision.reason}` : ""}`,
+      EVENT_TITLE[dto.action],
+      `${application.scenario_name ?? "-"} · ${application.channel_name ?? "-"} · 申请 ${application.application_no}${caseDoc.decision?.reason ? `：${caseDoc.decision.reason}` : ""}${deferralDetail}`,
       operator,
     );
 
-    // 合规结论联动交易订单时间线：通过→自动推进就绪的待KYC订单；驳回/终止→登记结论（合规官/时间/说明）
-    if (dto.action === ReviewDecisionAction.APPROVE) {
+    // 合规结论联动交易订单时间线：通过/条件性放行→自动推进就绪的待KYC订单；驳回/终止→登记结论
+    if (dto.action === ReviewDecisionAction.APPROVE || dto.action === ReviewDecisionAction.CONDITIONAL) {
       await this.orderService.advanceAfterKyc(application.customer_id, {
         reviewer: operator.display_name,
         reviewedAt: caseDoc.reviewed_at ?? new Date(),
+        conditional: deferral
+          ? {
+              dueAt: deferral.due_at,
+              missingNames: deferral.missing_item_names,
+              limitText: deferral.limit_amount
+                ? `${deferral.limit_currency} ${deferral.limit_amount.toLocaleString("en-US")}`
+                : null,
+            }
+          : null,
       });
     } else {
       await this.orderService.noteKycRejected(
@@ -415,6 +463,11 @@ export class ReviewService {
     if (!doc) throw new NotFoundException("审核工单不存在");
     return doc;
   }
+}
+
+function fmtDate(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}`;
 }
 
 function toVO(
@@ -443,7 +496,8 @@ function toVO(
     form_snapshot: doc.form_snapshot,
     materials_snapshot: doc.materials_snapshot,
     review_requirement: doc.review_requirement,
-    decision: doc.decision,
+    /* decision.deferral 在 schema 中为 Mixed，序列化时 Date→ISO，与 VO 对齐 */
+    decision: doc.decision as ReviewCaseVO["decision"],
     material_verdicts: doc.material_verdicts,
     submitted_by_name: doc.submitted_by_name,
     submitted_at: doc.submitted_at.toISOString(),

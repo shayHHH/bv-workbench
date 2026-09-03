@@ -43,7 +43,13 @@ import {
  * demo 状态语义：草稿/被驳回可直接编辑提交；审核拒绝、已过期、已取消需先「重新提交」
  * 回到草稿（reopen）再走工作台。
  */
-const EDITABLE_STATUSES: AccessStatus[] = [AccessStatus.DRAFT, AccessStatus.SUPPLEMENT_REQUIRED];
+const EDITABLE_STATUSES: AccessStatus[] = [
+  AccessStatus.DRAFT,
+  AccessStatus.SUPPLEMENT_REQUIRED,
+  /* 条件性放行/逾期受限：允许补充缺失材料并重新提交（补件复核） */
+  AccessStatus.APPROVED_CONDITIONAL,
+  AccessStatus.DEFERRAL_OVERDUE,
+];
 
 /** 可通过「重新提交」重开为草稿的状态（demo materialStatusFlow 的 ⟳ 重新提交） */
 const REOPENABLE_STATUSES: AccessStatus[] = [
@@ -53,7 +59,12 @@ const REOPENABLE_STATUSES: AccessStatus[] = [
 ];
 
 /** 视为"占用 客户×业务×渠道"的活跃状态：存在时不允许再提交同组合申请 */
-const ACTIVE_STATUSES: AccessStatus[] = [AccessStatus.PENDING_REVIEW, AccessStatus.APPROVED];
+const ACTIVE_STATUSES: AccessStatus[] = [
+  AccessStatus.PENDING_REVIEW,
+  AccessStatus.APPROVED,
+  AccessStatus.APPROVED_CONDITIONAL,
+  AccessStatus.DEFERRAL_OVERDUE,
+];
 
 type ScenarioLean = {
   _id: Types.ObjectId;
@@ -296,7 +307,12 @@ export class AccessService {
       channel_code: doc.channel_code,
       channel_name: doc.channel_name,
       review_type: reviewType,
-      audit_type: priorCase ? ReviewAuditType.RESUBMIT : ReviewAuditType.NEW,
+      audit_type:
+        doc.status === AccessStatus.APPROVED_CONDITIONAL || doc.status === AccessStatus.DEFERRAL_OVERDUE
+          ? ReviewAuditType.DEFERRAL_REVIEW
+          : priorCase
+            ? ReviewAuditType.RESUBMIT
+            : ReviewAuditType.NEW,
       status: ReviewCaseStatus.PENDING,
       /* 客户主档已移除风险等级；工单风险快照仅保留历史数据 */
       risk_level: null,
@@ -499,6 +515,21 @@ export class AccessService {
             rejected_item_ids: doc.latest_review.rejected_item_ids,
             reviewed_at: doc.latest_review.reviewed_at.toISOString(),
             reviewer_name: doc.latest_review.reviewer_name,
+          }
+        : null,
+      deferral: doc.deferral
+        ? {
+            due_at: doc.deferral.due_at.toISOString(),
+            missing_item_ids: doc.deferral.missing_item_ids,
+            missing_item_names: doc.deferral.missing_item_names,
+            limit_amount: doc.deferral.limit_amount ?? null,
+            limit_currency: doc.deferral.limit_currency ?? null,
+            restrict_large_outflow: doc.deferral.restrict_large_outflow !== false,
+            notes: doc.deferral.notes ?? "",
+            decided_by: doc.deferral.decided_by ?? null,
+            decided_at: doc.deferral.decided_at.toISOString(),
+            reminded: doc.deferral.reminded ?? [],
+            overdue_at: doc.deferral.overdue_at ? doc.deferral.overdue_at.toISOString() : null,
           }
         : null,
       timeline: doc.timeline.map(entry => ({ ...entry, at: entry.at.toISOString() })),

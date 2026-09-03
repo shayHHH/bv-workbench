@@ -107,12 +107,13 @@ async function loadAccessBadge() {
     return;
   }
   try {
-    const result = await fetchApplications({
-      status: "SUPPLEMENT_REQUIRED",
-      page: 1,
-      page_size: 1,
-    });
-    rejectedAccessCount.value = result.total;
+    /* 待补件 + 延期补件（条件性放行/逾期受限）都计入业务准入角标 */
+    const [supplement, conditional, overdue] = await Promise.all([
+      fetchApplications({ status: "SUPPLEMENT_REQUIRED", page: 1, page_size: 1 }),
+      fetchApplications({ status: "APPROVED_CONDITIONAL", page: 1, page_size: 1 }),
+      fetchApplications({ status: "DEFERRAL_OVERDUE", page: 1, page_size: 1 }),
+    ]);
+    rejectedAccessCount.value = supplement.total + conditional.total + overdue.total;
   } catch {
     rejectedAccessCount.value = 0;
   }
