@@ -4,6 +4,8 @@ import {
   BenchmarkSnapshotVO,
   BenchmarkStateVO,
   ChannelRateVO,
+  DEFAULT_QUOTE_MONITOR_SETTINGS,
+  QuoteMonitorSettingsVO,
   VariableSource,
 } from "@bv/shared";
 import { Model, Types } from "mongoose";
@@ -17,7 +19,13 @@ import {
 } from "./schemas/benchmark.schema";
 import { QuoteChannelRate, QuoteChannelRateDocument } from "./schemas/channel-rate.schema";
 import { QuoteConfig, QuoteConfigDocument } from "./schemas/quote-config.schema";
-import { QuerySnapshotsDto, SaveBenchmarksDto, UpdateChannelRatesDto } from "./dto/quote.dto";
+import { QuoteSettings, QuoteSettingsDocument } from "./schemas/quote-settings.schema";
+import {
+  QuerySnapshotsDto,
+  SaveBenchmarksDto,
+  SaveQuoteSettingsDto,
+  UpdateChannelRatesDto,
+} from "./dto/quote.dto";
 
 function dec(value: Types.Decimal128 | null | undefined): string | null {
   return value == null ? null : value.toString();
@@ -35,8 +43,44 @@ export class QuoteMarketService {
     private readonly channelModel: Model<QuoteChannelRateDocument>,
     @InjectModel(QuoteConfig.name)
     private readonly configModel: Model<QuoteConfigDocument>,
+    @InjectModel(QuoteSettings.name)
+    private readonly settingsModel: Model<QuoteSettingsDocument>,
     private readonly xeRates: XeRatesService,
   ) {}
+
+  /** 报价监测阈值（全局单例，缺省用默认值兜底） */
+  async getMonitorSettings(): Promise<QuoteMonitorSettingsVO> {
+    const doc = await this.settingsModel.findOne({ singleton_key: "global" }).lean();
+    return {
+      benchmark_hours: doc?.benchmark_hours ?? DEFAULT_QUOTE_MONITOR_SETTINGS.benchmark_hours,
+      channel_hours: doc?.channel_hours ?? DEFAULT_QUOTE_MONITOR_SETTINGS.channel_hours,
+      broker_hours: doc?.broker_hours ?? DEFAULT_QUOTE_MONITOR_SETTINGS.broker_hours,
+      quote_item_hours: doc?.quote_item_hours ?? DEFAULT_QUOTE_MONITOR_SETTINGS.quote_item_hours,
+      result_hours: doc?.result_hours ?? DEFAULT_QUOTE_MONITOR_SETTINGS.result_hours,
+    };
+  }
+
+  async saveMonitorSettings(
+    dto: SaveQuoteSettingsDto,
+    operator: JwtPayload,
+  ): Promise<QuoteMonitorSettingsVO> {
+    await this.settingsModel.updateOne(
+      { singleton_key: "global" },
+      {
+        $set: {
+          benchmark_hours: dto.benchmark_hours,
+          channel_hours: dto.channel_hours,
+          broker_hours: dto.broker_hours,
+          quote_item_hours: dto.quote_item_hours,
+          result_hours: dto.result_hours,
+          updated_by: new Types.ObjectId(operator.sub),
+        },
+        $setOnInsert: { singleton_key: "global", created_by: new Types.ObjectId(operator.sub) },
+      },
+      { upsert: true },
+    );
+    return this.getMonitorSettings();
+  }
 
   /** 该基准价 code 被多少个报价公式引用（BENCHMARK 变量） */
   private async benchmarkUsageCount(code: string): Promise<number> {
@@ -62,6 +106,7 @@ export class QuoteMarketService {
         label: item.label,
         value: dec(item.value)!,
         sort: item.sort,
+        updated_at: (item.value_updated_at ?? item.updated_at)?.toISOString() ?? null,
       })),
       saved_at: latest?.saved_at?.toISOString() ?? null,
       operator_name: latest?.operator_name ?? null,
@@ -102,8 +147,13 @@ export class QuoteMarketService {
       const doc = item.id ? byId.get(item.id) : undefined;
       if (item.id && !doc) throw new BadRequestException("基准价项目不存在或已被删除");
       if (doc) {
+        /* 仅当数值真正变化时刷新 value_updated_at；改名/排序不算"价格更新" */
+        const nextValue = Types.Decimal128.fromString(item.value);
+        if (dec(doc.value) !== dec(nextValue)) {
+          doc.value = nextValue;
+          doc.value_updated_at = new Date();
+        }
         doc.label = item.label.trim();
-        doc.value = Types.Decimal128.fromString(item.value);
         doc.sort = index;
         doc.set("updated_by", operatorId);
         await doc.save();
@@ -117,7 +167,11 @@ export class QuoteMarketService {
           revived.is_deleted = false;
           revived.set("deleted_at", null);
           revived.set("deleted_by", null);
-          revived.value = Types.Decimal128.fromString(item.value);
+          const revivedValue = Types.Decimal128.fromString(item.value);
+          if (dec(revived.value) !== dec(revivedValue)) {
+            revived.value = revivedValue;
+            revived.value_updated_at = new Date();
+          }
           revived.sort = index;
           revived.set("updated_by", operatorId);
           await revived.save();
@@ -177,6 +231,18 @@ export class QuoteMarketService {
     }));
   }
 
+  /** 计算时刻的数据版本快照：基准价最近保存时间 + 渠道汇率最近更新时间 */
+  async getPricingVersion(): Promise<{ benchmark_saved_at: Date | null; channel_updated_at: Date | null }> {
+    const [snapshot, channel] = await Promise.all([
+      this.snapshotModel.findOne({ is_deleted: false }).sort({ saved_at: -1 }).select({ saved_at: 1 }).lean(),
+      this.channelModel.findOne({ is_deleted: false }).sort({ updated_at: -1 }).select({ updated_at: 1 }).lean(),
+    ]);
+    return {
+      benchmark_saved_at: snapshot?.saved_at ?? null,
+      channel_updated_at: (channel as { updated_at?: Date } | null)?.updated_at ?? null,
+    };
+  }
+
   async listChannelRates(): Promise<ChannelRateVO[]> {
     const docs = await this.channelModel
       .find({ is_deleted: false })
@@ -204,12 +270,16 @@ export class QuoteMarketService {
     }
     const latest = await this.xeRates.fetchLatestRates();
     if (latest) {
+      /* 渠道 updated_at 语义＝「同步时间」：同步成功即刷新，无论数值是否变化。
+         整批用同一时间戳，前端「最近更新」取所有渠道 updated_at 的最大值即为本次同步时刻。 */
+      const syncedAt = new Date();
       for (const [code, value] of latest) {
         await this.channelModel.updateOne(
           { code, is_deleted: false },
           {
             $set: {
               value: Types.Decimal128.fromString(value),
+              updated_at: syncedAt,
               updated_by: new Types.ObjectId(operator.sub),
             },
           },

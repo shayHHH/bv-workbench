@@ -13,6 +13,7 @@ import {
   QuoteBenchmarkSnapshotSchema,
 } from "./schemas/benchmark.schema";
 import { QuoteChannelRate, QuoteChannelRateSchema } from "./schemas/channel-rate.schema";
+import { QuoteSettings, QuoteSettingsSchema } from "./schemas/quote-settings.schema";
 import { QuoteConfig, QuoteConfigSchema } from "./schemas/quote-config.schema";
 import { QuoteGroup, QuoteGroupSchema } from "./schemas/quote-group.schema";
 import { QuoteRecord, QuoteRecordSchema } from "./schemas/quote-record.schema";
@@ -24,6 +25,7 @@ import { QuoteRecord, QuoteRecordSchema } from "./schemas/quote-record.schema";
       { name: QuoteBenchmark.name, schema: QuoteBenchmarkSchema },
       { name: QuoteBenchmarkSnapshot.name, schema: QuoteBenchmarkSnapshotSchema },
       { name: QuoteChannelRate.name, schema: QuoteChannelRateSchema },
+      { name: QuoteSettings.name, schema: QuoteSettingsSchema },
       { name: QuoteConfig.name, schema: QuoteConfigSchema },
       { name: QuoteGroup.name, schema: QuoteGroupSchema },
       { name: QuoteRecord.name, schema: QuoteRecordSchema },

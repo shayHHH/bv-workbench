@@ -174,6 +174,12 @@ export const router = createRouter({
           component: () => import("@/views/admin/ReviewAssignmentView.vue"),
           meta: { title: "审核分配", roles: ["ADMIN"] },
         },
+        {
+          path: "admin/quote-monitor",
+          name: "adminQuoteMonitor",
+          component: () => import("@/views/admin/QuoteMonitorSettingsView.vue"),
+          meta: { title: "报价监测配置", roles: ["ADMIN"] },
+        },
       ],
     },
     { path: "/:pathMatch(.*)*", redirect: "/dashboard" },

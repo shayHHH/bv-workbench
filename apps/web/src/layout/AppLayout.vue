@@ -85,6 +85,7 @@ const menu: MenuItem[] = [
     children: [
       { path: "/admin/users", titleKey: "layout.menu.adminUsers" },
       { path: "/admin/review-assignment", titleKey: "layout.menu.adminReviewAssignment" },
+      { path: "/admin/quote-monitor", titleKey: "layout.menu.adminQuoteMonitor" },
     ],
   },
 ];

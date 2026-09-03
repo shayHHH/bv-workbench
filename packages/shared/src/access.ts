@@ -222,6 +222,8 @@ export interface ApplicationMaterialVO {
   material_key: string;
   /** 关联的 KYC 材料项 item_id；未关联为 null */
   requirement_item_id: string | null;
+  /** 清单外材料的自定义说明（上传页「关联」选自定义后填写）；关联到清单项时为 null */
+  custom_item_name: string | null;
   name: string;
   source: MaterialSource;
   file: FileRef | null;
@@ -235,6 +237,8 @@ export interface ApplicationMaterialVO {
 export interface ApplicationFormVO {
   customer_cn_name: string | null;
   customer_en_name: string | null;
+  /** 要 onboard 的公司（渠道选定后填写，呈现给合规与订单业务准入 tab） */
+  onboard_company: string | null;
   business_note: string | null;
 }
 
@@ -310,6 +314,7 @@ export interface SaveApplicationDraftInput {
   materials?: Array<{
     material_key: string;
     requirement_item_id?: string | null;
+    custom_item_name?: string | null;
     name: string;
     source: MaterialSource;
     file?: FileRef | null;
@@ -539,3 +544,18 @@ export const UPLOAD_ACCEPT_MIMES = [
 export const UPLOAD_ACCEPT_EXTS = [".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx"] as const;
 
 export const UPLOAD_MAX_SIZE = 20 * 1024 * 1024;
+
+/** 材料在清单口径下的显示名：关联清单项 > 自定义说明 > 文件名（各页面统一用它） */
+export function materialItemLabel(
+  material: Pick<ApplicationMaterialVO, "requirement_item_id" | "custom_item_name" | "name">,
+  itemNameById?: Map<string, string> | ((id: string) => string | undefined),
+): string {
+  if (material.requirement_item_id) {
+    const lookup =
+      typeof itemNameById === "function"
+        ? itemNameById(material.requirement_item_id)
+        : itemNameById?.get(material.requirement_item_id);
+    if (lookup) return lookup;
+  }
+  return material.custom_item_name || material.name;
+}

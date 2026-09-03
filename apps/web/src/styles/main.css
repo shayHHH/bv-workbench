@@ -9,3 +9,31 @@ body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
   background: #f5f6f8;
 }
+
+/* 报价陈旧监测弹窗内容（ElMessageBox 挂载到 body，需全局样式） */
+.monitor-dialog .monitor-lead {
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+.monitor-dialog .monitor-list {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  background: #fdf6ec;
+  border-radius: 6px;
+  color: #7c5c1e;
+  line-height: 1.9;
+  font-variant-numeric: tabular-nums;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.monitor-dialog .monitor-list strong {
+  display: inline-block;
+  margin-top: 4px;
+  color: #b88230;
+}
+.monitor-dialog .monitor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}

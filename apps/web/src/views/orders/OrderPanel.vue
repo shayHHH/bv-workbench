@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {
+  AccessStatusLabel,
+  ApplicationMaterialStatusLabel,
   DispatchStatus,
   FundingKind,
   FundingKindLabel,
@@ -7,13 +9,20 @@ import {
   fundingKindOf,
   fundingOwnerRole,
   isOrderEditable,
+  LEGACY_DECISION_ACTION_LABEL,
+  MaterialSourceLabel,
   ORDER_STAGES,
   orderStageCurrent,
+  ReviewDecisionActionLabel,
+  ReviewTypeLabel,
   TradeOrderStatus,
   TradeOrderStatusLabel,
+  type AccessApplicationVO,
+  type ApplicationMaterialStatus,
   type FileRef,
   type FundingSide,
   type PayoutOrderVO,
+  type ReviewDecisionAction,
   type TradeOrderVO,
 } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -22,7 +31,7 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
-import { openFilePreview } from "@/api/access";
+import { fetchApplications, openFilePreview } from "@/api/access";
 import {
   approveDispatch,
   cancelOrder,
@@ -56,8 +65,76 @@ const role = computed(() => auth.roleCode);
 const order = ref<TradeOrderVO | null>(null);
 const dispatch = ref<PayoutOrderVO | null>(null);
 const loading = ref(false);
-const tab = ref<"payment" | "payout" | "execution" | "activity">("payment");
+const tab = ref<"access" | "payment" | "payout" | "execution" | "activity">("access");
 const dispatchTextVisible = ref(false);
+
+/* ---------- 业务准入（本订单客户的 KYC 提交情况） ---------- */
+const accessApp = ref<AccessApplicationVO | null>(null);
+const accessLoading = ref(false);
+
+/** 准入状态 → el-tag 类型 */
+const ACCESS_STATUS_TAG: Record<string, "success" | "info" | "warning" | "danger"> = {
+  APPROVED: "success",
+  APPROVED_CONDITIONAL: "warning",
+  DEFERRAL_OVERDUE: "danger",
+  PENDING_REVIEW: "info",
+  SUPPLEMENT_REQUIRED: "warning",
+  EXPIRED: "warning",
+  SUSPENDED: "info",
+  REJECTED: "danger",
+  CANCELLED: "info",
+  DRAFT: "info",
+};
+
+/** 材料状态 → el-tag 类型 */
+const MATERIAL_TAG: Record<ApplicationMaterialStatus, "info" | "success" | "danger"> = {
+  PENDING: "info",
+  ACCEPTED: "success",
+  RETURNED: "danger",
+};
+
+/** 与后端 kycBadgeFor 同口径：同客户同业务类型取最优状态那条 */
+const ADMISSION_RANK = [
+  "APPROVED",
+  "APPROVED_CONDITIONAL",
+  "PENDING_REVIEW",
+  "SUPPLEMENT_REQUIRED",
+  "DEFERRAL_OVERDUE",
+  "EXPIRED",
+  "SUSPENDED",
+  "REJECTED",
+  "CANCELLED",
+  "DRAFT",
+];
+
+/** 从客户的准入申请中挑出与本订单匹配（业务类型优先 scenario_id、名称兜底）的那条 */
+function pickAccessApp(apps: AccessApplicationVO[], o: TradeOrderVO): AccessApplicationVO | null {
+  const matches = apps.filter(a => {
+    if (o.business_scenario_id) return a.scenario_id === o.business_scenario_id;
+    if (o.business_type) return a.scenario_name === o.business_type;
+    return true;
+  });
+  if (!matches.length) return null;
+  const rankOf = (s: string) => {
+    const i = ADMISSION_RANK.indexOf(s);
+    return i < 0 ? ADMISSION_RANK.length : i;
+  };
+  return [...matches].sort((a, b) => {
+    if (rankOf(a.status) !== rankOf(b.status)) return rankOf(a.status) - rankOf(b.status);
+    return (
+      new Date(b.submitted_at ?? b.created_at).getTime() -
+      new Date(a.submitted_at ?? a.created_at).getTime()
+    );
+  })[0];
+}
+
+function reviewActionText(action: string): string {
+  return localizeText(
+    ReviewDecisionActionLabel[action as ReviewDecisionAction] ??
+      LEGACY_DECISION_ACTION_LABEL[action] ??
+      action,
+  );
+}
 
 type FieldValue = string | FileRef;
 
@@ -83,8 +160,27 @@ async function load() {
   try {
     order.value = await fetchOrder(props.orderId);
     dispatch.value = order.value.dispatch_id ? await fetchOrderDispatch(props.orderId) : null;
+    void loadAccess();
   } finally {
     loading.value = false;
+  }
+}
+
+/** 拉取本订单客户的准入申请，挑出与本订单业务匹配的一条（业务准入 tab 用） */
+async function loadAccess() {
+  const o = order.value;
+  if (!o) {
+    accessApp.value = null;
+    return;
+  }
+  accessLoading.value = true;
+  try {
+    const page = await fetchApplications({ customer_id: o.customer_id, page_size: 50 });
+    accessApp.value = pickAccessApp(page.items, o);
+  } catch {
+    accessApp.value = null;
+  } finally {
+    accessLoading.value = false;
   }
 }
 
@@ -614,6 +710,7 @@ async function copyPanelDispatchText() {
       </header>
 
       <el-tabs v-model="tab" class="panel-tabs">
+        <el-tab-pane :label="t('orders.panel.tabs.access')" name="access" />
         <el-tab-pane :label="t('orders.panel.tabs.payment')" name="payment" />
         <el-tab-pane :label="t('orders.common.dispatch')" name="payout" />
         <el-tab-pane :label="t('orders.panel.tabs.execution')" name="execution" />
@@ -621,6 +718,78 @@ async function copyPanelDispatchText() {
       </el-tabs>
 
       <div class="panel-body">
+        <!-- 业务准入（本订单客户提交的 KYC 情况） -->
+        <template v-if="tab === 'access'">
+          <div v-if="accessLoading" v-loading="true" class="access-loading" />
+          <template v-else-if="accessApp">
+            <section class="block">
+              <div class="access-head">
+                <el-tag :type="ACCESS_STATUS_TAG[accessApp.status] ?? 'info'" effect="light">
+                  {{ localizeText(AccessStatusLabel[accessApp.status]) }}
+                </el-tag>
+                <span class="access-no">{{ accessApp.application_no }}</span>
+              </div>
+              <el-descriptions :column="2" size="small" border class="access-desc">
+                <el-descriptions-item :label="t('orders.panel.access.scenario')">
+                  {{ accessApp.scenario_name || "—" }}
+                  <span v-if="accessApp.channel_name" class="muted"> · {{ accessApp.channel_name }}</span>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.reviewType')">
+                  {{ accessApp.review_type ? localizeText(ReviewTypeLabel[accessApp.review_type]) : "—" }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.onboardCompany')" :span="2">
+                  {{ accessApp.form.onboard_company || "—" }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.cnName')">{{ accessApp.form.customer_cn_name || "—" }}</el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.enName')">{{ accessApp.form.customer_en_name || "—" }}</el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.completeness')">
+                  {{ accessApp.completeness.done }} / {{ accessApp.completeness.total }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.submittedAt')">
+                  {{ accessApp.submitted_at ? formatDateTime(accessApp.submitted_at) : "—" }}
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('orders.panel.access.businessNote')" :span="2">
+                  {{ accessApp.form.business_note || "—" }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </section>
+
+            <section v-if="accessApp.latest_review" class="block">
+              <h4 class="block-title">{{ t("orders.panel.access.reviewTitle") }}</h4>
+              <el-descriptions :column="1" size="small" border>
+                <el-descriptions-item :label="t('orders.panel.access.conclusion')">
+                  {{ reviewActionText(accessApp.latest_review.action) }}
+                  <span class="muted">
+                    · {{ accessApp.latest_review.reviewer_name || "—" }} · {{ formatDateTime(accessApp.latest_review.reviewed_at) }}
+                  </span>
+                </el-descriptions-item>
+                <el-descriptions-item v-if="accessApp.latest_review.reason" :label="t('orders.panel.access.reason')">
+                  {{ accessApp.latest_review.reason }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </section>
+
+            <section class="block">
+              <h4 class="block-title">{{ t("orders.panel.access.materialsTitle") }}</h4>
+              <div v-if="accessApp.materials.length" class="access-materials">
+                <div v-for="m in accessApp.materials" :key="m.material_key" class="access-material">
+                  <el-tag :type="MATERIAL_TAG[m.status]" size="small">
+                    {{ localizeText(ApplicationMaterialStatusLabel[m.status]) }}
+                  </el-tag>
+                  <span class="mat-name">{{ m.name }}</span>
+                  <span v-if="m.file" class="muted">{{ localizeText(MaterialSourceLabel[m.source]) }}</span>
+                  <el-button v-if="m.file" link type="primary" size="small" @click="openVoucherFile(m.file)">
+                    {{ t("orders.panel.access.preview") }}
+                  </el-button>
+                  <span v-if="m.return_reason" class="mat-return">{{ m.return_reason }}</span>
+                </div>
+              </div>
+              <p v-else class="muted">{{ t("orders.panel.access.noMaterials") }}</p>
+            </section>
+          </template>
+          <el-empty v-else :description="t('orders.panel.access.none')" />
+        </template>
+
         <!-- 收款 -->
         <template v-if="tab === 'payment'">
           <el-alert v-if="!order.kyc.ready && !['COMPLETED', 'CANCELLED'].includes(order.status)" type="warning" :closable="false" class="mb">
@@ -1360,5 +1529,43 @@ dd {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 业务准入 tab */
+.access-loading {
+  min-height: 140px;
+}
+.access-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.access-no {
+  color: #909399;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.access-desc {
+  margin-bottom: 4px;
+}
+.access-materials {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.access-material {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.access-material .mat-name {
+  font-weight: 500;
+}
+.access-material .mat-return {
+  color: #e6a23c;
+  font-size: 12px;
 }
 </style>

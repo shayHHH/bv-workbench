@@ -24,6 +24,7 @@ import {
   QuerySnapshotsDto,
   RenameGroupDto,
   SaveBenchmarksDto,
+  SaveQuoteSettingsDto,
   UpdateChannelRatesDto,
   UpsertQuoteConfigDto,
 } from "./dto/quote.dto";
@@ -80,6 +81,20 @@ export class QuoteController {
     if (!result.synced) return result;
     const refreshed = await this.quoteService.recalculateAllConfigs(operator);
     return { ...result, refreshed };
+  }
+
+  /* ---------- 报价监测阈值（admin 配置） ---------- */
+
+  @Get("settings")
+  @Roles("AGENT", "OPS", "MANAGER", "COMPLIANCE", "ADMIN")
+  getMonitorSettings() {
+    return this.marketService.getMonitorSettings();
+  }
+
+  @Put("settings")
+  @Roles("ADMIN")
+  saveMonitorSettings(@Body() dto: SaveQuoteSettingsDto, @CurrentUser() operator: JwtPayload) {
+    return this.marketService.saveMonitorSettings(dto, operator);
   }
 
   /* ---------- 客户报价配置 ---------- */

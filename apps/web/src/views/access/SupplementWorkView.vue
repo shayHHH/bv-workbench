@@ -2,6 +2,7 @@
 import {
   AccessStatusLabel,
   ApplicationMaterialStatus,
+  materialItemLabel,
   MaterialSource,
   type KycItem,
   type KycScenarioVO,
@@ -36,15 +37,31 @@ const submitting = ref(false);
 const fileInput = ref<HTMLInputElement>();
 const dragActive = ref(false);
 
+/** 「匹配材料项」下拉的自定义项：与首次上传页同口径（清单外材料，手填说明） */
+const CUSTOM_ITEM = "__custom__";
+
 interface SupplementRow {
   key: string;
   name: string;
   size: number;
   file: FileRef | null;
-  /** 匹配的当前渠道 KYC 材料项 item_id */
+  /** 匹配的当前渠道 KYC 材料项 item_id；CUSTOM_ITEM 表示清单外自定义材料 */
   targetKey: string;
+  /** targetKey === CUSTOM_ITEM 时填写的材料说明 */
+  customItemName: string;
   uploading: boolean;
   uploadTask?: Promise<void>;
+}
+
+/** 一行是否已完成匹配：选了清单项，或选了自定义且填了说明 */
+function rowMatched(row: SupplementRow): boolean {
+  if (row.targetKey === CUSTOM_ITEM) return !!row.customItemName.trim();
+  return !!row.targetKey;
+}
+
+/** 关联项变更：改选清单项或清空后，自定义说明作废（对齐上传页 onLinkChange） */
+function onTargetChange(row: SupplementRow) {
+  if (row.targetKey !== CUSTOM_ITEM) row.customItemName = "";
 }
 
 const uploads = ref<SupplementRow[]>([]);
@@ -86,11 +103,11 @@ const optionNameById = computed(
 );
 
 const hasUploading = computed(() => uploads.value.some(row => row.uploading));
-const allMatched = computed(() => uploads.value.length > 0 && uploads.value.every(row => row.targetKey));
+const allMatched = computed(() => uploads.value.length > 0 && uploads.value.every(rowMatched));
 
 const footerHint = computed(() => {
   if (!uploads.value.length) return t("access.supplement.hintNeedFile");
-  if (uploads.value.some(row => !row.targetKey)) return t("access.supplement.hintUnmatched");
+  if (uploads.value.some(row => !rowMatched(row))) return t("access.supplement.hintUnmatched");
   if (hasUploading.value) return t("access.supplement.hintUploading");
   return t("access.supplement.hintReady");
 });
@@ -132,6 +149,7 @@ async function addFiles(list: FileList | File[]) {
       size: file.size,
       file: null,
       targetKey: target?.item_id ?? "",
+      customItemName: "",
       uploading: true,
     };
     uploads.value.push(row);
@@ -163,10 +181,15 @@ function removeRow(key: string) {
   uploads.value = uploads.value.filter(row => row.key !== key);
 }
 
-function displayMaterialName(material: { requirement_item_id: string | null; name: string }) {
-  return material.requirement_item_id
-    ? (optionNameById.value.get(material.requirement_item_id) ?? material.name)
-    : material.name;
+function displayMaterialName(material: {
+  requirement_item_id: string | null;
+  custom_item_name?: string | null;
+  name: string;
+}) {
+  return materialItemLabel(
+    { ...material, custom_item_name: material.custom_item_name ?? null },
+    optionNameById.value,
+  );
 }
 
 async function previewMaterial(file: FileRef | null) {
@@ -181,6 +204,10 @@ async function previewMaterial(file: FileRef | null) {
 async function submitSupplement() {
   const app = application.value;
   if (!app || !allMatched.value) return;
+  if (uploads.value.some(row => row.targetKey === CUSTOM_ITEM && !row.customItemName.trim())) {
+    ElMessage.warning(t("access.upload.customNameRequired"));
+    return;
+  }
   submitting.value = true;
   try {
     await Promise.all(uploads.value.map(row => row.uploadTask).filter(Boolean));
@@ -203,6 +230,8 @@ async function submitSupplement() {
       return {
         material_key: material.material_key,
         requirement_item_id: material.requirement_item_id,
+        /* 补件替换的是文件，材料说明沿用原来的 */
+        custom_item_name: material.custom_item_name,
         name: replaced ? replaced.name : material.name,
         source: replaced ? MaterialSource.LOCAL_UPLOAD : material.source,
         file: replaced ? replaced.file : material.file,
@@ -210,10 +239,13 @@ async function submitSupplement() {
       };
     });
     for (const [itemId, rows] of replacement) {
+      const isCustom = itemId === CUSTOM_ITEM;
       for (const row of rows) {
         nextMaterials.push({
           material_key: row.key,
-          requirement_item_id: itemId,
+          requirement_item_id: isCustom ? null : itemId,
+          /* 自定义材料带说明；关联到清单项时服务端会强制置 null，两者不并存 */
+          custom_item_name: isCustom ? row.customItemName.trim() || null : null,
           name: row.name,
           source: MaterialSource.LOCAL_UPLOAD,
           file: row.file,
@@ -337,14 +369,30 @@ onMounted(load);
                   {{ row.uploading ? t("access.supplement.uploading") : t("access.supplement.pendingSubmit") }}
                 </small>
               </span>
-              <el-select v-model="row.targetKey" class="map-select" :placeholder="t('access.supplement.matchPh')" size="small">
+              <el-select
+                v-model="row.targetKey"
+                class="map-select"
+                :placeholder="t('access.supplement.matchPh')"
+                size="small"
+                clearable
+                @change="onTargetChange(row)"
+              >
                 <el-option
                   v-for="material in materialOptions"
                   :key="material.item_id"
                   :value="material.item_id"
                   :label="material.item_name"
                 />
+                <el-option :value="CUSTOM_ITEM" :label="t('access.upload.customItem')" />
               </el-select>
+              <el-input
+                v-if="row.targetKey === CUSTOM_ITEM"
+                v-model="row.customItemName"
+                class="custom-name"
+                size="small"
+                maxlength="100"
+                :placeholder="t('access.upload.customNamePh')"
+              />
               <button class="remove" type="button" @click="removeRow(row.key)">×</button>
             </div>
 
@@ -542,6 +590,7 @@ h1 {
 .file-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid #ebeef5;
@@ -565,7 +614,7 @@ h1 {
 
 .file-main {
   flex: 1;
-  min-width: 0;
+  min-width: 180px;
   display: flex;
   flex-direction: column;
 }
@@ -575,6 +624,11 @@ h1 {
 }
 
 .map-select {
+  width: 220px;
+  flex: none;
+}
+
+.custom-name {
   width: 220px;
   flex: none;
 }

@@ -4,8 +4,9 @@
  * 三栏布局对齐原型 groupQuote 视图；组员与去重一律按 customer_id（原型按 name 的缺陷已修正）。
  */
 import { Close, Download, MoreFilled, Plus, Refresh, Search } from "@element-plus/icons-vue";
-import type { QuoteGroupBoardVO, QuoteGroupVO } from "@bv/shared";
-import { ElMessage } from "element-plus";
+import type { ChannelRateVO, QuoteGroupBoardVO, QuoteGroupVO, QuoteMonitorSettingsVO } from "@bv/shared";
+import { DEFAULT_QUOTE_MONITOR_SETTINGS } from "@bv/shared";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -13,15 +14,22 @@ import {
   createQuoteGroup,
   deleteQuoteGroup,
   downloadQuoteGroupCsv,
+  fetchBenchmarks,
+  fetchChannelRates,
   fetchQuoteGroupBoard,
   fetchQuoteGroups,
+  fetchQuoteSettings,
   recalculateQuoteGroup,
   removeQuoteGroupMember,
   renameQuoteGroup,
 } from "@/api/quote";
 import {
+  confirmThreeWay,
   customerDisplayLabel,
+  detectStalePlatformVariables,
+  detectStaleResults,
   fetchAllQuoteCustomers,
+  formatAge,
   formatQuoteTime,
   type QuoteCustomerOption,
 } from "./quote-utils";
@@ -34,6 +42,19 @@ const board = ref<QuoteGroupBoardVO | null>(null);
 const boardLoading = ref(false);
 const allCustomers = ref<QuoteCustomerOption[]>([]);
 const focusedMemberId = ref<string | null>(null);
+
+/* ---------- 报价陈旧监测 ---------- */
+const settings = ref<QuoteMonitorSettingsVO>({ ...DEFAULT_QUOTE_MONITOR_SETTINGS });
+/** 平台基准价最近保存时间（复制场景①用） */
+const benchmarkSavedAt = ref<string | null>(null);
+/** 渠道汇率整体最近更新时间：所有渠道 updated_at 的最大值 */
+const channelUpdatedAt = ref<string | null>(null);
+function computeChannelUpdatedAt(rates: ChannelRateVO[]): string | null {
+  const times = rates
+    .map(rate => (rate.updated_at ? new Date(rate.updated_at).getTime() : 0))
+    .filter(ms => ms > 0);
+  return times.length ? new Date(Math.max(...times)).toISOString() : null;
+}
 
 /* 勾选：key = `${customerId}::${itemId}` */
 const selectedKeys = ref(new Set<string>());
@@ -245,6 +266,19 @@ function toggleMemberAll(customerId: string, checked: boolean) {
   selectedKeys.value = next;
 }
 
+/** 实际写入剪贴板 */
+async function doCopyMember(member: QuoteGroupBoardVO["members"][number], picked: typeof member.items) {
+  const lines = picked.map(
+    item => `${item.trade_type} ${item.prefix}: ${item.result ?? "-"}${item.suffix ? ` ${item.suffix}` : ""}`,
+  );
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    ElMessage.success(t("quote.batch.copied", { name: member.name, n: picked.length }));
+  } catch {
+    ElMessage.error(t("quote.quick.copyFail"));
+  }
+}
+
 async function copyMemberSelected(customerId: string) {
   const member = board.value?.members.find(m => m.customer_id === customerId);
   if (!member) return;
@@ -255,15 +289,71 @@ async function copyMemberSelected(customerId: string) {
     ElMessage.warning(t("quote.batch.pickQuoteFirst"));
     return;
   }
-  const lines = picked.map(
-    item => `${item.trade_type} ${item.prefix}: ${item.result ?? "-"}${item.suffix ? ` ${item.suffix}` : ""}`,
+
+  // 场景①：平台级数据陈旧（批量看板无逐项公式，仅校验基准价/渠道整体时效）
+  const staleVars = detectStalePlatformVariables(
+    benchmarkSavedAt.value,
+    channelUpdatedAt.value,
+    settings.value,
   );
-  try {
-    await navigator.clipboard.writeText(lines.join("\n"));
-    ElMessage.success(t("quote.batch.copied", { name: member.name, n: picked.length }));
-  } catch {
-    ElMessage.error(t("quote.quick.copyFail"));
+  if (staleVars.length) {
+    const rows = staleVars.map(v => {
+      const ageText = Number.isFinite(v.hours)
+        ? t("quote.monitor.updatedAgo", { age: formatAge(v.hours) })
+        : t("quote.monitor.neverUpdated");
+      return `· ${v.label}（${ageText}）`;
+    });
+    try {
+      await ElMessageBox.confirm(
+        `<div class="monitor-dialog"><p class="monitor-lead">${t("quote.monitor.staleVarLead")}</p><div class="monitor-list">${rows.join("<br/>")}</div></div>`,
+        t("quote.monitor.staleVarTitle"),
+        {
+          dangerouslyUseHTMLString: true,
+          confirmButtonText: t("quote.monitor.copyAnyway"),
+          cancelButtonText: t("quote.monitor.cancel"),
+          type: "warning",
+        },
+      );
+    } catch {
+      return; // 取消
+    }
+    await doCopyMember(member, picked);
+    return;
   }
+
+  // 场景②：结果时间跨度异常
+  const staleResults = detectStaleResults(picked, settings.value);
+  if (staleResults.length) {
+    const rows = staleResults.map(r => {
+      const ageText = Number.isFinite(r.hours)
+        ? t("quote.monitor.generatedAgo", { age: formatAge(r.hours) })
+        : t("quote.monitor.neverGenerated");
+      return `· ${r.label}（${ageText}）`;
+    });
+    const choice = await confirmThreeWay({
+      title: t("quote.monitor.staleResultTitle"),
+      lead: t("quote.monitor.staleResultLead", { hours: settings.value.result_hours }),
+      rows,
+      primaryText: t("quote.monitor.refreshAndCopy"),
+      secondaryText: t("quote.monitor.copyAnyway"),
+      cancelText: t("quote.monitor.cancel"),
+    });
+    if (choice === "primary") {
+      // 刷新并复制：全组重算后取回最新看板，再复制该组员当前勾选项
+      await recalcGroup();
+      const fresh = board.value?.members.find(m => m.customer_id === customerId);
+      if (!fresh) return;
+      const freshPicked = fresh.items.filter(item =>
+        selectedKeys.value.has(quoteKey(customerId, item.id)),
+      );
+      await doCopyMember(fresh, freshPicked);
+    } else if (choice === "secondary") {
+      await doCopyMember(member, picked);
+    }
+    return; // cancel = 不复制
+  }
+
+  await doCopyMember(member, picked);
 }
 
 /* ---------- 重算 / 导出 ---------- */
@@ -294,8 +384,17 @@ async function exportCsv() {
 }
 
 onMounted(async () => {
-  const [, options] = await Promise.all([loadGroups(), fetchAllQuoteCustomers()]);
+  const [, options, monitorSettings, benchmarkState, channelRates] = await Promise.all([
+    loadGroups(),
+    fetchAllQuoteCustomers(),
+    fetchQuoteSettings().catch(() => ({ ...DEFAULT_QUOTE_MONITOR_SETTINGS })),
+    fetchBenchmarks().catch(() => null),
+    fetchChannelRates().catch(() => [] as ChannelRateVO[]),
+  ]);
   allCustomers.value = options;
+  settings.value = monitorSettings;
+  benchmarkSavedAt.value = benchmarkState?.saved_at ?? null;
+  channelUpdatedAt.value = computeChannelUpdatedAt(channelRates);
 });
 </script>
 

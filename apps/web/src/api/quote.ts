@@ -9,6 +9,7 @@ import type {
   QuoteGroupBoardVO,
   QuoteGroupDetailVO,
   QuoteGroupVO,
+  QuoteMonitorSettingsVO,
   QuoteRecordVO,
   QuoteVariablesVO,
   RecalculateResultVO,
@@ -16,6 +17,20 @@ import type {
   UpsertQuoteConfigInput,
 } from "@bv/shared";
 import { http } from "./http";
+
+/* ---- 报价监测阈值（admin 配置） ---- */
+
+export async function fetchQuoteSettings(): Promise<QuoteMonitorSettingsVO> {
+  const { data } = await http.get<QuoteMonitorSettingsVO>("/quote/settings");
+  return data;
+}
+
+export async function saveQuoteSettings(
+  input: QuoteMonitorSettingsVO,
+): Promise<QuoteMonitorSettingsVO> {
+  const { data } = await http.put<QuoteMonitorSettingsVO>("/quote/settings", input);
+  return data;
+}
 
 /* ---- 平台基准价 / 渠道汇率 ---- */
 

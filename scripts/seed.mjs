@@ -441,7 +441,7 @@ const approvedAccess = (no, customerId, name, code) => ({
   customer_snapshot: { name, customer_code: code, customer_kind: "DIRECT" },
   scenario_id: kycScenarioId, scenario_code: "1", scenario_name: kycScenarioName,
   channel_code: "SGB", channel_name: "SGB", review_type: "FX",
-  form: { customer_cn_name: name, customer_en_name: null, business_note: null },
+  form: { customer_cn_name: name, customer_en_name: null, onboard_company: null, business_note: null },
   materials: [], status: "APPROVED", owner_user_id: null, owner_name: "quotetest",
   latest_review: null,
   /* 客户详情弹窗要求每条准入记录（含已完结）都展示处理时间线 */

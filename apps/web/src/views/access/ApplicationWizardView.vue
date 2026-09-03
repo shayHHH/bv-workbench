@@ -54,6 +54,7 @@ const draft = reactive({
   channel_code: "" as string,
   customer_cn_name: "" as string,
   customer_en_name: "" as string,
+  onboard_company: "" as string,
   business_note: "" as string,
   materials: [] as ApplicationMaterialVO[],
 });
@@ -132,6 +133,7 @@ async function load() {
     draft.channel_code = app.channel_code ?? "";
     draft.customer_cn_name = app.form.customer_cn_name ?? app.customer_snapshot.name;
     draft.customer_en_name = app.form.customer_en_name ?? "";
+    draft.onboard_company = app.form.onboard_company ?? "";
     draft.business_note = app.form.business_note ?? "";
     draft.materials = app.materials.map(m => ({ ...m }));
     // 补件/驳回状态直接跳到材料步骤
@@ -156,11 +158,13 @@ async function persistDraft(silent = false) {
       form: {
         customer_cn_name: draft.customer_cn_name || null,
         customer_en_name: draft.customer_en_name || null,
+        onboard_company: draft.onboard_company || null,
         business_note: draft.business_note || null,
       },
       materials: draft.materials.map(m => ({
         material_key: m.material_key,
         requirement_item_id: m.requirement_item_id,
+        custom_item_name: m.custom_item_name,
         name: m.name,
         source: m.source,
         file: m.file,
@@ -231,6 +235,7 @@ async function onFileChosen(event: Event) {
     draft.materials.push({
       material_key: crypto.randomUUID(),
       requirement_item_id: pendingItemId,
+      custom_item_name: null,
       name: fileRef.original_name,
       source: MaterialSource.LOCAL_UPLOAD,
       file: fileRef,
@@ -279,6 +284,7 @@ async function addFromLibrary() {
     draft.materials.push({
       material_key: crypto.randomUUID(),
       requirement_item_id: null,
+      custom_item_name: null,
       name: item.name,
       source: MaterialSource.LIBRARY,
       file: item.file,
@@ -311,7 +317,10 @@ async function archiveToLibrary() {
   await archiveCustomerMaterials(application.value!.customer_id, {
     items: candidates.map(m => ({
       name: m.name,
-      category: applicableItems.value.find(i => i.item_id === m.requirement_item_id)?.item_name ?? null,
+      category:
+        applicableItems.value.find(i => i.item_id === m.requirement_item_id)?.item_name ??
+        m.custom_item_name ??
+        null,
       file: m.file!,
     })),
   });
@@ -495,6 +504,14 @@ onMounted(load);
                   <el-input v-model="draft.customer_en_name" :disabled="!editable" maxlength="100" />
                 </el-form-item>
               </div>
+              <el-form-item :label="t('access.wizard.onboardCompany')">
+                <el-input
+                  v-model="draft.onboard_company"
+                  :disabled="!editable"
+                  maxlength="200"
+                  :placeholder="t('access.wizard.onboardCompanyPh')"
+                />
+              </el-form-item>
               <el-form-item :label="t('access.wizard.noteField')">
                 <el-input
                   v-model="draft.business_note"
@@ -573,7 +590,12 @@ onMounted(load);
               <article v-for="material in unlinkedMaterials" :key="material.material_key" class="material-item">
                 <div class="material-copy">
                   <strong>{{ material.name }}</strong>
-                  <small class="muted">{{ localizeText(MaterialSourceLabel[material.source]) }}<template v-if="material.file"> · {{ formatSize(material.file.size) }}</template></small>
+                  <small class="muted">
+                    <el-tag v-if="material.custom_item_name" size="small" type="info" effect="plain">
+                      {{ material.custom_item_name }}
+                    </el-tag>
+                    {{ localizeText(MaterialSourceLabel[material.source]) }}<template v-if="material.file"> · {{ formatSize(material.file.size) }}</template>
+                  </small>
                   <div class="link-row">
                     <span class="muted">{{ t("access.wizard.linkItemLabel") }}</span>
                     <el-select
@@ -583,6 +605,7 @@ onMounted(load);
                       :placeholder="t('access.wizard.unlinked')"
                       class="link-select"
                       :disabled="!editable"
+                      @change="material.custom_item_name = material.requirement_item_id ? null : material.custom_item_name"
                     >
                       <el-option
                         v-for="item in applicableItems"
@@ -629,6 +652,7 @@ onMounted(load);
               <el-descriptions-item :label="t('access.wizard.subjectType')">{{ subjectTypeText() }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.wizard.cnName')">{{ draft.customer_cn_name || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.wizard.enName')">{{ draft.customer_en_name || "—" }}</el-descriptions-item>
+              <el-descriptions-item :label="t('access.wizard.onboardCompany')" :span="2">{{ draft.onboard_company || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.wizard.noteShort')" :span="2">{{ draft.business_note || "—" }}</el-descriptions-item>
               <el-descriptions-item :label="t('access.common.completeness')" :span="2">
                 <el-progress

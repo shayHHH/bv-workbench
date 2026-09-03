@@ -53,7 +53,10 @@ export class AccessApplication {
   @Prop({ type: String, default: null })
   review_type: string | null;
 
-  @Prop({ type: Object, default: { customer_cn_name: null, customer_en_name: null, business_note: null } })
+  @Prop({
+    type: Object,
+    default: { customer_cn_name: null, customer_en_name: null, onboard_company: null, business_note: null },
+  })
   form: ApplicationFormVO;
 
   @Prop({ type: Array, default: [] })

@@ -18,10 +18,11 @@ import type {
   FormulaToken,
   QuoteConfigVO,
   QuoteItemVO,
+  QuoteMonitorSettingsVO,
   QuoteVariablesVO,
   VariableOptionVO,
 } from "@bv/shared";
-import { RoundMode, RoundModeLabel } from "@bv/shared";
+import { DEFAULT_QUOTE_MONITOR_SETTINGS, RoundMode, RoundModeLabel } from "@bv/shared";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -30,20 +31,26 @@ import {
   fetchBenchmarks,
   fetchChannelRates,
   fetchQuoteConfig,
+  fetchQuoteSettings,
   fetchQuoteVariables,
   recalculateQuote,
   saveBenchmarks,
   saveQuoteConfig,
   syncChannelRates,
 } from "@/api/quote";
+import { useAuthStore } from "@/stores/auth";
 import CustomerCreateDialog from "@/views/customer/CustomerCreateDialog.vue";
 import FormulaEditor from "./FormulaEditor.vue";
 import VariablePickerDialog from "./VariablePickerDialog.vue";
 import {
   buildClientResolver,
+  confirmThreeWay,
   customerDisplayLabel,
+  detectStaleResults,
+  detectStaleVariables,
   evalItem,
   fetchAllQuoteCustomers,
+  formatAge,
   formatQuoteTime,
   matchCustomers,
   type QuoteCustomerOption,
@@ -98,6 +105,89 @@ const benchmarkEditing = ref(false);
 const benchmarkDraft = ref<{ id?: string; label: string; value: string }[]>([]);
 const channels = ref<ChannelRateVO[]>([]);
 const channelFlash = ref(false);
+/** 渠道汇率整体最近更新时间：取所有渠道 updated_at 的最大值 */
+const channelLastSync = computed(() => {
+  const times = channels.value
+    .map(rate => (rate.updated_at ? new Date(rate.updated_at).getTime() : 0))
+    .filter(ms => ms > 0);
+  return times.length ? new Date(Math.max(...times)).toISOString() : null;
+});
+
+/* ---------- 报价陈旧监测 ---------- */
+const auth = useAuthStore();
+/** admin 配置的阈值（未取到前用默认，避免首屏 race 拦截失灵） */
+const settings = ref<QuoteMonitorSettingsVO>({ ...DEFAULT_QUOTE_MONITOR_SETTINGS });
+/** 每日进入提醒：平台基准价今日（东八区）尚未更新时的常驻风险横幅 */
+const benchmarkStaleToday = ref(false);
+
+/** 东八区自然日 yyyy-mm-dd */
+function tzDayCN(iso: string | Date | null | undefined): string | null {
+  if (!iso) return null;
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return null;
+  // UTC+8
+  const shifted = new Date(date.getTime() + 8 * 3_600_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+/** 每日提醒「稍后处理」按用户按日抑制弹窗（横幅仍常驻） */
+function dailyDismissKey(): string {
+  return `bv-quote-daily-reminder:${auth.user?.id ?? "anon"}:${tzDayCN(new Date())}`;
+}
+
+/** 基准价是否在今日（东八区）更新过 */
+function isBenchmarkUpdatedToday(): boolean {
+  const savedDay = tzDayCN(benchmark.value?.saved_at ?? null);
+  return savedDay !== null && savedDay === tzDayCN(new Date());
+}
+
+/** 首次进入提醒：基准价今日未更新则提示，去更新 / 稍后处理 */
+async function maybeDailyReminder() {
+  if (isBenchmarkUpdatedToday()) {
+    benchmarkStaleToday.value = false;
+    return;
+  }
+  benchmarkStaleToday.value = true;
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem(dailyDismissKey()) === "1";
+  } catch {
+    /* 私密窗口忽略 */
+  }
+  if (dismissed) return;
+  try {
+    await ElMessageBox.confirm(
+      t("quote.monitor.dailyBody"),
+      t("quote.monitor.dailyTitle"),
+      {
+        confirmButtonText: t("quote.monitor.goUpdate"),
+        cancelButtonText: t("quote.monitor.later"),
+        type: "warning",
+        distinguishCancelAndClose: true,
+      },
+    );
+    goUpdateBenchmark();
+  } catch (action) {
+    // 点「稍后处理」按日抑制；右上角关闭则本次不抑制，下次进入再提醒
+    if (action === "cancel") {
+      try {
+        localStorage.setItem(dailyDismissKey(), "1");
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/** 去更新：展开基准价面板并进入编辑，滚动到面板 */
+function goUpdateBenchmark() {
+  sideCollapsed.value = false;
+  panelCollapsed.benchmark = false;
+  if (!benchmarkEditing.value) enterBenchmarkEdit();
+  nextTick(() => {
+    document.getElementById("benchmark-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
 
 /* ---------- 文本格式 ---------- */
 const groupByType = ref(true);
@@ -134,6 +224,7 @@ const quotedOptions = computed<VariableOptionVO[]>(() =>
       code: item.id,
       label: `${selected.value?.name ?? ""}${item.trade_type}${item.prefix}`,
       value: results.value.get(item.id)?.value ?? item.last_result,
+      updated_at: item.last_quoted_at,
     })),
 );
 
@@ -165,7 +256,13 @@ const quoteBody = computed(() => {
   return lines.join("\n");
 });
 
-async function copyQuoteText() {
+/** 当前将要输出的报价项（预览勾选项） */
+function outputItems(): QuoteItemVO[] {
+  return (config.value?.items ?? []).filter(item => item.output_checked);
+}
+
+/** 实际写入剪贴板 */
+async function doCopyQuoteText() {
   const cfg = config.value;
   if (!cfg) return;
   const parts = [cfg.text.opening, quoteBody.value, cfg.text.ending];
@@ -179,6 +276,114 @@ async function copyQuoteText() {
   } catch {
     ElMessage.error(t("quote.quick.copyFail"));
   }
+}
+
+/** 刷新并复制：同步渠道汇率 + 重新计算（刷新结果时间戳）后复制 */
+async function refreshAndCopy() {
+  const customer = selected.value;
+  if (!customer) {
+    await doCopyQuoteText();
+    return;
+  }
+  try {
+    const sync = await syncChannelRates();
+    channels.value = sync.rates;
+    channelFlash.value = true;
+    setTimeout(() => {
+      channelFlash.value = false;
+    }, 650);
+    if (saveTimer) clearTimeout(saveTimer);
+    await saveNow();
+    const result = await recalculateQuote(customer.id);
+    const cfg = config.value;
+    if (cfg) {
+      result.config.items.forEach((remote, index) => {
+        const local = cfg.items[index];
+        if (!local) return;
+        local.last_result = remote.last_result;
+        local.last_quoted_at = remote.last_quoted_at;
+      });
+      lastSavedPayload = JSON.stringify(buildPayload());
+    }
+    await reloadCurrentResults();
+  } catch {
+    ElMessage.error(t("quote.monitor.refreshFail"));
+    return;
+  }
+  await doCopyQuoteText();
+}
+
+/** 场景②三选一弹窗：刷新并复制（主） / 仍要复制 / 取消 */
+async function confirmStaleResults(
+  staleResults: ReturnType<typeof detectStaleResults>,
+): Promise<"refresh" | "anyway" | "cancel"> {
+  const rows = staleResults.map(r => {
+    const ageText = Number.isFinite(r.hours)
+      ? t("quote.monitor.generatedAgo", { age: formatAge(r.hours) })
+      : t("quote.monitor.neverGenerated");
+    return `· ${r.label}（${ageText}）`;
+  });
+  const choice = await confirmThreeWay({
+    title: t("quote.monitor.staleResultTitle"),
+    lead: t("quote.monitor.staleResultLead", { hours: settings.value.result_hours }),
+    rows,
+    primaryText: t("quote.monitor.refreshAndCopy"),
+    secondaryText: t("quote.monitor.copyAnyway"),
+    cancelText: t("quote.monitor.cancel"),
+  });
+  return choice === "primary" ? "refresh" : choice === "secondary" ? "anyway" : "cancel";
+}
+
+/** 复制入口：先做陈旧变量拦截（①），再做结果时间跨度拦截（②），最后复制 */
+async function copyQuoteText() {
+  const cfg = config.value;
+  if (!cfg) return;
+  const items = outputItems();
+
+  // 场景①：引用变量陈旧
+  const staleVars = detectStaleVariables(items, variables.value, settings.value);
+  if (staleVars.length) {
+    const grouped = new Map<string, string[]>();
+    for (const v of staleVars) {
+      if (!grouped.has(v.sourceLabel)) grouped.set(v.sourceLabel, []);
+      const ageText = Number.isFinite(v.hours)
+        ? t("quote.monitor.updatedAgo", { age: formatAge(v.hours) })
+        : t("quote.monitor.neverUpdated");
+      grouped.get(v.sourceLabel)!.push(`${v.label}（${ageText}）`);
+    }
+    const lines: string[] = [];
+    for (const [group, labels] of grouped) {
+      lines.push(`<strong>${group}</strong>`);
+      for (const label of labels) lines.push(`· ${label}`);
+    }
+    try {
+      await ElMessageBox.confirm(
+        `<div class="monitor-dialog">${t("quote.monitor.staleVarLead")}<div class="monitor-list">${lines.join("<br/>")}</div></div>`,
+        t("quote.monitor.staleVarTitle"),
+        {
+          dangerouslyUseHTMLString: true,
+          confirmButtonText: t("quote.monitor.copyAnyway"),
+          cancelButtonText: t("quote.monitor.cancel"),
+          type: "warning",
+        },
+      );
+    } catch {
+      return; // 取消
+    }
+    await doCopyQuoteText();
+    return;
+  }
+
+  // 场景②：结果时间跨度异常（变量未陈旧，但结果生成时间超过 T5）
+  const staleResults = detectStaleResults(items, settings.value);
+  if (staleResults.length) {
+    const choice = await confirmStaleResults(staleResults);
+    if (choice === "refresh") await refreshAndCopy();
+    else if (choice === "anyway") await doCopyQuoteText();
+    return; // cancel = 不复制
+  }
+
+  await doCopyQuoteText();
 }
 
 /* ---------- 自动保存 ---------- */
@@ -443,6 +648,8 @@ async function saveBenchmarkDraft() {
   const state = await saveBenchmarks({ items: benchmarkDraft.value });
   benchmark.value = state;
   benchmarkEditing.value = false;
+  // 基准价刚更新（今日东八区），撤下风险横幅
+  if (isBenchmarkUpdatedToday()) benchmarkStaleToday.value = false;
   /* 服务端已全量自动重算引用基准价的报价，取回当前客户的最新落库结果 */
   await reloadCurrentResults();
   ElMessage.success(
@@ -491,14 +698,18 @@ async function refreshChannels() {
 /* ---------- 初始化 ---------- */
 onMounted(async () => {
   document.addEventListener("click", handleDocumentClick);
-  const [options, benchmarkState, channelRates] = await Promise.all([
+  const [options, benchmarkState, channelRates, monitorSettings] = await Promise.all([
     fetchAllQuoteCustomers(),
     fetchBenchmarks(),
     fetchChannelRates(),
+    fetchQuoteSettings().catch(() => ({ ...DEFAULT_QUOTE_MONITOR_SETTINGS })),
   ]);
   customers.value = options;
   benchmark.value = benchmarkState;
   channels.value = channelRates;
+  settings.value = monitorSettings;
+  // 每日进入提醒：基准价今日未更新则提示 + 常驻风险横幅
+  void maybeDailyReminder();
   /* 只在带 ?customer=（如从交易订单跳转报价）时预选客户；直接进入页面不默认选中，避免误改到别人的报价配置 */
   const preferred = route.query.customer
     ? (options.find(option => option.id === route.query.customer) ?? null)
@@ -525,6 +736,21 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
       <h1>{{ t("quote.quick.title") }}</h1>
       <p class="subtitle">{{ t("quote.quick.subtitle") }}</p>
     </header>
+
+    <el-alert
+      v-if="benchmarkStaleToday"
+      class="daily-risk-banner"
+      type="warning"
+      :closable="false"
+      show-icon
+    >
+      <template #title>
+        <span>{{ t("quote.monitor.bannerText") }}</span>
+        <el-button link type="primary" @click="goUpdateBenchmark">
+          {{ t("quote.monitor.goUpdate") }}
+        </el-button>
+      </template>
+    </el-alert>
 
     <div class="quote-shell" :class="{ 'side-collapsed': sideCollapsed }">
       <div class="main-col">
@@ -845,7 +1071,7 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
           {{ sideCollapsed ? "‹" : "›" }}
         </button>
         <template v-if="!sideCollapsed">
-          <el-card shadow="never" class="assist-card">
+          <el-card id="benchmark-panel" shadow="never" class="assist-card">
             <header class="assist-head clickable" @click="togglePanel('benchmark')">
               <h3>
                 <i class="panel-chevron" :class="{ collapsed: panelCollapsed.benchmark }">⌄</i>
@@ -922,10 +1148,18 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
               {{ t("quote.channel.source") }}
               <span class="online-pill">● {{ t("quote.channel.online") }}</span>
             </p>
+            <p class="channel-sync">
+              {{ channelLastSync ? t("quote.channel.lastSync", { time: formatQuoteTime(channelLastSync) }) : t("quote.channel.noUpdate") }}
+            </p>
             <div class="channel-list" :class="{ updating: channelFlash }">
               <div v-for="rate in channels" :key="rate.id" class="channel-row">
                 <span class="channel-name">{{ rate.label }}</span>
-                <code>{{ rate.value }}</code>
+                <span class="channel-value">
+                  <code>{{ rate.value }}</code>
+                  <small class="channel-time">
+                    {{ rate.updated_at ? formatQuoteTime(rate.updated_at) : "-" }}
+                  </small>
+                </span>
               </div>
             </div>
             </div>
@@ -1604,9 +1838,37 @@ h1 {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.channel-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+
 .channel-row code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   font-weight: 600;
+}
+
+.channel-time {
+  color: #b6885f;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.channel-sync {
+  margin: -4px 0 8px;
+  color: #909399;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-risk-banner {
+  margin-bottom: 16px;
+}
+.daily-risk-banner :deep(.el-button) {
+  margin-left: 8px;
+  vertical-align: baseline;
 }
 </style>

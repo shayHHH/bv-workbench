@@ -220,6 +220,7 @@ export class AccessService {
       doc.form = {
         customer_cn_name: dto.form.customer_cn_name ?? doc.form.customer_cn_name ?? null,
         customer_en_name: dto.form.customer_en_name ?? doc.form.customer_en_name ?? null,
+        onboard_company: dto.form.onboard_company ?? doc.form.onboard_company ?? null,
         business_note: dto.form.business_note ?? doc.form.business_note ?? null,
       };
     }
@@ -232,6 +233,8 @@ export class AccessService {
         return {
           material_key: input.material_key,
           requirement_item_id: input.requirement_item_id ?? null,
+          /* 关联到清单项后自定义说明作废，避免两个名字并存 */
+          custom_item_name: input.requirement_item_id ? null : (input.custom_item_name?.trim() || null),
           name: input.name,
           source: input.source,
           file: input.file ?? null,

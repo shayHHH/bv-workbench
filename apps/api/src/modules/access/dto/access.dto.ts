@@ -35,6 +35,11 @@ export class DraftFormDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
+  onboard_company?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(1000)
   business_note?: string | null;
 }
@@ -48,6 +53,12 @@ export class DraftMaterialDto {
   @IsString()
   @MaxLength(50)
   requirement_item_id?: string | null;
+
+  /** 清单外材料的自定义说明（关联下拉选「自定义」时填） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  custom_item_name?: string | null;
 
   @IsString()
   @MaxLength(200)

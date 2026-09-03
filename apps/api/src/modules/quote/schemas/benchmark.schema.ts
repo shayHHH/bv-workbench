@@ -23,6 +23,10 @@ export class QuoteBenchmark {
 
   @Prop({ type: Number, default: 0 })
   sort: number;
+
+  /** 数值最近一次变更时间（仅 value 改动时刷新；label/sort 改动不影响，供陈旧监测） */
+  @Prop({ type: Date, default: () => new Date() })
+  value_updated_at: Date;
 }
 
 export type QuoteBenchmarkDocument = HydratedDocument<QuoteBenchmark> & {

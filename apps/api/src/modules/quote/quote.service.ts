@@ -135,12 +135,14 @@ export class QuoteService {
         code: item.code,
         label: item.label,
         value: item.value,
+        updated_at: item.updated_at,
       })),
       channels: channels.map(item => ({
         source: VariableSource.CHANNEL,
         code: item.code,
         label: item.label,
         value: item.value,
+        updated_at: item.updated_at,
       })),
       broker_items: brokerItems,
     };
@@ -151,6 +153,7 @@ export class QuoteService {
     const doc = await this.getOrCreateConfig(customer, operator);
     const resolver = await this.buildResolver(customer, doc);
     const now = new Date();
+    const pricingVersion = await this.marketService.getPricingVersion();
     const errors: { item_id: string; error: string }[] = [];
     const records: Partial<QuoteRecord>[] = [];
 
@@ -164,7 +167,7 @@ export class QuoteService {
       item.last_result = Types.Decimal128.fromString(result.value);
       item.last_quoted_at = now;
       records.push(
-        this.buildRecord(customer, item, tokens, resolver, result.value, now, operator),
+        this.buildRecord(customer, item, tokens, resolver, result.value, now, operator, pricingVersion),
       );
     }
 
@@ -190,6 +193,7 @@ export class QuoteService {
     const ordered = [...configs].sort((a, b) => rank(a) - rank(b));
 
     const now = new Date();
+    const pricingVersion = await this.marketService.getPricingVersion();
     let itemCount = 0;
     let customerCount = 0;
     for (const config of ordered) {
@@ -206,7 +210,7 @@ export class QuoteService {
         if (previous !== null && Number(result.value) === previous) continue;
         item.last_result = Types.Decimal128.fromString(result.value);
         item.last_quoted_at = now;
-        records.push(this.buildRecord(customer, item, tokens, resolver, result.value, now, operator));
+        records.push(this.buildRecord(customer, item, tokens, resolver, result.value, now, operator, pricingVersion));
         itemCount += 1;
       }
       if (records.length) {
@@ -324,6 +328,7 @@ export class QuoteService {
     }
 
     const now = new Date();
+    const pricingVersion = await this.marketService.getPricingVersion();
     const errors: string[] = [];
     let itemCount = 0;
     let customerCount = 0;
@@ -363,7 +368,7 @@ export class QuoteService {
         item.last_result = Types.Decimal128.fromString(result.value);
         item.last_quoted_at = now;
         records.push(
-          this.buildRecord(customer, item, nextTokens, resolver, result.value, now, operator),
+          this.buildRecord(customer, item, nextTokens, resolver, result.value, now, operator, pricingVersion),
         );
         touched = true;
         itemCount += 1;
@@ -569,6 +574,7 @@ export class QuoteService {
       code: item._id.toString(),
       label: `${parent.name}${item.trade_type}${item.prefix}`,
       value: dec(item.last_result),
+      updated_at: item.last_quoted_at ? new Date(item.last_quoted_at).toISOString() : null,
     }));
   }
 
@@ -590,6 +596,7 @@ export class QuoteService {
     resultValue: string,
     quotedAt: Date,
     operator: JwtPayload,
+    pricingVersion?: { benchmark_saved_at: Date | null; channel_updated_at: Date | null } | null,
   ): Partial<QuoteRecord> {
     const variables = tokens
       .filter((t): t is Extract<FormulaToken, { type: "var" }> => t.type === "var")
@@ -612,6 +619,7 @@ export class QuoteService {
       round_mode: item.round_mode,
       quoted_at: quotedAt,
       operator_name: operator.display_name,
+      pricing_version: pricingVersion ?? null,
       created_by: new Types.ObjectId(operator.sub),
     } as Partial<QuoteRecord>;
   }

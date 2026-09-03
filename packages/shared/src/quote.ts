@@ -101,6 +101,8 @@ export interface BenchmarkItemVO {
   label: string;
   value: string;
   sort: number;
+  /** 该项数值最近一次变更时间（仅当 value 改动时刷新，用于陈旧监测） */
+  updated_at: string | null;
 }
 
 /** 基准价/渠道汇率变动后全量自动刷新的汇总 */
@@ -219,6 +221,8 @@ export interface VariableOptionVO {
   code: string;
   label: string;
   value: string | null;
+  /** 该变量取值的最近更新时间（基准价=该项值变更时间；渠道=同步时间；中介报价=该报价记录时间） */
+  updated_at: string | null;
 }
 
 export interface QuoteVariablesVO {
@@ -450,4 +454,43 @@ export function createItemAwareResolver(options: {
     return options.lookup(token.source, token.code);
   };
   return resolver;
+}
+
+/* ---------------- 报价监测阈值（admin 配置，单位：小时） ---------------- */
+
+export interface QuoteMonitorSettingsVO {
+  /** T1 平台基准价陈旧阈值 */
+  benchmark_hours: number;
+  /** T2 渠道即时汇率陈旧阈值 */
+  channel_hours: number;
+  /** T3 中介报价陈旧阈值 */
+  broker_hours: number;
+  /** T4 已报价结果（引用其它报价项）陈旧阈值 */
+  quote_item_hours: number;
+  /** T5 报价结果时效（生成时间戳距今） */
+  result_hours: number;
+}
+
+export const DEFAULT_QUOTE_MONITOR_SETTINGS: QuoteMonitorSettingsVO = {
+  benchmark_hours: 12,
+  channel_hours: 4,
+  broker_hours: 12,
+  quote_item_hours: 12,
+  result_hours: 24,
+};
+
+/** 变量陈旧监测的类型标签（复制拦截弹窗分组用） */
+export const VariableSourceLabel: Record<VariableSource, string> = {
+  BENCHMARK: "平台基准价",
+  CHANNEL: "渠道即时汇率",
+  BROKER_ITEM: "中介报价",
+  QUOTE_ITEM: "已报价结果",
+};
+
+/** 报价结果计算时引用的数据版本快照（记录到 quote_records） */
+export interface QuotePricingVersion {
+  /** 引用基准价的最近保存时间 */
+  benchmark_saved_at: string | null;
+  /** 引用渠道汇率的最近更新时间 */
+  channel_updated_at: string | null;
 }

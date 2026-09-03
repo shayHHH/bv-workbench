@@ -40,6 +40,9 @@ const { t } = useI18n();
 
 /* ---------------- 数据 ---------------- */
 
+/** 「关联」下拉的自定义项：清单里没有对应材料项时选它，并手填材料说明 */
+const CUSTOM_ITEM = "__custom__";
+
 const scenarios = ref<KycScenarioVO[]>([]);
 
 /** 文件行（本地上传与材料库复用混排，仅保留来源标记） */
@@ -53,8 +56,10 @@ interface UploadRow {
   size: number;
   mime: string;
   detected: string;
-  /** 关联材料项 item_id */
+  /** 关联材料项 item_id；CUSTOM_ITEM 表示清单外的自定义材料 */
   mappedItemId: string;
+  /** mappedItemId === CUSTOM_ITEM 时填写的材料说明 */
+  customItemName: string;
   uploading: boolean;
 }
 
@@ -66,6 +71,7 @@ const state = reactive({
   channelIndex: 0,
   customerCnName: "",
   customerEnName: "",
+  onboardCompany: "",
   note: "",
   files: [] as UploadRow[],
   libraryOpen: false,
@@ -155,11 +161,18 @@ const selectedChannel = computed(
 function relinkAll() {
   const valid = new Set(flatItems.value.map(item => item.item_id));
   for (const row of state.files) {
+    /* 自定义材料与清单无关，切换场景/渠道时保留 */
+    if (row.mappedItemId === CUSTOM_ITEM) continue;
     if (row.mappedItemId && !valid.has(row.mappedItemId)) row.mappedItemId = "";
   }
   for (const row of state.files) {
     if (!row.mappedItemId) row.mappedItemId = autoLinkItem(row);
   }
+}
+
+/** 关联项变更：改选清单项或清空后，自定义说明作废 */
+function onLinkChange(row: UploadRow) {
+  if (row.mappedItemId !== CUSTOM_ITEM) row.customItemName = "";
 }
 
 function onScenarioChange() {
@@ -245,6 +258,7 @@ async function addFiles(list: FileList | File[]) {
       mime: file.type || "application/octet-stream",
       detected: detectType(file.name),
       mappedItemId: "",
+      customItemName: "",
       uploading: true,
     };
     row.mappedItemId = autoLinkItem(row);
@@ -318,6 +332,7 @@ function addLibraryItem(item: CustomerMaterialVO) {
     mime: item.file.mime_type,
     detected: detectType(item.name),
     mappedItemId: "",
+    customItemName: "",
     uploading: false,
   };
   row.mappedItemId = autoLinkItem(row);
@@ -334,6 +349,11 @@ const processLines = computed(() => {
     .map(line => line.replace(/^\s*\d+[.、]\s*/, "").trim())
     .filter(Boolean);
 });
+
+/** 自定义材料的说明（未选自定义返回 null） */
+function customLabel(row: UploadRow): string | null {
+  return row.mappedItemId === CUSTOM_ITEM ? row.customItemName.trim() || null : null;
+}
 
 function linkedFiles(item: KycItem): UploadRow[] {
   return state.files.filter(row => row.mappedItemId === item.item_id);
@@ -359,6 +379,7 @@ const hasDraft = computed(
     !!state.customer ||
     !!state.customerCnName ||
     !!state.customerEnName ||
+    !!state.onboardCompany ||
     !!state.note ||
     state.libraryOpen,
 );
@@ -376,6 +397,7 @@ function clearAll() {
     channelIndex: 0,
     customerCnName: "",
     customerEnName: "",
+    onboardCompany: "",
     note: "",
     files: [],
     libraryOpen: false,
@@ -390,6 +412,10 @@ async function submitAll() {
     ElMessage.warning(t("access.upload.stillUploading"));
     return;
   }
+  if (state.files.some(row => row.mappedItemId === CUSTOM_ITEM && !row.customItemName.trim())) {
+    ElMessage.warning(t("access.upload.customNameRequired"));
+    return;
+  }
   const itemNameById = new Map(flatItems.value.map(item => [item.item_id, item.item_name]));
   state.submitting = true;
   try {
@@ -399,7 +425,7 @@ async function submitAll() {
       await archiveCustomerMaterials(state.customer.id, {
         items: localRows.map(row => ({
           name: row.name,
-          category: row.mappedItemId ? (itemNameById.get(row.mappedItemId) ?? null) : row.detected,
+          category: customLabel(row) ?? (row.mappedItemId ? (itemNameById.get(row.mappedItemId) ?? null) : row.detected),
           file: row.file as FileRef,
         })),
       });
@@ -425,11 +451,13 @@ async function submitAll() {
       form: {
         customer_cn_name: state.customerCnName.trim() || state.customer.name,
         customer_en_name: state.customerEnName.trim() || null,
+        onboard_company: state.onboardCompany.trim() || null,
         business_note: state.note || null,
       },
       materials: state.files.map(row => ({
         material_key: row.key,
-        requirement_item_id: row.mappedItemId || null,
+        requirement_item_id: row.mappedItemId === CUSTOM_ITEM ? null : row.mappedItemId || null,
+        custom_item_name: customLabel(row),
         name: row.name,
         source: row.source === "library" ? MaterialSource.LIBRARY : MaterialSource.LOCAL_UPLOAD,
         file: row.file,
@@ -616,6 +644,15 @@ onMounted(async () => {
         </div>
         <p v-else class="muted">{{ t("access.upload.noChannels") }}</p>
       </div>
+
+      <div class="field">
+        <label>{{ t("access.upload.onboardCompany") }} <span class="optional">{{ t("access.upload.optional") }}</span></label>
+        <el-input
+          v-model="state.onboardCompany"
+          maxlength="200"
+          :placeholder="t('access.upload.onboardCompanyPh')"
+        />
+      </div>
     </section>
 
     <!-- 2. 上传合规材料文件 -->
@@ -677,14 +714,28 @@ onMounted(async () => {
           </span>
           <div class="link-select">
             <span class="link-label">{{ t("access.upload.linkLabel") }}</span>
-            <el-select v-model="row.mappedItemId" :placeholder="t('access.upload.selectItemPh')" clearable>
+            <el-select
+              v-model="row.mappedItemId"
+              :placeholder="t('access.upload.selectItemPh')"
+              clearable
+              @change="onLinkChange(row)"
+            >
               <el-option
                 v-for="(item, index) in flatItems"
                 :key="item.item_id"
                 :value="item.item_id"
                 :label="`${index + 1}. ${item.item_name}`"
               />
+              <el-option :value="CUSTOM_ITEM" :label="t('access.upload.customItem')" />
             </el-select>
+            <el-input
+              v-if="row.mappedItemId === CUSTOM_ITEM"
+              v-model="row.customItemName"
+              class="custom-name"
+              size="small"
+              maxlength="100"
+              :placeholder="t('access.upload.customNamePh')"
+            />
           </div>
           <el-button
             class="trash"
@@ -1212,6 +1263,7 @@ h1 {
 
 .file-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   background: #fafbfc;
@@ -1248,7 +1300,7 @@ h1 {
 
 .file-main {
   flex: 1;
-  min-width: 0;
+  min-width: 180px;
   display: flex;
   flex-direction: column;
   cursor: pointer;
@@ -1286,6 +1338,17 @@ h1 {
 
 .link-select :deep(.el-select) {
   width: 200px;
+}
+
+/* 自定义材料说明：接在关联下拉右侧，共用同一个药丸边框 */
+.link-select .custom-name {
+  width: 190px;
+}
+
+.link-select .custom-name :deep(.el-input__wrapper) {
+  box-shadow: none !important;
+  border-radius: 0;
+  border-left: 1px solid #dcdfe6;
 }
 
 .link-select :deep(.el-select__wrapper) {

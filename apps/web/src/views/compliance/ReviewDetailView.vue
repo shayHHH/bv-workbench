@@ -100,7 +100,8 @@ function verdictOf(materialKey: string) {
 }
 
 function requirementNameOf(material: ApplicationMaterialVO): string {
-  if (!material.requirement_item_id) return "";
+  /* 清单外材料显示交易员填的自定义说明，避免合规侧只看到一个文件名 */
+  if (!material.requirement_item_id) return material.custom_item_name ?? "";
   return reviewCase.value?.requirements?.find(req => req.item_id === material.requirement_item_id)?.name ?? "";
 }
 
@@ -408,6 +409,10 @@ onMounted(load);
               <div class="submission-field">
                 <span>{{ t("compliance.detail.submitterAndTime") }}</span>
                 <strong>{{ reviewCase.submitted_by_name || "—" }} · {{ formatDateTime(reviewCase.submitted_at) }}</strong>
+              </div>
+              <div class="submission-field">
+                <span>{{ t("compliance.detail.onboardCompany") }}</span>
+                <strong>{{ reviewCase.form_snapshot.onboard_company || "—" }}</strong>
               </div>
               <div class="submission-field wide">
                 <span>{{ t("compliance.detail.businessNote") }}</span>

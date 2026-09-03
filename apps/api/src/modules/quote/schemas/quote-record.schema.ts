@@ -62,6 +62,17 @@ export class QuoteRecord {
 
   @Prop({ type: String, required: true, maxlength: 50 })
   operator_name: string;
+
+  /** 计算时引用的数据版本快照（基准价最近保存时间 / 渠道汇率最近更新时间），用于追溯与陈旧核验 */
+  @Prop({
+    type: {
+      benchmark_saved_at: { type: Date, default: null },
+      channel_updated_at: { type: Date, default: null },
+    },
+    _id: false,
+    default: null,
+  })
+  pricing_version: { benchmark_saved_at: Date | null; channel_updated_at: Date | null } | null;
 }
 
 export type QuoteRecordDocument = HydratedDocument<QuoteRecord> & {

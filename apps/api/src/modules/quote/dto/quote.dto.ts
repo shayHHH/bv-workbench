@@ -245,3 +245,21 @@ export class QuerySnapshotsDto {
   @IsISO8601({}, { message: "结束时间格式不合法" })
   to?: string;
 }
+
+/** 报价监测阈值（单位小时，1-720） */
+export class SaveQuoteSettingsDto {
+  @IsInt() @Min(1) @Max(720)
+  benchmark_hours: number;
+
+  @IsInt() @Min(1) @Max(720)
+  channel_hours: number;
+
+  @IsInt() @Min(1) @Max(720)
+  broker_hours: number;
+
+  @IsInt() @Min(1) @Max(720)
+  quote_item_hours: number;
+
+  @IsInt() @Min(1) @Max(720)
+  result_hours: number;
+}
