@@ -193,7 +193,7 @@ onMounted(() => {
 .formula-editor .var-badge {
   display: inline-block;
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   border: 1px solid var(--color-primary-light);
   border-radius: 999px;
   padding: 0 9px;

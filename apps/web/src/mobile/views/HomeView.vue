@@ -171,7 +171,7 @@ onMounted(() => {
 }
 
 .count {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 16px;
 }
 
@@ -183,7 +183,7 @@ onMounted(() => {
   background: #fff;
   border-radius: 12px;
   padding: 14px;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 14px;
 }
 </style>

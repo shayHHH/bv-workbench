@@ -430,7 +430,7 @@ const weekLeaves = computed(() =>
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -567,7 +567,7 @@ h1 {
 
 .schedule-head strong em {
   font-style: normal;
-  color: var(--color-accent);
+  color: var(--color-primary);
   margin-left: 4px;
   font-size: 11px;
 }
@@ -635,7 +635,7 @@ button.schedule-cell.available {
 }
 
 button.schedule-cell.available:hover {
-  color: var(--color-accent);
+  color: var(--color-primary);
   border-color: var(--color-primary);
 }
 
@@ -761,7 +761,7 @@ button.schedule-cell.available:hover {
 }
 
 .handoff-card footer b {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 @media (max-width: 1100px) {

@@ -1185,7 +1185,7 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -1530,7 +1530,7 @@ h1 {
 
 .summary-result {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .summary-type {
@@ -1627,7 +1627,7 @@ h1 {
 
 .op-chip:hover {
   border-color: var(--color-primary);
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .formula-error {
@@ -1668,7 +1668,7 @@ h1 {
 
 .result-box strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 15px;
 }
 
@@ -1725,7 +1725,7 @@ h1 {
 }
 
 .assist-head.clickable:hover h3 {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .panel-chevron {
@@ -1833,7 +1833,7 @@ h1 {
 }
 
 .channel-name {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }

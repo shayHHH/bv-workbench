@@ -111,7 +111,7 @@ header strong {
 }
 
 .pair i {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-style: normal;
 }
 
@@ -153,7 +153,7 @@ footer {
 }
 
 .cta.primary {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 600;
 }
 

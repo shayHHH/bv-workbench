@@ -441,7 +441,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;

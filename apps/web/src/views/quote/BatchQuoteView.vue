@@ -664,7 +664,7 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -747,7 +747,7 @@ h1 {
 
 .group-item.active {
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -769,7 +769,7 @@ h1 {
 
 .group-item.active .group-badge {
   background: #ffe4d1;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .danger-item {
@@ -793,7 +793,7 @@ h1 {
 .member-item.active {
   background: var(--color-primary-light);
   border-color: #ffd4b8;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .member-meta {
@@ -875,7 +875,7 @@ h1 {
 
 .quote-type {
   background: #eaf2ff;
-  color: var(--color-accent);
+  color: var(--color-primary);
   border-radius: 999px;
   font-size: 12px;
   padding: 0 10px;
@@ -903,7 +903,7 @@ h1 {
 
 .quote-val {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--color-accent);
+  color: var(--color-primary);
   white-space: nowrap;
 }
 
@@ -971,7 +971,7 @@ h1 {
 }
 
 .broker-tag {
-  color: var(--color-accent);
+  color: var(--color-primary);
   margin-left: 8px;
 }
 </style>

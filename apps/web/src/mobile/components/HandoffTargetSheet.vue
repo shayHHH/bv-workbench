@@ -152,7 +152,7 @@ async function pick(candidate: HandoffCandidateVO) {
   text-align: left;
 }
 .row.current {
-  color: var(--bv-primary, var(--color-accent));
+  color: var(--bv-primary, var(--color-primary));
 }
 .row:disabled {
   opacity: 0.6;

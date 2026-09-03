@@ -958,8 +958,8 @@ onMounted(async () => {
   appearance: none;
   border: 1px solid #ffe0c2;
   border-radius: 4px;
-  background: #fff8f1;
-  color: var(--color-accent);
+  background: var(--color-surface-alt);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -1003,7 +1003,7 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -1170,8 +1170,8 @@ h1 {
 
 .channel-chip.active {
   border-color: var(--color-primary);
-  color: var(--color-warning);
-  background: #fff8f1;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
   font-weight: 600;
 }
 
@@ -1206,7 +1206,7 @@ h1 {
   height: 56px;
   border-radius: 50%;
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1374,7 +1374,7 @@ h1 {
 }
 
 .process-details summary {
-  color: var(--color-accent);
+  color: var(--color-primary);
   cursor: pointer;
 }
 

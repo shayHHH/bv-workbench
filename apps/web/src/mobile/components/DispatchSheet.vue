@@ -254,7 +254,7 @@ h3 {
 
 .channel-options button.active {
   border-color: var(--color-primary);
-  color: var(--color-accent);
+  color: var(--color-primary);
   background: var(--color-primary-light);
 }
 

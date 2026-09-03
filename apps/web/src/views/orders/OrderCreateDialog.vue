@@ -609,7 +609,7 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: #fff8f1;
+  background: var(--color-surface-alt);
   border: 1px solid #ffe1c4;
   border-radius: 8px;
   padding: 8px 12px;
@@ -645,7 +645,7 @@ async function submit() {
 
 .custom-name em {
   font-style: normal;
-  color: var(--color-accent);
+  color: var(--color-primary);
   background: #fff4e8;
   border-radius: 4px;
   padding: 0 5px;

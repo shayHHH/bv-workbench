@@ -151,7 +151,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -224,7 +224,7 @@ h1 {
 
 .metric-head i {
   font-style: normal;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .metric-value {
@@ -271,7 +271,7 @@ h1 {
   height: 34px;
   border-radius: 9px;
   background: #fff4ea;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 700;
   display: flex;
   align-items: center;

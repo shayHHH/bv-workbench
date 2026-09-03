@@ -251,7 +251,7 @@ h3 {
 
 .pill-options button.active {
   border-color: var(--color-primary);
-  color: var(--color-accent);
+  color: var(--color-primary);
   background: var(--color-primary-light);
 }
 
@@ -305,7 +305,7 @@ h3 {
 }
 
 .impact span {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .buttons {

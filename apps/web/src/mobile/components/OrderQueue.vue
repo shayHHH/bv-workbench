@@ -115,6 +115,6 @@ load(true);
 }
 
 .load-more {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 </style>

@@ -1058,8 +1058,8 @@ h1 {
 }
 
 .metric-card.orange .metric-icon {
-  background: var(--color-accent-light);
-  color: var(--color-accent);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
 }
 
 .metric-card.blue .metric-icon {

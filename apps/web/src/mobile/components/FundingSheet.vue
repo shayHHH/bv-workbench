@@ -312,7 +312,7 @@ h3 {
 
 .chain-options button.active {
   border-color: var(--color-primary);
-  color: var(--color-accent);
+  color: var(--color-primary);
   background: var(--color-primary-light);
 }
 
@@ -347,7 +347,7 @@ h3 {
   height: 30px;
   border-radius: 8px;
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -376,7 +376,7 @@ h3 {
 }
 
 .upload-action {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   white-space: nowrap;
 }

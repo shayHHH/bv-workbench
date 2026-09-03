@@ -378,7 +378,7 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -410,7 +410,7 @@ h1 {
 }
 
 .count-text :deep(strong) {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .snapshot-list {
@@ -489,7 +489,7 @@ h1 {
 }
 
 .today-col {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -510,7 +510,7 @@ h1 {
 .quote-cell.highlight {
   background: var(--color-primary-light);
   border-color: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -532,7 +532,7 @@ h1 {
 
 .detail-result strong {
   font-size: 24px;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .detail-result small {

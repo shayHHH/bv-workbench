@@ -213,6 +213,6 @@ async function submit() {
 }
 
 .impact span {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 </style>

@@ -729,7 +729,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 11px;
   letter-spacing: 0.12em;
   margin: 0 0 6px;
@@ -853,7 +853,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   height: 40px;
   border-radius: 8px;
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 700;
   display: flex;

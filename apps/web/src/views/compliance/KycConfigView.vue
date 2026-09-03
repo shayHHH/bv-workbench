@@ -568,7 +568,7 @@ onMounted(() => load());
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -680,7 +680,7 @@ h1 {
 
 .card-top em {
   font-style: normal;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 700;
   font-size: 12px;
 }
@@ -707,7 +707,7 @@ h1 {
 .code-pill {
   flex: none;
   background: #231c17;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 700;
   border-radius: 6px;
   padding: 4px 10px;

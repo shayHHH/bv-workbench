@@ -410,7 +410,7 @@ h1 {
 .avatar.company {
   border-radius: 9px;
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .avatar.avatar-sub {
@@ -441,7 +441,7 @@ h1 {
 }
 
 .name-link:hover {
-  color: var(--color-accent);
+  color: var(--color-primary);
   text-decoration: underline;
 }
 

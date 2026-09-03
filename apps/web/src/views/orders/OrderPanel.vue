@@ -999,7 +999,7 @@ async function copyPanelDispatchText() {
 }
 
 .eyebrow {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 11px;
   letter-spacing: 0.1em;
 }
@@ -1081,7 +1081,7 @@ async function copyPanelDispatchText() {
 }
 
 .hero-legs i {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-style: normal;
 }
 
@@ -1152,7 +1152,7 @@ async function copyPanelDispatchText() {
 
 .hero-quote code {
   font-weight: 700;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .hero-quote em {

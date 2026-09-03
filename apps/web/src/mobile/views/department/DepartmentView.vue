@@ -241,7 +241,7 @@ function openForm() {
   margin: 10px 12px;
   border: 1px dashed var(--color-primary);
   background: var(--color-primary-light);
-  color: var(--color-accent);
+  color: var(--color-primary);
   border-radius: 10px;
   padding: 10px;
   font-size: 13px;
@@ -334,7 +334,7 @@ function openForm() {
 }
 
 .suggest {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .done {
@@ -350,7 +350,7 @@ function openForm() {
   padding: 0;
   background: none;
   border: none;
-  color: var(--bv-primary, var(--color-accent));
+  color: var(--bv-primary, var(--color-primary));
   font-size: 12px;
 }
 .link-btn.danger {

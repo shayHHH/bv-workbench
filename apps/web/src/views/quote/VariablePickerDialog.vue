@@ -97,6 +97,6 @@ function pick(option: VariableOptionVO) {
 .variable-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 </style>

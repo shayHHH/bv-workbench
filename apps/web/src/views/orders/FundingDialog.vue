@@ -305,7 +305,7 @@ async function submit() {
 .voucher-upload:focus,
 .voucher-upload.dragging {
   border-color: var(--color-primary);
-  background: #fff7ed;
+  background: var(--color-primary-light);
   outline: none;
 }
 
@@ -323,7 +323,7 @@ async function submit() {
   height: 34px;
   border-radius: 8px;
   background: #fff;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 18px;
 }
 
