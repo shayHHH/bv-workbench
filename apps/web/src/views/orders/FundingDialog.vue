@@ -277,7 +277,7 @@ async function submit() {
 <style scoped>
 .brief {
   margin: 0 0 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .grid {
@@ -289,9 +289,9 @@ async function submit() {
 .voucher-upload {
   width: 100%;
   min-height: 82px;
-  border: 1.5px dashed #dcdfe6;
+  border: 1.5px dashed var(--color-border);
   border-radius: 10px;
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
@@ -304,7 +304,7 @@ async function submit() {
 .voucher-upload:hover,
 .voucher-upload:focus,
 .voucher-upload.dragging {
-  border-color: #ff7a00;
+  border-color: var(--color-primary);
   background: #fff7ed;
   outline: none;
 }
@@ -323,7 +323,7 @@ async function submit() {
   height: 34px;
   border-radius: 8px;
   background: #fff;
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 18px;
 }
 
@@ -333,7 +333,7 @@ async function submit() {
 
 .voucher-file strong {
   display: block;
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -342,7 +342,7 @@ async function submit() {
 
 .voucher-file small {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   margin-top: 3px;
 }
 

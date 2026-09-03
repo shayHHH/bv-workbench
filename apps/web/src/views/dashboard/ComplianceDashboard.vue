@@ -151,7 +151,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -163,12 +163,12 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .role-context {
@@ -176,7 +176,7 @@ h1 {
   align-items: center;
   gap: 12px;
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 14px;
@@ -194,7 +194,7 @@ h1 {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: #ff7a00;
+  background: var(--color-primary);
   color: #fff;
   font-weight: 700;
   display: flex;
@@ -218,13 +218,13 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .metric-head i {
   font-style: normal;
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 
 .metric-value {
@@ -261,7 +261,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -271,7 +271,7 @@ h1 {
   height: 34px;
   border-radius: 9px;
   background: #fff4ea;
-  color: #ff7a00;
+  color: var(--color-accent);
   font-weight: 700;
   display: flex;
   align-items: center;

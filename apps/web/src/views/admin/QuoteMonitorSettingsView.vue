@@ -113,12 +113,12 @@ onMounted(load);
   gap: 8px;
 }
 .unit {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 .field-hint {
   margin: 6px 0 0;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.5;
 }

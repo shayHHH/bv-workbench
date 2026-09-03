@@ -221,7 +221,7 @@ h3 {
 }
 
 .hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   text-align: center;
   margin: 0 0 14px;
@@ -230,7 +230,7 @@ h3 {
 .field-label {
   display: block;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin: 12px 0 6px;
 }
 
@@ -241,18 +241,18 @@ h3 {
 }
 
 .pill-options button {
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 999px;
   padding: 6px 14px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .pill-options button.active {
-  border-color: #ff7a00;
-  color: #ff7a00;
-  background: #fff7f0;
+  border-color: var(--color-primary);
+  color: var(--color-accent);
+  background: var(--color-primary-light);
 }
 
 .row-2 {
@@ -268,7 +268,7 @@ h3 {
 .native-input {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 13px;
@@ -276,7 +276,7 @@ h3 {
 }
 
 .note-input {
-  background: #f6f7f9;
+  background: var(--color-surface-alt);
   border-radius: 8px;
 }
 
@@ -285,7 +285,7 @@ h3 {
 }
 
 .impact {
-  background: #fffaf5;
+  background: var(--color-primary-light);
   border: 1px solid #ffe2c4;
   border-radius: 8px;
   padding: 10px 12px;
@@ -296,16 +296,16 @@ h3 {
 .impact strong {
   display: block;
   margin-bottom: 4px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .impact p {
   margin: 0 0 4px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .impact span {
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 
 .buttons {

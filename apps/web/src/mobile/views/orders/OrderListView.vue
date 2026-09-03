@@ -24,6 +24,6 @@ const initialTab = Number(route.query.tab) || 0;
 <style scoped>
 .order-list {
   min-height: 100%;
-  background: #f5f6f8;
+  background: var(--color-surface-alt);
 }
 </style>

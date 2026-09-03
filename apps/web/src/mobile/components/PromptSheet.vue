@@ -99,14 +99,14 @@ h3 {
 }
 
 .message {
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
   margin: 0 0 12px;
   line-height: 1.6;
 }
 
 .input {
-  background: #f6f7f9;
+  background: var(--color-surface-alt);
   border-radius: 8px;
   margin-bottom: 14px;
 }

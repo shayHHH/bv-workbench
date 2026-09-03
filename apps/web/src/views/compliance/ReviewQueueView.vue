@@ -12,6 +12,7 @@ import {
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
+import { REVIEW_FINAL_TONE, type TagTone } from "@/components/statusTones";
 import { fetchReviewCases } from "@/api/access";
 import { localizeText } from "@/i18n";
 import { formatDateTime } from "@/utils/format";
@@ -105,12 +106,7 @@ function subjectTypeText(row: ReviewCaseVO): string {
   return localizeText(CustomerSubTypeLabel[subType as keyof typeof CustomerSubTypeLabel] ?? subType);
 }
 
-const FINAL_TAG: Record<string, "success" | "warning" | "info"> = {
-  APPROVED: "success",
-  APPROVED_CONDITIONAL: "warning",
-  UNRESOLVED: "warning",
-  TERMINATED: "info",
-};
+const FINAL_TAG: Record<string, TagTone> = REVIEW_FINAL_TONE;
 
 const finalText = (row: ReviewCaseVO) =>
   row.final_result ? localizeText(ReviewFinalResultLabel[row.final_result]) : "--";
@@ -292,7 +288,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -304,7 +300,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -331,18 +327,18 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .status-dot i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #67c23a;
+  background: var(--color-success);
 }
 
 .muted {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
 }
 
 .pager {

@@ -222,7 +222,7 @@ async function submit() {
 <style scoped>
 .subtitle {
   margin: 0 0 16px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .kind-group :deep(.el-radio-button__inner) {
@@ -245,13 +245,13 @@ async function submit() {
   display: flex;
   flex-direction: column;
   padding: 8px 14px;
-  background: #f5f6f8;
+  background: var(--color-surface-alt);
   border-radius: 8px;
   line-height: 1.5;
 }
 
 .kind-locked span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 

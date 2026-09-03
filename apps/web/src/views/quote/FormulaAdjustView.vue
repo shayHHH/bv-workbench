@@ -283,7 +283,7 @@ async function confirmApply() {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -295,7 +295,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -314,7 +314,7 @@ h1 {
 
 .card-desc {
   margin: 4px 0 0;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -333,12 +333,12 @@ h1 {
 .controls label span {
   display: block;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   margin-bottom: 4px;
 }
 
 .hint {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 12px;
   margin: 8px 0 12px;
 }
@@ -347,12 +347,12 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
   border-radius: 8px;
   padding: 8px 12px;
   margin-bottom: 10px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .match-table code {
@@ -361,7 +361,7 @@ h1 {
 }
 
 .code-tag {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -370,7 +370,7 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
   border-radius: 8px;
   padding: 12px;
   margin: 12px 0;
@@ -385,11 +385,11 @@ h1 {
 }
 
 .confirm-rows span {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .confirm-foot {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 12px;
   margin: 0;
 }

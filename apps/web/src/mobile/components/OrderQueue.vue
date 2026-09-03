@@ -109,12 +109,12 @@ load(true);
   border: 0;
   background: transparent;
   text-align: center;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
   padding: 10px;
 }
 
 .load-more {
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 </style>

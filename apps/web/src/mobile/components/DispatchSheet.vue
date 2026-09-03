@@ -185,7 +185,7 @@ h3 {
 }
 
 .brief {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   text-align: center;
   margin: 0 0 12px;
@@ -199,7 +199,7 @@ h3 {
 }
 
 .channel-strip div {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 10px;
   min-width: 0;
@@ -207,7 +207,7 @@ h3 {
 
 .channel-strip span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
   margin-bottom: 2px;
 }
@@ -219,7 +219,7 @@ h3 {
 
 .section-label {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin: 12px 0 8px;
 }
 
@@ -233,7 +233,7 @@ h3 {
 .text-label-row button {
   border: 0;
   background: transparent;
-  color: #409eff;
+  color: var(--color-primary);
   font-size: 13px;
   padding: 0;
 }
@@ -244,18 +244,18 @@ h3 {
 }
 
 .channel-options button {
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 6px;
   padding: 7px 18px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .channel-options button.active {
-  border-color: #ff7a00;
-  color: #ff7a00;
-  background: #fff7f0;
+  border-color: var(--color-primary);
+  color: var(--color-accent);
+  background: var(--color-primary-light);
 }
 
 .va-list {
@@ -271,10 +271,10 @@ h3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
-  background: #fafbfc;
+  background: var(--color-surface-alt);
 }
 
 .va-lines {
@@ -285,7 +285,7 @@ h3 {
 }
 
 .va-lines span {
-  color: #909399;
+  color: var(--color-text-muted);
   margin-right: 8px;
 }
 
@@ -296,12 +296,12 @@ h3 {
 
 .va-empty {
   margin: 0;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .text-input {
-  background: #f6f7f9;
+  background: var(--color-surface-alt);
   border-radius: 8px;
 }
 

@@ -65,7 +65,7 @@ function logout() {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #ff7a00;
+  background: var(--color-primary);
   color: #fff;
   display: flex;
   align-items: center;
@@ -86,7 +86,7 @@ function logout() {
 
 .user-meta span {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .menu-group {

@@ -77,7 +77,7 @@ function pick(option: VariableOptionVO) {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
@@ -85,18 +85,18 @@ function pick(option: VariableOptionVO) {
 }
 
 .variable-row:hover {
-  border-color: #f6b895;
-  background: #fff4ed;
+  border-color: var(--color-primary-light);
+  background: var(--color-primary-light);
 }
 
 .variable-label {
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .variable-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  color: #d9531e;
+  color: var(--color-accent);
 }
 </style>

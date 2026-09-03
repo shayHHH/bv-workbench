@@ -165,7 +165,7 @@ onMounted(() => {
 <style scoped>
 .formula-editor {
   min-height: 30px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 4px 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -177,11 +177,11 @@ onMounted(() => {
 }
 
 .formula-editor:focus {
-  border-color: #ff7a00;
+  border-color: var(--color-primary);
 }
 
 .formula-editor.error {
-  border-color: #f56c6c;
+  border-color: var(--color-danger);
 }
 
 .formula-editor:empty::before {
@@ -192,9 +192,9 @@ onMounted(() => {
 .formula-editor :deep(.var-badge),
 .formula-editor .var-badge {
   display: inline-block;
-  background: #fff4ed;
-  color: #d9531e;
-  border: 1px solid #f6b895;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
+  border: 1px solid var(--color-primary-light);
   border-radius: 999px;
   padding: 0 9px;
   margin: 0 2px;

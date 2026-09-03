@@ -30,6 +30,7 @@ import {
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { CUSTOMER_STATUS_TONE, ACCESS_STATUS_TONE } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { fetchApplication, fetchApplications, fetchCustomerMaterials, openFilePreview } from "@/api/access";
 import { fetchCustomer, fetchCustomerEvents, updateCustomer } from "@/api/customer";
@@ -72,12 +73,7 @@ const eyebrow = computed(() => {
   }
 });
 
-const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | "info"> = {
-  NEW: "primary",
-  ACTIVE: "success",
-  DORMANT: "warning",
-  SUSPENDED: "info",
-};
+const statusTagType = CUSTOMER_STATUS_TONE;
 
 async function loadEvents() {
   if (!current.value) return;
@@ -218,18 +214,7 @@ async function toggleCooperation() {
   }
 }
 
-const accessStatusTagType: Record<AccessStatus, "primary" | "success" | "warning" | "info" | "danger"> = {
-  DRAFT: "info",
-  PENDING_REVIEW: "warning",
-  SUPPLEMENT_REQUIRED: "warning",
-  REJECTED: "danger",
-  APPROVED: "success",
-  APPROVED_CONDITIONAL: "warning",
-  DEFERRAL_OVERDUE: "danger",
-  EXPIRED: "info",
-  SUSPENDED: "info",
-  CANCELLED: "info",
-};
+const accessStatusTagType = ACCESS_STATUS_TONE;
 
 const orderStatusTagType: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
   PENDING_KYC: "info",
@@ -739,12 +724,12 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 8px;
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 11px;
   letter-spacing: 0.12em;
   margin: 0 0 6px;
@@ -759,7 +744,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .sub-line {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
   font-size: 13px;
 }
@@ -775,18 +760,18 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   border: none;
   background: transparent;
   font-size: 22px;
-  color: #909399;
+  color: var(--color-text-muted);
   cursor: pointer;
   line-height: 1;
   padding: 2px 6px;
 }
 
 .drawer-close:hover {
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .overview-grid :deep(.el-descriptions__label) {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .section {
@@ -803,12 +788,12 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
   border-radius: 8px;
 }
 
 .lifecycle-row > span:first-child {
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -817,7 +802,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: 8px 2px 0;
 }
@@ -827,7 +812,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   margin-bottom: 8px;
 }
@@ -839,7 +824,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .sub-main small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .timeline-pane {
@@ -857,7 +842,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   margin-bottom: 8px;
 }
@@ -867,8 +852,8 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: #fff3e6;
-  color: #ff7a00;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   font-size: 12px;
   font-weight: 700;
   display: flex;
@@ -890,7 +875,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .doc-main small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .app-card.clickable {
@@ -898,17 +883,17 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .app-card.clickable:hover {
-  border-color: #f6b895;
+  border-color: var(--color-primary-light);
 }
 
 .app-toggle {
   margin-left: auto;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
 }
 
 .app-detail {
   margin-top: 10px;
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--color-border);
   padding-top: 10px;
   cursor: default;
 }
@@ -916,7 +901,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 .app-detail h5 {
   margin: 12px 0 6px;
   font-size: 12px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .app-info-grid {
@@ -927,7 +912,7 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 
 .app-info-grid span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -950,11 +935,11 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .material-name {
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .material-reason {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-style: normal;
   font-size: 11px;
 }
@@ -962,13 +947,13 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 .app-empty-line,
 .app-review-line {
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
 .app-review-line em {
   font-style: normal;
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .app-timeline {
@@ -982,21 +967,21 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   align-items: baseline;
   gap: 8px;
   font-size: 11px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .app-timeline-row time {
-  color: #909399;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .app-timeline-row em {
-  color: #909399;
+  color: var(--color-text-muted);
   font-style: normal;
 }
 
 .app-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 8px;
@@ -1015,13 +1000,13 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 }
 
 .app-meta {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .app-reason {
   margin: 6px 0 0;
   font-size: 12px;
-  color: #c45656;
+  color: var(--color-danger);
 }
 
 .order-field-list {
@@ -1036,17 +1021,17 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
   gap: 8px;
   align-items: baseline;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .order-field-row > span:first-child {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .order-field-row b {
   min-width: 0;
   font-weight: 500;
-  color: #303133;
+  color: var(--color-text-primary);
   overflow-wrap: anywhere;
 }
 
@@ -1074,14 +1059,14 @@ const subTypeText = (c: CustomerVO) => (c.sub_type ? localizeText(CustomerSubTyp
 
 .event-detail {
   margin: 4px 0 0;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .tabs-hint {
   margin: auto 0 0;
   padding-top: 10px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 12px;
 }
 .app-material-row .material-name.link {

@@ -20,6 +20,7 @@ import { ArrowLeft } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
+import { MATERIAL_STATUS_TONE, REVIEW_FINAL_TONE } from "@/components/statusTones";
 import { decideReviewCase, fetchReviewCase, openFilePreview } from "@/api/access";
 import { fetchCustomerEvents } from "@/api/customer";
 import { localizeText } from "@/i18n";
@@ -340,18 +341,9 @@ function sizeText(size: number | null | undefined): string {
 
 const materialRowClass = ({ row }: { row: MaterialRow }) => (row.kind === "history" ? "history-row" : "");
 
-const MATERIAL_TAG: Record<string, string> = {
-  PENDING: "info",
-  ACCEPTED: "success",
-  RETURNED: "danger",
-};
+const MATERIAL_TAG: Record<string, string> = MATERIAL_STATUS_TONE;
 
-const FINAL_TAG: Record<string, string> = {
-  APPROVED: "success",
-  APPROVED_CONDITIONAL: "warning",
-  UNRESOLVED: "warning",
-  TERMINATED: "info",
-};
+const FINAL_TAG: Record<string, string> = REVIEW_FINAL_TONE;
 
 onMounted(load);
 </script>
@@ -660,7 +652,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -675,7 +667,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -703,7 +695,7 @@ h1 {
 .submission-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -712,8 +704,8 @@ h1 {
   min-width: 0;
   background: #fff;
   padding: 12px 14px;
-  border-right: 1px solid #ebeef5;
-  border-bottom: 1px solid #ebeef5;
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .submission-field:nth-child(3n),
@@ -727,28 +719,28 @@ h1 {
 
 .submission-field.wide {
   grid-column: 1 / -1;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border);
   border-bottom: none;
 }
 
 .submission-field span {
   display: block;
   margin-bottom: 6px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .submission-field strong {
   display: block;
   min-height: 20px;
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 14px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .small {
@@ -770,7 +762,7 @@ h1 {
 }
 
 .decision-reason {
-  background: #f5f6f8;
+  background: var(--color-surface-alt);
   border-radius: 8px;
   padding: 10px;
   margin: 8px 0 0;
@@ -784,13 +776,13 @@ h1 {
 }
 
 .dialog-hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
   margin: 0 0 10px;
 }
 
 .activity-sub {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: -6px 0 10px;
 }
@@ -811,7 +803,7 @@ h1 {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ff7a00;
+  background: var(--color-primary);
   margin-top: 5px;
 }
 
@@ -822,13 +814,13 @@ h1 {
 .activity-item p {
   margin: 2px 0;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
   word-break: break-all;
 }
 
 .activity-item time {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 @media (max-width: 1100px) {
@@ -841,7 +833,7 @@ h1 {
   background: transparent;
   cursor: pointer;
   font: inherit;
-  color: #303133;
+  color: var(--color-text-primary);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -849,13 +841,13 @@ h1 {
 }
 
 .idx-toggle .chev {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .history-flag,
 .history-name {
-  color: #909399;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
@@ -870,11 +862,11 @@ h1 {
 }
 
 :deep(.history-row) {
-  background: #fafafa;
+  background: var(--color-surface-alt);
 }
 
 :deep(.history-row td) {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .return-option {
@@ -891,7 +883,7 @@ h1 {
 }
 
 .return-option small {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 .due-row {
@@ -912,8 +904,8 @@ h1 {
 
 .deferral-summary {
   margin-top: 10px;
-  border: 1px solid #faecd8;
-  background: #fdf6ec;
+  border: 1px solid var(--color-warning-bg);
+  background: var(--color-warning-bg);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 13px;
@@ -921,7 +913,7 @@ h1 {
 
 .deferral-summary h5 {
   margin: 0 0 6px;
-  color: #b88230;
+  color: var(--color-warning);
 }
 
 .deferral-summary p {

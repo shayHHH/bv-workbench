@@ -601,7 +601,7 @@ async function submit() {
 
 .legs-title {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -615,14 +615,14 @@ async function submit() {
   padding: 8px 12px;
   margin-bottom: 14px;
   font-size: 13px;
-  color: #c2660a;
+  color: var(--color-warning);
   font-variant-numeric: tabular-nums;
 }
 
 .calc-expr.manual {
-  background: #f5f7fa;
-  border-color: #e4e7ed;
-  color: #909399;
+  background: var(--color-surface-alt);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
 }
 
 .calc-icon {
@@ -630,7 +630,7 @@ async function submit() {
 }
 
 .biz-hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.5;
   margin-top: 2px;
@@ -645,7 +645,7 @@ async function submit() {
 
 .custom-name em {
   font-style: normal;
-  color: #ff7a00;
+  color: var(--color-accent);
   background: #fff4e8;
   border-radius: 4px;
   padding: 0 5px;

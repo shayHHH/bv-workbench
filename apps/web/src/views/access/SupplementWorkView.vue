@@ -429,7 +429,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -441,7 +441,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -454,7 +454,7 @@ h1 {
 
 .strip-item {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
@@ -463,7 +463,7 @@ h1 {
 }
 
 .strip-item span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -471,7 +471,7 @@ h1 {
 .strip-item strong {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .layout {
@@ -489,7 +489,7 @@ h1 {
 }
 
 .reject-card {
-  border-color: #fde2e2;
+  border-color: var(--color-danger-bg);
 }
 
 .reject-head {
@@ -501,7 +501,7 @@ h1 {
 
 .reject-note {
   margin: 0 0 10px;
-  color: #606266;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -513,7 +513,7 @@ h1 {
 }
 
 .chips-label {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -536,12 +536,12 @@ h1 {
 }
 
 .material-chip:not(:disabled):hover {
-  border-color: #ff7a00;
+  border-color: var(--color-primary);
   background: #fff4e6;
 }
 
 .chip-file-name {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   max-width: 220px;
   overflow: hidden;
@@ -550,18 +550,18 @@ h1 {
 }
 
 .chip-preview {
-  color: #409eff;
+  color: var(--color-primary);
   font-size: 12px;
 }
 
 .head-sub {
   margin-left: 10px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .dropzone {
-  border: 1.5px dashed #dcdfe6;
+  border: 1.5px dashed var(--color-border);
   border-radius: 10px;
   padding: 22px;
   display: flex;
@@ -574,17 +574,17 @@ h1 {
 
 .dropzone.active,
 .dropzone:hover {
-  border-color: #ff7a00;
-  background: #fffaf5;
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .dz-icon {
   font-size: 20px;
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 
 .dropzone small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .file-row {
@@ -593,7 +593,7 @@ h1 {
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   margin-bottom: 8px;
 }
@@ -603,8 +603,8 @@ h1 {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: #fff3e6;
-  color: #ff7a00;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   font-size: 11px;
   font-weight: 700;
   display: flex;
@@ -620,7 +620,7 @@ h1 {
 }
 
 .file-main small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .map-select {
@@ -637,12 +637,12 @@ h1 {
   border: none;
   background: transparent;
   font-size: 18px;
-  color: #909399;
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .remove:hover {
-  color: #c45656;
+  color: var(--color-danger);
 }
 
 .submit-footer {
@@ -653,14 +653,14 @@ h1 {
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .history {
   margin: 0;
   padding-left: 18px;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -673,7 +673,7 @@ h1 {
 
 .deferral-due-line {
   margin: 4px 0 6px;
-  color: #b88230;
+  color: var(--color-warning);
   font-size: 13px;
   font-weight: 600;
 }

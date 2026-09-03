@@ -201,7 +201,7 @@ function openForm() {
 <style scoped>
 .department-view {
   min-height: 100%;
-  background: #f5f6f8;
+  background: var(--color-surface-alt);
 }
 
 .metric-grid {
@@ -223,25 +223,25 @@ function openForm() {
 }
 
 .metric.warn strong {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .metric.danger strong {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .metric span {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .register-btn {
   display: block;
   width: calc(100% - 24px);
   margin: 10px 12px;
-  border: 1px dashed #ff7a00;
-  background: #fff7f0;
-  color: #ff7a00;
+  border: 1px dashed var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   border-radius: 10px;
   padding: 10px;
   font-size: 13px;
@@ -262,7 +262,7 @@ function openForm() {
 .handoff-hint {
   margin: 0 0 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .member-card,
@@ -288,7 +288,7 @@ function openForm() {
 .member-card header small,
 .leave-card header small {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-top: 2px;
 }
@@ -304,13 +304,13 @@ function openForm() {
 
 .badge.leave {
   background: #fdf3e3;
-  color: #b88230;
+  color: var(--color-warning);
 }
 
 .focus {
   margin: 8px 0;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .member-card footer,
@@ -320,21 +320,21 @@ function openForm() {
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .leave-card p {
   margin: 6px 0;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .leave-card .note {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .suggest {
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 
 .done {
@@ -350,7 +350,7 @@ function openForm() {
   padding: 0;
   background: none;
   border: none;
-  color: var(--bv-primary, #ff7a1a);
+  color: var(--bv-primary, var(--color-accent));
   font-size: 12px;
 }
 .link-btn.danger {
@@ -360,11 +360,11 @@ function openForm() {
   opacity: 0.5;
 }
 .handoff-btn {
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 6px;
   padding: 5px 12px;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 </style>

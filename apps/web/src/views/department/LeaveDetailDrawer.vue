@@ -120,7 +120,7 @@ async function cancelRecord() {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -138,7 +138,7 @@ async function cancelRecord() {
 }
 
 .hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: 6px 0 0;
 }
@@ -161,7 +161,7 @@ async function cancelRecord() {
 }
 
 .advice {
-  background: #f0f9eb;
+  background: var(--color-success-bg);
   border: 1px solid #d8ecc5;
   border-radius: 8px;
   padding: 10px 12px;
@@ -171,9 +171,9 @@ async function cancelRecord() {
 }
 
 .advice.warn {
-  background: #fdf6ec;
+  background: var(--color-warning-bg);
   border-color: #f5dcb8;
-  color: #b88230;
+  color: var(--color-warning);
 }
 
 .actions {

@@ -141,7 +141,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -153,7 +153,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -175,12 +175,12 @@ h1 {
 
 .toolbar-count {
   margin-left: auto;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .small {

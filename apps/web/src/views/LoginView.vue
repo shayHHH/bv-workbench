@@ -76,15 +76,15 @@ async function submit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1f2430;
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
 }
 
 .login-card {
   width: 380px;
   background: #fff;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 36px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 }
 
 .brand {
@@ -98,7 +98,7 @@ async function submit() {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: #231c17;
+  background: #1E293B;
   object-fit: contain;
   padding: 5px;
   box-sizing: border-box;
@@ -107,20 +107,25 @@ async function submit() {
 .brand strong {
   display: block;
   font-size: 16px;
+  font-weight: 700;
+  color: #0F172A;
 }
 
 .brand small {
-  color: #909399;
-  letter-spacing: 0.08em;
+  color: #94A3B8;
+  letter-spacing: 0.06em;
+  font-size: 12px;
 }
 
 h1 {
   font-size: 20px;
+  font-weight: 700;
   margin: 0 0 4px;
+  color: #0F172A;
 }
 
 .hint {
-  color: #909399;
+  color: #94A3B8;
   margin: 0 0 20px;
   font-size: 13px;
 }
@@ -128,5 +133,7 @@ h1 {
 .submit {
   width: 100%;
   margin-top: 8px;
+  border-radius: 8px;
+  font-weight: 600;
 }
 </style>

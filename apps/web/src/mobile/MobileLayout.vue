@@ -69,7 +69,7 @@ function switchTab(name: string | number) {
 <style scoped>
 .mobile-shell {
   min-height: 100vh;
-  background: #f5f6f8;
+  background: var(--color-surface-alt);
 }
 
 .mobile-body {

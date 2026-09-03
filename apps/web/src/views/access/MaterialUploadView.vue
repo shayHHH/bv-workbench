@@ -19,6 +19,7 @@ import { Delete, OfficeBuilding, UploadFilled } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { CUSTOMER_STATUS_TONE } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -140,12 +141,7 @@ function onCustomerCreated(customer: CustomerVO) {
   ElMessage.success(t("access.upload.customerSelected", { name: customer.name }));
 }
 
-const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | "info"> = {
-  NEW: "primary",
-  ACTIVE: "success",
-  DORMANT: "warning",
-  SUSPENDED: "info",
-};
+const statusTagType = CUSTOMER_STATUS_TONE;
 
 function customerInitials(name: string): string {
   return /^[a-zA-Z]/.test(name) ? name.slice(0, 2).toUpperCase() : name.slice(0, 1);
@@ -880,7 +876,7 @@ onMounted(async () => {
 
 .panel {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 14px 16px;
 }
@@ -894,15 +890,15 @@ onMounted(async () => {
 
 .panel-head span {
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .panel-head small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .rule-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
   margin-bottom: 10px;
@@ -924,19 +920,19 @@ onMounted(async () => {
 .rule-card em {
   font-style: normal;
   font-size: 11px;
-  color: #909399;
-  border: 1px solid #ebeef5;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 1px 6px;
 }
 
 .rule-card.danger {
-  border-color: #fde2e2;
+  border-color: var(--color-danger-bg);
   background: #fef6f6;
 }
 
 .rule-card.danger em {
-  color: #c45656;
+  color: var(--color-danger);
   border-color: #fbc4c4;
 }
 
@@ -944,7 +940,7 @@ onMounted(async () => {
 .rule-card ul {
   margin: 0;
   padding-left: 18px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .rule-card li {
@@ -963,7 +959,7 @@ onMounted(async () => {
   border: 1px solid #ffe0c2;
   border-radius: 4px;
   background: #fff8f1;
-  color: #ff7a00;
+  color: var(--color-accent);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -978,7 +974,7 @@ onMounted(async () => {
 }
 
 .checklist .check-item {
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--color-border);
   padding: 8px 0;
   display: flex;
   flex-direction: column;
@@ -986,7 +982,7 @@ onMounted(async () => {
 }
 
 .check-empty {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 8px 0 0;
 }
 
@@ -1007,7 +1003,7 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -1019,13 +1015,13 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
 .card {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 20px 24px;
 }
@@ -1049,7 +1045,7 @@ h1 {
   width: 5px;
   height: 18px;
   border-radius: 3px;
-  background: #ff7a00;
+  background: var(--color-primary);
 }
 
 .pair-grid {
@@ -1070,7 +1066,7 @@ h1 {
 .custom-biz-hint {
   margin-top: 6px;
   padding: 6px 10px;
-  background: #fff7f0;
+  background: var(--color-primary-light);
   border: 1px solid #ffe2c4;
   border-radius: 6px;
   color: #b06a1f;
@@ -1081,17 +1077,17 @@ h1 {
 .field label {
   display: block;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .field label em {
-  color: #c45656;
+  color: var(--color-danger);
   font-style: normal;
 }
 
 .optional {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .field :deep(.el-select) {
@@ -1100,7 +1096,7 @@ h1 {
 
 .option-meta {
   float: right;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -1109,7 +1105,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 14px;
@@ -1148,7 +1144,7 @@ h1 {
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -1163,18 +1159,18 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 10px;
   padding: 10px 18px;
   cursor: pointer;
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .channel-chip.active {
-  border-color: #ff7a00;
-  color: #c2660a;
+  border-color: var(--color-primary);
+  color: var(--color-warning);
   background: #fff8f1;
   font-weight: 600;
 }
@@ -1183,12 +1179,12 @@ h1 {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ff7a00;
+  background: var(--color-primary);
 }
 
 /* 上传区 */
 .dropzone {
-  border: 1.5px dashed #dcdfe6;
+  border: 1.5px dashed var(--color-border);
   border-radius: 12px;
   padding: 44px 20px;
   display: flex;
@@ -1201,16 +1197,16 @@ h1 {
 
 .dropzone.active,
 .dropzone:hover {
-  border-color: #ff7a00;
-  background: #fffaf5;
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .dz-icon {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #fff3e6;
-  color: #ff7a00;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1222,7 +1218,7 @@ h1 {
 }
 
 .dropzone small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .library-line {
@@ -1233,7 +1229,7 @@ h1 {
 }
 
 .library-list {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 10px 14px;
   margin-top: 8px;
@@ -1266,8 +1262,8 @@ h1 {
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  background: #fafbfc;
-  border: 1px solid #f0f2f5;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-bg);
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 10px;
@@ -1279,8 +1275,8 @@ h1 {
   height: 44px;
   border-radius: 10px;
   background: #fff;
-  border: 1px solid #ebeef5;
-  color: #909399;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 700;
   display: flex;
@@ -1323,7 +1319,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
@@ -1331,7 +1327,7 @@ h1 {
 
 .link-select .link-label {
   padding: 0 10px;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
   flex: none;
 }
@@ -1348,7 +1344,7 @@ h1 {
 .link-select .custom-name :deep(.el-input__wrapper) {
   box-shadow: none !important;
   border-radius: 0;
-  border-left: 1px solid #dcdfe6;
+  border-left: 1px solid var(--color-border);
 }
 
 .link-select :deep(.el-select__wrapper) {
@@ -1357,11 +1353,11 @@ h1 {
 }
 
 .trash {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .trash:hover {
-  color: #c45656;
+  color: var(--color-danger);
 }
 
 /* KYC 核验 */
@@ -1370,7 +1366,7 @@ h1 {
 }
 
 .process-details {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 14px;
   margin-bottom: 12px;
@@ -1378,14 +1374,14 @@ h1 {
 }
 
 .process-details summary {
-  color: #ff7a00;
+  color: var(--color-accent);
   cursor: pointer;
 }
 
 .process-details ol {
   margin: 8px 0 0;
   padding-left: 18px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .process-details li {
@@ -1394,7 +1390,7 @@ h1 {
 }
 
 .check-item {
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--color-border);
   padding: 10px 0;
   display: flex;
   flex-direction: column;
@@ -1409,7 +1405,7 @@ h1 {
 }
 
 .check-type {
-  color: #c2660a;
+  color: var(--color-warning);
   font-size: 12px;
 }
 
@@ -1418,7 +1414,7 @@ h1 {
   position: sticky;
   bottom: 0;
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 14px 20px;
   display: flex;
@@ -1436,7 +1432,7 @@ h1 {
 }
 
 .mode-label {
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 600;
 }

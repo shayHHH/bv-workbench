@@ -161,14 +161,14 @@ async function submit() {
 }
 
 .channel-strip div {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 12px;
 }
 
 .channel-strip span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -178,12 +178,12 @@ async function submit() {
 
 .va-head {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin-bottom: 8px;
 }
 
 .va-head span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-left: 6px;
 }
@@ -201,10 +201,10 @@ async function submit() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
-  background: #fafbfc;
+  background: var(--color-surface-alt);
 }
 
 .va-lines {
@@ -215,7 +215,7 @@ async function submit() {
 }
 
 .va-lines span {
-  color: #909399;
+  color: var(--color-text-muted);
   margin-right: 8px;
 }
 
@@ -226,7 +226,7 @@ async function submit() {
 
 .va-empty {
   margin: 0;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 

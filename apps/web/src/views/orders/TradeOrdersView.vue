@@ -11,6 +11,7 @@ import {
 import { Plus } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { ORDER_STATUS_TONE, type TagTone } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { useRoute } from "vue-router";
 import { fetchOrders, type OrderListQuery } from "@/api/order";
@@ -113,15 +114,7 @@ function search() {
 
 /* ---- 行展示 ---- */
 
-const STATUS_TAG: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
-  PENDING_KYC: "info",
-  AWAITING_INFLOW: "warning",
-  AWAITING_DISPATCH: "primary",
-  DISPATCH_REVIEW: "info",
-  AWAITING_PAYOUT: "warning",
-  COMPLETED: "success",
-  CANCELLED: "info",
-};
+const STATUS_TAG: Record<string, TagTone> = ORDER_STATUS_TONE;
 
 const KYC_TAG: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
   success: "success",
@@ -371,7 +364,7 @@ onMounted(() => {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -383,7 +376,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -396,7 +389,7 @@ h1 {
 
 .metric {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -407,13 +400,13 @@ h1 {
 }
 
 .metric span {
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 13px;
 }
 
 .metric small {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -425,18 +418,18 @@ h1 {
 }
 
 .todo-tabs button {
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 999px;
   padding: 5px 14px;
   cursor: pointer;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .todo-tabs button.active {
-  background: #ff7a00;
-  border-color: #ff7a00;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: #fff;
 }
 
@@ -468,7 +461,7 @@ h1 {
 }
 
 .count {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-left: auto;
 }
@@ -478,7 +471,7 @@ h1 {
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -489,7 +482,7 @@ h1 {
 }
 
 .pair i {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-style: normal;
 }
 
@@ -498,7 +491,7 @@ h1 {
 }
 
 .flag {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 11px;
   margin-top: 2px;
 }

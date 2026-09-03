@@ -178,7 +178,7 @@ async function submit() {
 <style scoped>
 .hint {
   margin: 0 0 14px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -190,11 +190,11 @@ async function submit() {
 }
 
 .time-row span {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .impact {
-  background: #fffaf5;
+  background: var(--color-primary-light);
   border: 1px solid #ffe2c4;
   border-radius: 8px;
   padding: 10px 12px;
@@ -204,15 +204,15 @@ async function submit() {
 .impact strong {
   display: block;
   margin-bottom: 4px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .impact p {
   margin: 0 0 4px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .impact span {
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 </style>

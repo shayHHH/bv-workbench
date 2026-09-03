@@ -441,7 +441,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -453,7 +453,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -465,7 +465,7 @@ h1 {
 }
 
 .count {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -475,7 +475,7 @@ h1 {
 }
 
 .cell-name small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .self-tag {
@@ -484,7 +484,7 @@ h1 {
 
 .dialog-subtitle {
   margin: 0 0 16px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 

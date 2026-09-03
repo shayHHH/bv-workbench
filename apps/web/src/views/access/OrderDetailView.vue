@@ -158,7 +158,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -170,7 +170,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -183,7 +183,7 @@ h1 {
 
 .strip-item {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
@@ -192,7 +192,7 @@ h1 {
 }
 
 .strip-item span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -200,7 +200,7 @@ h1 {
 .strip-item strong {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .layout {
@@ -212,7 +212,7 @@ h1 {
 
 .head-sub {
   margin-left: 10px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -221,7 +221,7 @@ h1 {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   margin-bottom: 8px;
 }
@@ -231,8 +231,8 @@ h1 {
   width: 38px;
   height: 38px;
   border-radius: 8px;
-  background: #fff3e6;
-  color: #ff7a00;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   font-size: 11px;
   font-weight: 700;
   display: flex;
@@ -254,12 +254,12 @@ h1 {
 }
 
 .doc-main small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .entry-note {
   margin: 4px 0 0;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 </style>

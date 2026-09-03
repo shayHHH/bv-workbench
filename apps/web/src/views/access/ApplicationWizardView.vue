@@ -24,6 +24,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowLeft, FolderOpened, Upload } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { ACCESS_STATUS_TONE, MATERIAL_STATUS_TONE } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -359,20 +360,9 @@ async function submit() {
 
 /* ---------------- 展示辅助 ---------------- */
 
-const STATUS_TAG: Record<string, string> = {
-  DRAFT: "info",
-  PENDING_REVIEW: "warning",
-  SUPPLEMENT_REQUIRED: "danger",
-  REJECTED: "danger",
-  APPROVED: "success",
-  CANCELLED: "info",
-};
+const STATUS_TAG: Record<string, string> = ACCESS_STATUS_TONE;
 
-const MATERIAL_TAG: Record<string, string> = {
-  PENDING: "info",
-  ACCEPTED: "success",
-  RETURNED: "danger",
-};
+const MATERIAL_TAG: Record<string, string> = MATERIAL_STATUS_TONE;
 
 const acceptAttr = UPLOAD_ACCEPT_EXTS.join(",");
 
@@ -776,7 +766,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: #2563EB;
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -791,7 +781,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: #94A3B8;
   margin: 0;
 }
 
@@ -828,7 +818,7 @@ h1 {
 }
 
 .step-hint {
-  color: #909399;
+  color: #94A3B8;
   font-size: 13px;
   margin: 0 0 16px;
 }
@@ -841,7 +831,7 @@ h1 {
 
 .option-card {
   text-align: left;
-  border: 1px solid #e4e7ed;
+  border: 1px solid #E2E8F0;
   border-radius: 10px;
   padding: 14px;
   background: #fff;
@@ -850,12 +840,12 @@ h1 {
 }
 
 .option-card:hover:not(:disabled) {
-  border-color: #ff7a00;
+  border-color: #2563EB;
 }
 
 .option-card.selected {
-  border-color: #ff7a00;
-  box-shadow: 0 0 0 2px rgba(255, 122, 0, 0.15);
+  border-color: #2563EB;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
 .option-card:disabled {
@@ -868,13 +858,13 @@ h1 {
 }
 
 .option-card small {
-  color: #909399;
+  color: #94A3B8;
 }
 
 .option-card p {
   margin: 8px 0 0;
   font-size: 12px;
-  color: #606266;
+  color: #475569;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -900,7 +890,7 @@ h1 {
 
 .material-section h4 {
   margin: 0 0 8px;
-  color: #606266;
+  color: #475569;
 }
 
 .material-item {
@@ -908,7 +898,7 @@ h1 {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid #E2E8F0;
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 8px;
@@ -920,13 +910,13 @@ h1 {
 }
 
 .material-copy small {
-  color: #909399;
+  color: #94A3B8;
   display: block;
   margin-top: 2px;
 }
 
 .required {
-  color: #f56c6c;
+  color: var(--color-danger);
   margin-left: 2px;
 }
 
@@ -953,7 +943,7 @@ h1 {
 }
 
 .return-reason {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 12px;
   width: 100%;
 }
@@ -979,7 +969,7 @@ h1 {
 }
 
 .muted {
-  color: #909399;
+  color: #94A3B8;
 }
 
 .summary {
@@ -1004,7 +994,7 @@ h1 {
   justify-content: space-between;
   margin-top: 22px;
   padding-top: 14px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid #E2E8F0;
 }
 
 .footer-right {
@@ -1029,10 +1019,10 @@ h1 {
 }
 
 .restriction {
-  background: #fdf6ec;
+  background: #EFF6FF;
   border-radius: 8px;
   padding: 10px;
-  color: #b88230;
+  color: var(--color-warning);
 }
 
 .check-list {
@@ -1047,11 +1037,11 @@ h1 {
   align-items: center;
   gap: 6px;
   padding: 3px 0;
-  color: #909399;
+  color: #94A3B8;
 }
 
 .check-list li.ok {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .check-dot {
@@ -1063,7 +1053,7 @@ h1 {
 }
 
 .timeline-note {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: 2px 0 0;
 }

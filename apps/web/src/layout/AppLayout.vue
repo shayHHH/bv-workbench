@@ -316,25 +316,27 @@ watch(
   height: 100%;
 }
 
+/* ── Sidebar ── */
 .sidebar {
-  background: #1f2430;
+  background: var(--color-sidebar-bg, #1E293B);
   color: #fff;
   display: flex;
   flex-direction: column;
+  border-right: none;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 18px 20px 10px;
+  padding: 18px 16px 12px;
 }
 
 .brand-mark {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: #231c17;
+  background: rgba(255, 255, 255, 0.1);
   object-fit: contain;
   padding: 4px;
   box-sizing: border-box;
@@ -343,34 +345,78 @@ watch(
 .brand strong {
   display: block;
   color: #fff;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .brand small {
-  color: #9aa3b2;
-  letter-spacing: 0.08em;
+  color: #64748B;
+  letter-spacing: 0.06em;
   font-size: 11px;
 }
 
 .workspace-label {
-  padding: 8px 20px;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  color: #78808f;
+  padding: 6px 16px 4px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #475569;
+  font-weight: 600;
 }
 
+/* ── Menu ── */
 .menu {
   border-right: none;
   background: transparent;
   flex: 1;
   overflow-y: auto;
-  --el-menu-text-color: #c3c9d5;
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08);
-  --el-menu-active-color: #ff7a00;
+  padding: 0 8px;
+  --el-menu-text-color: #94A3B8;
+  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.07);
+  --el-menu-active-color: #FFFFFF;
   --el-menu-bg-color: transparent;
+  --el-menu-item-height: 42px;
+}
+
+/* 激活菜单项 — 蓝色圆角 pill */
+.menu :deep(.el-menu-item.is-active) {
+  background: #2563EB;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Sub-menu 激活项 */
+.menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: #E2E8F0;
+}
+
+/* 普通 menu item */
+.menu :deep(.el-menu-item),
+.menu :deep(.el-sub-menu__title) {
+  border-radius: 8px;
+  margin-bottom: 2px;
+  height: 42px;
+  line-height: 42px;
+}
+
+.menu :deep(.el-menu-item:hover),
+.menu :deep(.el-sub-menu__title:hover) {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  color: #E2E8F0;
 }
 
 .menu :deep(.el-sub-menu .el-menu) {
-  background: rgba(0, 0, 0, 0.18);
+  background: transparent;
+  padding: 0 0 0 8px;
+}
+
+.menu :deep(.el-sub-menu .el-menu .el-menu-item) {
+  height: 38px;
+  line-height: 38px;
+  font-size: 13px;
+  padding-left: 40px !important;
 }
 
 .menu-title {
@@ -393,53 +439,70 @@ watch(
 
 .menu-badge {
   flex: none;
-  min-width: 22px;
-  height: 22px;
+  min-width: 20px;
+  height: 20px;
   padding: 0 6px;
-  background: #343c45;
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
-  color: #f4f7fb;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 22px;
+  color: #E2E8F0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
   text-align: center;
   box-sizing: border-box;
 }
 
 .menu-badge--child {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  font-size: 11px;
-  line-height: 20px;
+  min-width: 18px;
+  height: 18px;
+  font-size: 10px;
+  line-height: 18px;
 }
 
 .sidebar-note {
-  padding: 14px 20px;
+  padding: 12px 16px;
   font-size: 12px;
-  color: #78808f;
+  color: #475569;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .sidebar-note span {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #67c23a;
+  background: #22C55E;
+  flex-shrink: 0;
 }
 
+/* ── Topbar ── */
 .topbar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   background: #fff;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid #E2E8F0;
+  height: 60px;
+  padding: 0 20px;
+  box-sizing: border-box;
 }
 
 .global-search {
-  max-width: 420px;
+  max-width: 380px;
+}
+
+/* 搜索框圆角 pill 样式 */
+.global-search :deep(.el-input__wrapper) {
+  border-radius: 999px;
+  background: #F8FAFC;
+  box-shadow: 0 0 0 1px #E2E8F0;
+  padding-left: 14px;
+}
+
+.global-search :deep(.el-input__wrapper:hover),
+.global-search :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px #DBEAFE;
 }
 
 .top-actions {
@@ -450,18 +513,22 @@ watch(
 }
 
 .lang-chip {
-  border: 1px solid #dcdfe6;
+  border: 1px solid #E2E8F0;
   background: transparent;
-  color: #606266;
-  border-radius: 6px;
+  color: #475569;
+  border-radius: 8px;
   padding: 5px 12px;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  font-family: var(--el-font-family);
+  transition: border-color 0.15s, color 0.15s;
 }
 
 .lang-chip:hover {
-  color: #ff7a00;
-  border-color: #ff7a00;
+  color: #2563EB;
+  border-color: #BFDBFE;
+  background: #EFF6FF;
 }
 
 .user-chip {
@@ -472,23 +539,27 @@ watch(
   background: transparent;
   cursor: pointer;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: 10px;
+  font-family: var(--el-font-family);
+  transition: background 0.15s;
 }
 
 .user-chip:hover {
-  background: #f5f6f8;
+  background: #F8FAFC;
 }
 
 .avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: #ff7a00;
+  background: #2563EB;
   color: #fff;
   font-weight: 700;
+  font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .user-meta {
@@ -498,12 +569,21 @@ watch(
   line-height: 1.2;
 }
 
+.user-meta strong {
+  color: #0F172A;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .user-meta small {
-  color: #909399;
+  color: #94A3B8;
   font-size: 12px;
 }
 
+/* ── Main content area ── */
 .main {
-  background: #f5f6f8;
+  background: var(--color-bg, #F1F5F9);
+  overflow-y: auto;
 }
 </style>
+

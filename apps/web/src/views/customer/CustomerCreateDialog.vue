@@ -245,7 +245,7 @@ async function submit() {
 <style scoped>
 .subtitle {
   margin: 0 0 16px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .kind-group :deep(.el-radio-button__inner) {
@@ -283,7 +283,7 @@ async function submit() {
 
 .hint {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 </style>

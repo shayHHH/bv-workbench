@@ -430,7 +430,7 @@ const weekLeaves = computed(() =>
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -442,7 +442,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -455,7 +455,7 @@ h1 {
 
 .metric {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -466,21 +466,21 @@ h1 {
 }
 
 .metric.warn strong {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .metric.danger strong {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .metric span {
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 13px;
 }
 
 .metric small {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -497,18 +497,18 @@ h1 {
 }
 
 .todo-tabs button {
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 999px;
   padding: 5px 14px;
   cursor: pointer;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .todo-tabs button.active {
-  background: #ff7a00;
-  border-color: #ff7a00;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: #fff;
 }
 
@@ -519,7 +519,7 @@ h1 {
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -553,21 +553,21 @@ h1 {
 }
 
 .schedule-head {
-  background: #f5f7fa;
+  background: var(--color-surface-alt);
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .schedule-head strong {
   display: block;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .schedule-head strong em {
   font-style: normal;
-  color: #ff7a00;
+  color: var(--color-accent);
   margin-left: 4px;
   font-size: 11px;
 }
@@ -578,24 +578,24 @@ h1 {
 
 .schedule-group-row {
   grid-column: 1 / -1;
-  background: #fafafa;
+  background: var(--color-surface-alt);
   border-radius: 6px;
   padding: 5px 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin-top: 6px;
 }
 
 .schedule-group-row span {
   font-weight: 400;
-  color: #909399;
+  color: var(--color-text-muted);
   margin-left: 8px;
 }
 
 .schedule-person {
   padding: 8px 10px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   min-height: 46px;
 }
@@ -606,12 +606,12 @@ h1 {
 }
 
 .schedule-person small {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
 .schedule-cell {
-  border: 1px dashed #e4e7ed;
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
   min-height: 46px;
   display: flex;
@@ -623,20 +623,20 @@ h1 {
 
 .schedule-cell.today {
   border-color: #ffd6ad;
-  background: #fffaf5;
+  background: var(--color-primary-light);
 }
 
 button.schedule-cell.available {
   align-items: center;
   justify-content: center;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 12px;
   cursor: pointer;
 }
 
 button.schedule-cell.available:hover {
-  color: #ff7a00;
-  border-color: #ff7a00;
+  color: var(--color-accent);
+  border-color: var(--color-primary);
 }
 
 .leave-chip {
@@ -661,22 +661,22 @@ button.schedule-cell.available:hover {
 
 .leave-chip.annual,
 .leave-dot.annual {
-  background: #409eff;
+  background: var(--color-primary);
 }
 
 .leave-chip.sick,
 .leave-dot.sick {
-  background: #f56c6c;
+  background: var(--color-danger);
 }
 
 .leave-chip.personal,
 .leave-dot.personal {
-  background: #e6a23c;
+  background: var(--color-warning);
 }
 
 .leave-chip.rest,
 .leave-dot.rest {
-  background: #67c23a;
+  background: var(--color-success);
 }
 
 .leave-chip.outing,
@@ -691,13 +691,13 @@ button.schedule-cell.available:hover {
 
 .leave-chip.other,
 .leave-dot.other {
-  background: #909399;
+  background: var(--color-text-muted);
 }
 
 /* ---- 本周交接提醒 ---- */
 
 .week-side {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -712,7 +712,7 @@ button.schedule-cell.available:hover {
 }
 
 .handoff-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px;
   margin-bottom: 8px;
@@ -743,13 +743,13 @@ button.schedule-cell.available:hover {
 }
 
 .handoff-card header small {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
 .handoff-card p {
   margin: 6px 0;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -757,11 +757,11 @@ button.schedule-cell.available:hover {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .handoff-card footer b {
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 
 @media (max-width: 1100px) {

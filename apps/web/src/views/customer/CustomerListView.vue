@@ -11,6 +11,7 @@ import {
 import { Plus, Refresh, Search } from "@element-plus/icons-vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { CUSTOMER_STATUS_TONE } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { useRoute } from "vue-router";
 import { fetchCustomers } from "@/api/customer";
@@ -112,12 +113,7 @@ function initials(row: TableRow): string {
   return /^[a-zA-Z]/.test(name) ? name.slice(0, 2).toUpperCase() : name.slice(0, 1);
 }
 
-const statusTagType: Record<CustomerStatus, "primary" | "success" | "warning" | "info"> = {
-  NEW: "primary",
-  ACTIVE: "success",
-  DORMANT: "warning",
-  SUSPENDED: "info",
-};
+const statusTagType = CUSTOMER_STATUS_TONE;
 
 /* el-table 插槽 row 无类型，统一经带类型的辅助函数取展示内容 */
 const kindText = (row: TableRow) => localizeText(CustomerKindLabel[row.c.customer_kind]);
@@ -315,7 +311,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: #2563EB;
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -327,7 +323,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: #94A3B8;
   margin: 0;
 }
 
@@ -348,7 +344,7 @@ h1 {
 
 .count {
   margin-left: auto;
-  color: #909399;
+  color: #94A3B8;
   font-size: 13px;
 }
 
@@ -364,7 +360,7 @@ h1 {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #909399;
+  color: #94A3B8;
   font-size: 16px;
   line-height: 1;
   transition: transform 0.15s;
@@ -372,7 +368,7 @@ h1 {
 
 .expander.open {
   transform: rotate(90deg);
-  color: #ff7a00;
+  color: #2563EB;
 }
 
 .expander-placeholder {
@@ -392,8 +388,8 @@ h1 {
   top: -18px;
   bottom: 50%;
   width: 14px;
-  border-left: 1px solid #dcdfe6;
-  border-bottom: 1px solid #dcdfe6;
+  border-left: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   border-bottom-left-radius: 6px;
 }
 
@@ -413,8 +409,8 @@ h1 {
 
 .avatar.company {
   border-radius: 9px;
-  background: #fff3e6;
-  color: #ff7a00;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
 }
 
 .avatar.avatar-sub {
@@ -430,7 +426,7 @@ h1 {
 }
 
 .name-block small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .name-link {
@@ -439,18 +435,18 @@ h1 {
   padding: 0;
   font: inherit;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   cursor: pointer;
   text-align: left;
 }
 
 .name-link:hover {
-  color: #ff7a00;
+  color: var(--color-accent);
   text-decoration: underline;
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -476,13 +472,13 @@ h1 {
 }
 
 .sub-type {
-  color: #c2660a;
+  color: var(--color-warning);
   font-weight: 600;
   font-size: 12px;
 }
 
 :deep(.sub-row) {
-  background: #fafbfc;
+  background: var(--color-surface-alt);
 }
 
 :deep(.el-table__body tr) {

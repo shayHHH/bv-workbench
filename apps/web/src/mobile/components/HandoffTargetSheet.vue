@@ -131,7 +131,7 @@ async function pick(candidate: HandoffCandidateVO) {
   font-size: 16px;
 }
 .sheet-head small {
-  color: #8a8f99;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 .list {
@@ -152,7 +152,7 @@ async function pick(candidate: HandoffCandidateVO) {
   text-align: left;
 }
 .row.current {
-  color: var(--bv-primary, #ff7a1a);
+  color: var(--bv-primary, var(--color-accent));
 }
 .row:disabled {
   opacity: 0.6;
@@ -161,22 +161,22 @@ async function pick(candidate: HandoffCandidateVO) {
   margin-left: 6px;
   font-style: normal;
   font-size: 11px;
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .role {
-  color: #8a8f99;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 .state {
   padding: 24px 0;
   text-align: center;
-  color: #8a8f99;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 .hint {
   margin: 0;
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
-  color: #8a8f99;
+  color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.6;
 }

@@ -378,7 +378,7 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -390,7 +390,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -401,16 +401,16 @@ h1 {
   flex-wrap: wrap;
   margin-bottom: 14px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .count-text {
   margin-left: auto;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .count-text :deep(strong) {
-  color: #d9531e;
+  color: var(--color-accent);
 }
 
 .snapshot-list {
@@ -437,7 +437,7 @@ h1 {
 .dropdown {
   position: fixed;
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   /* 与 Element Plus popper 同层级，压过表格固定列/页签 */
@@ -464,17 +464,17 @@ h1 {
 
 .dropdown-item:hover,
 .dropdown-item.active {
-  background: #fff4ed;
+  background: var(--color-primary-light);
 }
 
 .dropdown-item span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .dropdown-empty {
   padding: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
   text-align: center;
 }
@@ -489,13 +489,13 @@ h1 {
 }
 
 .today-col {
-  color: #d9531e;
+  color: var(--color-accent);
   font-weight: 700;
 }
 
 .quote-cell {
-  border: 1px solid #ebeef5;
-  background: #fafafa;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
   border-radius: 6px;
   padding: 3px 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -504,18 +504,18 @@ h1 {
 }
 
 .quote-cell:hover {
-  border-color: #f6b895;
+  border-color: var(--color-primary-light);
 }
 
 .quote-cell.highlight {
-  background: #fff4ed;
-  border-color: #f6b895;
-  color: #d9531e;
+  background: var(--color-primary-light);
+  border-color: var(--color-primary-light);
+  color: var(--color-accent);
   font-weight: 600;
 }
 
 .empty-cell {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
 }
 
 .detail-result {
@@ -523,8 +523,8 @@ h1 {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  background: #fff4ed;
-  border: 1px solid #f6b895;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-light);
   border-radius: 10px;
   padding: 14px 16px;
   margin-bottom: 16px;
@@ -532,17 +532,17 @@ h1 {
 
 .detail-result strong {
   font-size: 24px;
-  color: #d9531e;
+  color: var(--color-accent);
 }
 
 .detail-result small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 h4 {
   margin: 18px 0 8px;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .detail-grid {
@@ -553,7 +553,7 @@ h4 {
 
 .detail-grid span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -562,8 +562,8 @@ h4 {
 }
 
 .formula-block {
-  background: #fafafa;
-  border: 1px dashed #e4e7ed;
+  background: var(--color-surface-alt);
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 12px;
@@ -585,11 +585,11 @@ h4 {
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
-  border-bottom: 1px dashed #f0f2f5;
+  border-bottom: 1px dashed var(--color-bg);
   padding-bottom: 4px;
 }
 
 .variable-rows span {
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 </style>

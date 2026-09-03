@@ -664,7 +664,7 @@ onMounted(async () => {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -676,7 +676,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -688,8 +688,8 @@ h1 {
   display: grid;
   grid-template-columns: 220px 240px minmax(0, 1fr);
   gap: 1px;
-  background: #e4e7ed;
-  border: 1px solid #e4e7ed;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
   height: max(640px, calc(100vh - 210px));
@@ -709,7 +709,7 @@ h1 {
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--color-bg);
   font-size: 14px;
 }
 
@@ -721,7 +721,7 @@ h1 {
 }
 
 .column-empty {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   text-align: center;
   padding: 32px 8px;
   font-size: 13px;
@@ -742,12 +742,12 @@ h1 {
 }
 
 .group-item:hover {
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
 }
 
 .group-item.active {
-  background: #fff4ed;
-  color: #d9531e;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   font-weight: 600;
 }
 
@@ -759,8 +759,8 @@ h1 {
 }
 
 .group-badge {
-  background: #f0f2f5;
-  color: #909399;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
   border-radius: 999px;
   font-size: 12px;
   padding: 0 8px;
@@ -769,11 +769,11 @@ h1 {
 
 .group-item.active .group-badge {
   background: #ffe4d1;
-  color: #d9531e;
+  color: var(--color-accent);
 }
 
 .danger-item {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .member-item {
@@ -787,13 +787,13 @@ h1 {
 }
 
 .member-item:hover {
-  background: #f7f8fa;
+  background: var(--color-surface-alt);
 }
 
 .member-item.active {
-  background: #fff4ed;
+  background: var(--color-primary-light);
   border-color: #ffd4b8;
-  color: #d9531e;
+  color: var(--color-accent);
 }
 
 .member-meta {
@@ -806,7 +806,7 @@ h1 {
 }
 
 .member-tag {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -820,7 +820,7 @@ h1 {
 }
 
 .result-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 10px 14px;
   scroll-margin: 18px;
@@ -831,7 +831,7 @@ h1 {
 }
 
 .result-card.focused {
-  background: #fffaf5;
+  background: var(--color-primary-light);
   border-color: #ffb980;
   box-shadow: 0 0 0 2px rgba(255, 122, 0, 0.12);
 }
@@ -841,7 +841,7 @@ h1 {
   align-items: center;
   gap: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f5f6f8;
+  border-bottom: 1px solid var(--color-surface-alt);
 }
 
 .card-name {
@@ -849,7 +849,7 @@ h1 {
 }
 
 .card-updated {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 12px;
 }
 
@@ -865,7 +865,7 @@ h1 {
   align-items: center;
   gap: 10px;
   padding: 7px 0;
-  border-bottom: 1px dashed #f5f6f8;
+  border-bottom: 1px dashed var(--color-surface-alt);
   font-size: 13px;
 }
 
@@ -875,7 +875,7 @@ h1 {
 
 .quote-type {
   background: #eaf2ff;
-  color: #d9531e;
+  color: var(--color-accent);
   border-radius: 999px;
   font-size: 12px;
   padding: 0 10px;
@@ -885,7 +885,7 @@ h1 {
 
 .quote-label {
   width: 90px;
-  color: #606266;
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -894,7 +894,7 @@ h1 {
 .quote-formula {
   flex: 1;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -903,18 +903,18 @@ h1 {
 
 .quote-val {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #d9531e;
+  color: var(--color-accent);
   white-space: nowrap;
 }
 
 .quote-suffix {
-  color: #909399;
+  color: var(--color-text-muted);
   font-weight: 400;
 }
 
 .download-bar {
   padding: 10px 14px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--color-bg);
   display: flex;
   justify-content: flex-end;
 }
@@ -924,7 +924,7 @@ h1 {
   justify-content: space-between;
   align-items: center;
   margin: 10px 0 6px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -940,7 +940,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #f0f2f5;
+  border: 1px solid var(--color-bg);
   border-radius: 8px;
   padding: 8px 10px;
   cursor: pointer;
@@ -960,18 +960,18 @@ h1 {
 }
 
 .pick-title em {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-style: normal;
   font-size: 12px;
 }
 
 .pick-sub {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .broker-tag {
-  color: #d9531e;
+  color: var(--color-accent);
   margin-left: 8px;
 }
 </style>

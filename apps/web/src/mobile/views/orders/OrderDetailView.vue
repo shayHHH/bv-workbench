@@ -471,12 +471,12 @@ function fundingRows(side: FundingSide): FundingRow[] {
 .state {
   padding: 40px;
   text-align: center;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .readonly-hint {
   background: #eef1f5;
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 12px;
   border-radius: 8px;
   padding: 8px 12px;
@@ -503,7 +503,7 @@ function fundingRows(side: FundingSide): FundingRow[] {
 .action-card p {
   margin: 0 0 10px;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
   line-height: 1.6;
 }
 
@@ -516,17 +516,17 @@ function fundingRows(side: FundingSide): FundingRow[] {
 .buttons button {
   flex: 1;
   min-width: 100px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 8px;
   padding: 9px 10px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .buttons button.primary {
-  border-color: #ff7a00;
-  background: #ff7a00;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
   color: #fff;
 }
 
@@ -538,7 +538,7 @@ function fundingRows(side: FundingSide): FundingRow[] {
 
 .info-card header {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-text-muted);
   margin-bottom: 8px;
 }
 
@@ -556,7 +556,7 @@ function fundingRows(side: FundingSide): FundingRow[] {
 }
 
 .info-card dt {
-  color: #909399;
+  color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
@@ -583,7 +583,7 @@ function fundingRows(side: FundingSide): FundingRow[] {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border-left: 2px solid #ff7a00;
+  border-left: 2px solid var(--color-primary);
   padding-left: 10px;
 }
 
@@ -593,11 +593,11 @@ function fundingRows(side: FundingSide): FundingRow[] {
 
 .timeline span {
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .timeline small {
   font-size: 11px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 </style>

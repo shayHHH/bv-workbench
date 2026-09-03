@@ -108,31 +108,31 @@ onMounted(() => {
   gap: 4px 10px;
   margin: 12px 12px 0;
   padding: 10px 12px;
-  background: #fff6ec;
-  border: 1px solid #f6dcbd;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-bg);
   border-radius: 10px;
   font-size: 12px;
   color: #6b625a;
 }
 .handoff-banner strong {
-  color: #d97a1a;
+  color: var(--color-warning);
 }
 .home-view {
   min-height: 100%;
-  background: #f5f6f8;
+  background: var(--color-surface-alt);
 }
 
 .queue-greeting {
   margin: 0;
   padding: 10px 16px 2px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   background: #fff;
 }
 
 .greeting-card {
   margin: 12px 12px 0;
-  background: linear-gradient(135deg, #ff7a00, #ff9d3f);
+  background: linear-gradient(135deg, var(--color-primary), #ff9d3f);
   color: #fff;
   border-radius: 12px;
   padding: 18px 16px;
@@ -160,18 +160,18 @@ onMounted(() => {
 .todo-card header {
   padding: 12px 16px 4px;
   font-size: 13px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .state {
   padding: 24px;
   text-align: center;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
 .count {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 16px;
 }
 
@@ -183,7 +183,7 @@ onMounted(() => {
   background: #fff;
   border-radius: 12px;
   padding: 14px;
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 14px;
 }
 </style>

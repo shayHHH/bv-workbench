@@ -1,3 +1,86 @@
+/* ─── Inter 字体 ─── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ─── 设计 Token ─── */
+:root {
+  /* Primary (Blue) */
+  --color-primary:         #2563EB;
+  --color-primary-hover:   #1D4ED8;
+  --color-primary-light:   #EFF6FF;
+  --color-primary-soft:    #DBEAFE;
+
+  /* Accent (Orange — 仅用于图表/品牌装饰) */
+  --color-accent:          #F97316;
+  --color-accent-light:    #FFF7ED;
+
+  /* Surface */
+  --color-bg:              #F1F5F9;
+  --color-surface:         #FFFFFF;
+  --color-surface-alt:     #F8FAFC;
+  --color-border:          #E2E8F0;
+  --color-border-soft:     #F1F5F9;
+
+  /* Sidebar */
+  --color-sidebar-bg:          #1E293B;
+  --color-sidebar-text:        #94A3B8;
+  --color-sidebar-active-bg:   #2563EB;
+  --color-sidebar-active-text: #FFFFFF;
+  --color-sidebar-hover-bg:    rgba(255, 255, 255, 0.07);
+
+  /* Text */
+  --color-text-primary:      #0F172A;
+  --color-text-secondary:    #475569;
+  --color-text-muted:        #94A3B8;
+  --color-text-placeholder:  #CBD5E1;
+
+  /* Semantic */
+  --color-success:     #16A34A;
+  --color-success-bg:  #F0FDF4;
+  --color-warning:     #D97706;
+  --color-warning-bg:  #FFFBEB;
+  --color-danger:      #DC2626;
+  --color-danger-bg:   #FEF2F2;
+
+  /* Shadow */
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+  --shadow-dropdown:   0 10px 40px rgba(0,0,0,0.12);
+}
+
+/* ─── Element Plus 全局变量覆盖 ─── */
+:root {
+  --el-color-primary:         #2563EB;
+  --el-color-primary-light-3: #60A5FA;
+  --el-color-primary-light-5: #93C5FD;
+  --el-color-primary-light-7: #BFDBFE;
+  --el-color-primary-light-8: #DBEAFE;
+  --el-color-primary-light-9: #EFF6FF;
+  --el-color-primary-dark-2:  #1D4ED8;
+
+  --el-border-color:         #E2E8F0;
+  --el-border-color-light:   #F1F5F9;
+  --el-border-color-lighter: #F8FAFC;
+
+  --el-bg-color:         #FFFFFF;
+  --el-bg-color-page:    #F1F5F9;
+  --el-fill-color:       #F8FAFC;
+  --el-fill-color-light: #F1F5F9;
+  --el-fill-color-blank: #FFFFFF;
+
+  --el-text-color-primary:     #0F172A;
+  --el-text-color-regular:     #475569;
+  --el-text-color-secondary:   #94A3B8;
+  --el-text-color-placeholder: #CBD5E1;
+
+  --el-border-radius-base:  8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 999px;
+
+  --el-font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --el-font-size-base: 14px;
+}
+
+/* ─── 全局基础样式 ─── */
 html,
 body,
 #app {
@@ -6,8 +89,47 @@ body,
 }
 
 body {
-  font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  background: #f5f6f8;
+  font-family: var(--el-font-family);
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+}
+
+/* ─── 全局 El Plus 组件修正 ─── */
+
+/* Table 行 hover 改为 slate 色调 */
+.el-table__body tr:hover > td.el-table__cell {
+  background: #F8FAFC !important;
+}
+
+/* Table 表头 */
+.el-table th.el-table__cell {
+  background: #F8FAFC;
+  color: #475569;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* Button 统一圆角 */
+.el-button {
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* Tag 样式 */
+.el-tag {
+  border-radius: 6px;
+  border: none;
+  font-weight: 500;
+}
+
+/* Input 圆角 */
+.el-input__wrapper {
+  border-radius: 8px;
+}
+
+/* Select 圆角 */
+.el-select .el-input__wrapper {
+  border-radius: 8px;
 }
 
 /* 报价陈旧监测弹窗内容（ElMessageBox 挂载到 body，需全局样式） */
@@ -18,7 +140,7 @@ body {
 .monitor-dialog .monitor-list {
   margin: 8px 0 4px;
   padding: 10px 12px;
-  background: #fdf6ec;
+  background: #FFFBEB;
   border-radius: 6px;
   color: #7c5c1e;
   line-height: 1.9;
@@ -29,7 +151,7 @@ body {
 .monitor-dialog .monitor-list strong {
   display: inline-block;
   margin-top: 4px;
-  color: #b88230;
+  color: #D97706;
 }
 .monitor-dialog .monitor-actions {
   display: flex;

@@ -63,7 +63,7 @@ const kycTone = (toneKey: string) => KYC_TONE[toneKey] ?? KYC_TONE.neutral;
 }
 
 .order-card:active {
-  background: #fafafa;
+  background: var(--color-surface-alt);
 }
 
 header,
@@ -76,7 +76,7 @@ header,
 
 header strong {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .customer-line {
@@ -111,18 +111,18 @@ header strong {
 }
 
 .pair i {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-style: normal;
 }
 
 .rate {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-style: normal;
 }
 
 .flag {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 12px;
   margin: 6px 0 0;
 }
@@ -138,7 +138,7 @@ footer {
 }
 
 .meta {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   min-width: 0;
   overflow: hidden;
@@ -148,12 +148,12 @@ footer {
 
 .cta {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
 .cta.primary {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-weight: 600;
 }
 

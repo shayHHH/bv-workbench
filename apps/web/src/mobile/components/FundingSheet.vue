@@ -263,14 +263,14 @@ h3 {
 }
 
 .brief {
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
   text-align: center;
   margin: 0 0 12px;
 }
 
 .form {
-  background: #f6f7f9;
+  background: var(--color-surface-alt);
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 14px;
@@ -302,18 +302,18 @@ h3 {
 }
 
 .chain-options button {
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 6px;
   padding: 6px 14px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .chain-options button.active {
-  border-color: #ff7a00;
-  color: #ff7a00;
-  background: #fff7f0;
+  border-color: var(--color-primary);
+  color: var(--color-accent);
+  background: var(--color-primary-light);
 }
 
 .voucher-field {
@@ -322,7 +322,7 @@ h3 {
 
 .voucher-upload {
   width: 100%;
-  border: 1.5px dashed #dcdfe6;
+  border: 1.5px dashed var(--color-border);
   background: #fff;
   border-radius: 10px;
   padding: 12px;
@@ -346,8 +346,8 @@ h3 {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: #fff7f0;
-  color: #ff7a00;
+  background: var(--color-primary-light);
+  color: var(--color-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -376,7 +376,7 @@ h3 {
 }
 
 .upload-action {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   white-space: nowrap;
 }

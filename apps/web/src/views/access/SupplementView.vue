@@ -9,6 +9,7 @@ import {
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { ACCESS_STATUS_TONE } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
 import { cancelApplication, fetchApplications, reopenApplication } from "@/api/access";
@@ -100,18 +101,7 @@ function onTabChange() {
   load();
 }
 
-const statusTagType: Record<AccessStatus, "primary" | "success" | "warning" | "info" | "danger"> = {
-  DRAFT: "info",
-  PENDING_REVIEW: "primary",
-  SUPPLEMENT_REQUIRED: "warning",
-  REJECTED: "danger",
-  APPROVED: "success",
-  APPROVED_CONDITIONAL: "warning",
-  DEFERRAL_OVERDUE: "danger",
-  EXPIRED: "info",
-  SUSPENDED: "info",
-  CANCELLED: "info",
-};
+const statusTagType = ACCESS_STATUS_TONE;
 
 /** demo materialStatusFlow：状态 → 主/次操作 */
 function primaryAction(row: AccessApplicationVO): { label: string; run: () => void } {
@@ -341,7 +331,7 @@ onMounted(load);
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -353,7 +343,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -366,7 +356,7 @@ h1 {
 
 .summary-card {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 14px 16px;
   display: flex;
@@ -379,7 +369,7 @@ h1 {
 }
 
 .summary-card span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -413,7 +403,7 @@ h1 {
 
 .count {
   margin-left: auto;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -444,11 +434,11 @@ h1 {
 }
 
 .name-block small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -465,33 +455,33 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border: 1px solid #ebeef5;
-  background: #fafbfc;
-  color: #606266;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
 }
 
 .deferral-card.d7 {
-  border-color: #faecd8;
-  background: #fdf6ec;
+  border-color: var(--color-warning-bg);
+  background: var(--color-warning-bg);
 }
 
 .deferral-card.d3,
 .deferral-card.d1 {
-  border-color: #fde2e2;
-  background: #fef0f0;
+  border-color: var(--color-danger-bg);
+  background: var(--color-danger-bg);
 }
 
 .deferral-card.d1 strong,
 .deferral-card.d3 strong {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .deferral-card.overdue {
-  border-color: #f56c6c;
-  background: #fef0f0;
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
 }
 
 .deferral-card.overdue strong {
-  color: #c45656;
+  color: var(--color-danger);
 }
 </style>

@@ -1185,7 +1185,7 @@ const roundModeOptions = Object.values(RoundMode).map(mode => ({
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -1197,7 +1197,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -1249,14 +1249,14 @@ h1 {
 .step-copy strong {
   display: block;
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .step-copy span {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1282,7 +1282,7 @@ h1 {
   left: 0;
   right: 0;
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   z-index: 100;
@@ -1308,17 +1308,17 @@ h1 {
 
 .dropdown-item.active,
 .dropdown-item:hover {
-  background: #fff4ed;
+  background: var(--color-primary-light);
 }
 
 .dropdown-item span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .dropdown-empty {
   padding: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
   text-align: center;
 }
@@ -1339,7 +1339,7 @@ h1 {
 
 .config-sub {
   margin: 4px 0 0;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -1375,7 +1375,7 @@ h1 {
 
 .section-title p {
   margin: 3px 0 0;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -1388,7 +1388,7 @@ h1 {
 .format-title {
   margin: 0 0 8px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 /* 抬头（Header）与落款（Footer）并排一行 */
@@ -1416,7 +1416,7 @@ h1 {
 }
 
 .field-label small {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 12px;
 }
 
@@ -1445,7 +1445,7 @@ h1 {
 }
 
 .notes-label {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -1454,13 +1454,13 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 16px;
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--color-border);
   padding-top: 10px;
 }
 
 .check-list small {
   width: 100%;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
 }
 
 .item-list {
@@ -1470,7 +1470,7 @@ h1 {
 }
 
 .item-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 14px 16px;
 }
@@ -1505,7 +1505,7 @@ h1 {
   align-items: center;
   flex: none;
   padding-right: 8px;
-  border-left: 1px solid #f0f2f5;
+  border-left: 1px solid var(--color-bg);
 }
 
 .summary-actions .el-button {
@@ -1522,7 +1522,7 @@ h1 {
 
 .summary-row code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #606266;
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1530,7 +1530,7 @@ h1 {
 
 .summary-result {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #d9531e;
+  color: var(--color-accent);
 }
 
 .summary-type {
@@ -1543,7 +1543,7 @@ h1 {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ff7a00;
+  background: var(--color-primary);
   display: inline-block;
 }
 
@@ -1561,7 +1561,7 @@ h1 {
 }
 
 .item-title small {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
 }
 
 .item-actions {
@@ -1580,13 +1580,13 @@ h1 {
 .param-grid label span {
   display: block;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   margin-bottom: 4px;
 }
 
 .formula-box {
-  background: #fafbfc;
-  border: 1px solid #f0f2f5;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-bg);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -1609,12 +1609,12 @@ h1 {
 
 .ops-label,
 .result-hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .op-chip {
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   border-radius: 6px;
   min-width: 28px;
@@ -1626,12 +1626,12 @@ h1 {
 }
 
 .op-chip:hover {
-  border-color: #ff7a00;
-  color: #ff7a00;
+  border-color: var(--color-primary);
+  color: var(--color-accent);
 }
 
 .formula-error {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 12px;
   margin: 6px 0 0;
 }
@@ -1649,8 +1649,8 @@ h1 {
 }
 
 .result-box {
-  background: #fff4ed;
-  border: 1px solid #f6b895;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-light);
   border-radius: 8px;
   padding: 6px 12px;
 }
@@ -1663,12 +1663,12 @@ h1 {
 .result-box span {
   display: block;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .result-box strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #d9531e;
+  color: var(--color-accent);
   font-size: 15px;
 }
 
@@ -1702,7 +1702,7 @@ h1 {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   background: #fff;
   cursor: pointer;
   z-index: 5;
@@ -1725,13 +1725,13 @@ h1 {
 }
 
 .assist-head.clickable:hover h3 {
-  color: #ff7a00;
+  color: var(--color-accent);
 }
 
 .panel-chevron {
   display: inline-block;
   font-style: normal;
-  color: #909399;
+  color: var(--color-text-muted);
   transition: transform 0.2s ease;
   margin-right: 2px;
 }
@@ -1744,8 +1744,8 @@ h1 {
   font-style: normal;
   font-weight: normal;
   font-size: 11px;
-  color: #909399;
-  background: #f0f2f5;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
   border-radius: 999px;
   padding: 1px 8px;
   margin-left: 6px;
@@ -1763,7 +1763,7 @@ h1 {
 }
 
 .assist-meta {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: 6px 0 10px;
   display: flex;
@@ -1772,7 +1772,7 @@ h1 {
 }
 
 .online-pill {
-  color: #67c23a;
+  color: var(--color-success);
   font-size: 12px;
 }
 
@@ -1794,9 +1794,9 @@ h1 {
 }
 
 .bench-head {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--color-bg);
   padding-bottom: 4px;
 }
 
@@ -1833,7 +1833,7 @@ h1 {
 }
 
 .channel-name {
-  color: #d9531e;
+  color: var(--color-accent);
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -1859,7 +1859,7 @@ h1 {
 
 .channel-sync {
   margin: -4px 0 8px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }

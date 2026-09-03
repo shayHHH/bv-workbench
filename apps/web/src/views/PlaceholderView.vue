@@ -27,7 +27,7 @@ const route = useRoute();
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: #2563EB;
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -36,10 +36,11 @@ const route = useRoute();
 h1 {
   margin: 0 0 4px;
   font-size: 22px;
+  color: #0F172A;
 }
 
 .subtitle {
-  color: #909399;
+  color: #94A3B8;
   margin: 0;
 }
 

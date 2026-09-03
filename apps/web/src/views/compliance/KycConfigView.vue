@@ -568,7 +568,7 @@ onMounted(() => load());
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 12px;
   letter-spacing: 0.12em;
   margin: 0 0 4px;
@@ -580,7 +580,7 @@ h1 {
 }
 
 .subtitle {
-  color: #909399;
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -592,7 +592,7 @@ h1 {
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -605,7 +605,7 @@ h1 {
 
 .metric {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 10px 14px;
   display: flex;
@@ -618,7 +618,7 @@ h1 {
 }
 
 .metric span {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -631,7 +631,7 @@ h1 {
 
 .library {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 14px;
 }
@@ -656,7 +656,7 @@ h1 {
 }
 
 .scenario-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   background: #fff;
   padding: 10px 12px;
@@ -668,8 +668,8 @@ h1 {
 }
 
 .scenario-card.active {
-  border-color: #ff7a00;
-  background: #fffaf5;
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .card-top {
@@ -680,20 +680,20 @@ h1 {
 
 .card-top em {
   font-style: normal;
-  color: #ff7a00;
+  color: var(--color-accent);
   font-weight: 700;
   font-size: 12px;
 }
 
 .card-top small,
 .card-meta {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
 .editor {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 16px 18px;
 }
@@ -707,7 +707,7 @@ h1 {
 .code-pill {
   flex: none;
   background: #231c17;
-  color: #ff7a00;
+  color: var(--color-accent);
   font-weight: 700;
   border-radius: 6px;
   padding: 4px 10px;
@@ -724,7 +724,7 @@ h1 {
 }
 
 .scenario-sub {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
   margin: 6px 0 14px;
 }
@@ -736,7 +736,7 @@ h1 {
 .field-block label {
   display: block;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
@@ -749,7 +749,7 @@ h1 {
 
 .matrix-head small {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .matrix-actions {
@@ -767,7 +767,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   background: #fff;
   padding: 8px 14px;
@@ -782,17 +782,17 @@ h1 {
 }
 
 .channel-tab small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .channel-tab.active {
-  border-color: #ff7a00;
-  background: #fffaf5;
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
   font-weight: 600;
 }
 
 .restriction-strip {
-  border: 1px solid #fde2e2;
+  border: 1px solid var(--color-danger-bg);
   background: #fef6f6;
   border-radius: 8px;
   padding: 8px 12px;
@@ -804,11 +804,11 @@ h1 {
 }
 
 .restriction-strip strong {
-  color: #c45656;
+  color: var(--color-danger);
 }
 
 .material-section {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 12px;
@@ -823,7 +823,7 @@ h1 {
 
 .section-no {
   flex: none;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -843,7 +843,7 @@ h1 {
 }
 
 .drag {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   cursor: default;
   font-size: 12px;
 }
@@ -868,7 +868,7 @@ h1 {
 }
 
 .item-empty {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
   font-size: 13px;
   margin: 4px 0;
 }
@@ -886,7 +886,7 @@ h1 {
 
 .hint {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 

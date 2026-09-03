@@ -29,6 +29,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Close, CopyDocument, Download, EditPen, FullScreen, View } from "@element-plus/icons-vue";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { ACCESS_STATUS_TONE, MATERIAL_STATUS_TONE, ORDER_STATUS_TONE, type TagTone } from "@/components/statusTones";
 import { localizeText } from "@/i18n";
 import { useRouter } from "vue-router";
 import { fetchApplications, openFilePreview } from "@/api/access";
@@ -73,25 +74,10 @@ const accessApp = ref<AccessApplicationVO | null>(null);
 const accessLoading = ref(false);
 
 /** 准入状态 → el-tag 类型 */
-const ACCESS_STATUS_TAG: Record<string, "success" | "info" | "warning" | "danger"> = {
-  APPROVED: "success",
-  APPROVED_CONDITIONAL: "warning",
-  DEFERRAL_OVERDUE: "danger",
-  PENDING_REVIEW: "info",
-  SUPPLEMENT_REQUIRED: "warning",
-  EXPIRED: "warning",
-  SUSPENDED: "info",
-  REJECTED: "danger",
-  CANCELLED: "info",
-  DRAFT: "info",
-};
+const ACCESS_STATUS_TAG: Record<string, TagTone> = ACCESS_STATUS_TONE;
 
 /** 材料状态 → el-tag 类型 */
-const MATERIAL_TAG: Record<ApplicationMaterialStatus, "info" | "success" | "danger"> = {
-  PENDING: "info",
-  ACCEPTED: "success",
-  RETURNED: "danger",
-};
+const MATERIAL_TAG = MATERIAL_STATUS_TONE;
 
 /** 与后端 kycBadgeFor 同口径：同客户同业务类型取最优状态那条 */
 const ADMISSION_RANK = [
@@ -198,15 +184,7 @@ defineExpose({ reload: load });
 
 const fmtMoney = (currency: string, amount: number) => `${currency} ${amount.toLocaleString("en-US")}`;
 
-const STATUS_TAG: Record<string, "primary" | "success" | "warning" | "info" | "danger"> = {
-  PENDING_KYC: "info",
-  AWAITING_INFLOW: "warning",
-  AWAITING_DISPATCH: "primary",
-  DISPATCH_REVIEW: "info",
-  AWAITING_PAYOUT: "warning",
-  COMPLETED: "success",
-  CANCELLED: "info",
-};
+const STATUS_TAG: Record<string, TagTone> = ORDER_STATUS_TONE;
 
 function ownerLabel(side: FundingSide): string {
   if (!order.value) return "";
@@ -1021,7 +999,7 @@ async function copyPanelDispatchText() {
 }
 
 .eyebrow {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-size: 11px;
   letter-spacing: 0.1em;
 }
@@ -1039,16 +1017,16 @@ async function copyPanelDispatchText() {
 }
 
 .hint {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: 6px 0 12px;
 }
 
 .trade-hero {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
-  background: #fafbfc;
+  background: var(--color-surface-alt);
 }
 
 .hero-row {
@@ -1059,12 +1037,12 @@ async function copyPanelDispatchText() {
 
 .hero-cell span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
 .hero-cell em {
-  color: #909399;
+  color: var(--color-text-muted);
   font-style: normal;
   font-size: 11px;
   margin-left: 6px;
@@ -1072,15 +1050,15 @@ async function copyPanelDispatchText() {
 
 /* KYC 状态为纯文字展示，按语气着色 */
 .kyc-text-success {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .kyc-text-warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .kyc-text-danger {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .hero-legs {
@@ -1089,12 +1067,12 @@ async function copyPanelDispatchText() {
   gap: 14px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed var(--color-border);
 }
 
 .hero-legs span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -1103,7 +1081,7 @@ async function copyPanelDispatchText() {
 }
 
 .hero-legs i {
-  color: #ff7a00;
+  color: var(--color-accent);
   font-style: normal;
 }
 
@@ -1115,7 +1093,7 @@ async function copyPanelDispatchText() {
 
 .hero-rate span {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 11px;
 }
 
@@ -1124,7 +1102,7 @@ async function copyPanelDispatchText() {
 }
 
 .hero-rate em {
-  color: #909399;
+  color: var(--color-text-muted);
   font-style: normal;
   font-size: 11px;
   margin-left: 6px;
@@ -1136,7 +1114,7 @@ async function copyPanelDispatchText() {
 }
 
 .hero-remark span {
-  color: #909399;
+  color: var(--color-text-muted);
   margin-right: 8px;
 }
 
@@ -1146,12 +1124,12 @@ async function copyPanelDispatchText() {
 }
 
 .biz-unset {
-  color: #909399;
+  color: var(--color-text-muted);
   font-weight: 400;
 }
 
 .estimate-tag {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-weight: 400;
   font-size: 11px;
   margin-left: 6px;
@@ -1160,7 +1138,7 @@ async function copyPanelDispatchText() {
 .hero-quote {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed var(--color-border);
   font-size: 12px;
   display: flex;
   align-items: center;
@@ -1169,25 +1147,25 @@ async function copyPanelDispatchText() {
 }
 
 .hero-quote > span {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .hero-quote code {
   font-weight: 700;
-  color: #d9531e;
+  color: var(--color-accent);
 }
 
 .hero-quote em {
-  color: #909399;
+  color: var(--color-text-muted);
   font-style: normal;
 }
 
 .hero-quote .quote-mismatch {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .hero-remark p.empty {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder);
 }
 
 .stage-cancelled {
@@ -1195,7 +1173,7 @@ async function copyPanelDispatchText() {
   gap: 8px;
   align-items: center;
   margin: 12px 0 4px;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -1223,7 +1201,7 @@ async function copyPanelDispatchText() {
   width: calc(100% - 28px);
   height: 2px;
   border-radius: 1px;
-  background: #e4e7ed;
+  background: var(--color-border);
 }
 
 /* 已完成/进行中节点的入线着色，体现推进进度 */
@@ -1236,8 +1214,8 @@ async function copyPanelDispatchText() {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #f0f2f5;
-  color: #909399;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
   font-size: 11px;
   font-style: normal;
   display: grid;
@@ -1248,22 +1226,22 @@ async function copyPanelDispatchText() {
 
 .stage.done i {
   background: #e7f6ec;
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .stage.active i {
-  background: #ff7a00;
+  background: var(--color-primary);
   color: #fff;
 }
 
 .stage span {
   font-size: 10px;
-  color: #909399;
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .stage.active span {
-  color: #303133;
+  color: var(--color-text-primary);
   font-weight: 600;
 }
 
@@ -1280,7 +1258,7 @@ async function copyPanelDispatchText() {
 }
 
 .funding-card {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 12px;
@@ -1292,7 +1270,7 @@ async function copyPanelDispatchText() {
 }
 
 .funding-card.error {
-  border-color: #fde2e2;
+  border-color: var(--color-danger-bg);
   background: #fef6f6;
 }
 
@@ -1304,13 +1282,13 @@ async function copyPanelDispatchText() {
 
 .funding-card header em {
   font-style: normal;
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin-left: 8px;
 }
 
 .owner {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   margin: 6px 0 8px;
 }
@@ -1328,7 +1306,7 @@ dl div {
 }
 
 dt {
-  color: #909399;
+  color: var(--color-text-muted);
   min-width: 90px;
 }
 
@@ -1347,7 +1325,7 @@ dd {
 }
 
 .file-name {
-  color: #303133;
+  color: var(--color-text-primary);
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1355,20 +1333,20 @@ dd {
 }
 
 .receipt-line {
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .receipt-line > span {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .receipt-line small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .block {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 12px;
@@ -1377,7 +1355,7 @@ dd {
 .block h4 {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-secondary);
 }
 
 .block-title {
@@ -1400,7 +1378,7 @@ dd {
 }
 
 .dispatch-head small {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .dispatch-text-wrap {
@@ -1449,17 +1427,17 @@ dd {
 
 .review-row small {
   display: block;
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .empty-inline {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 13px;
   margin: 0;
 }
 
 .muted {
-  color: #909399;
+  color: var(--color-text-muted);
 }
 
 .mono {
@@ -1474,11 +1452,11 @@ dd {
 }
 
 .profit .cost b {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .profit .net {
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed var(--color-border);
   margin-top: 6px;
   padding-top: 8px;
 }
@@ -1488,13 +1466,13 @@ dd {
 }
 
 .activity-detail {
-  color: #606266;
+  color: var(--color-text-secondary);
   font-size: 12px;
   margin: 2px 0 0;
 }
 
 .panel-actions {
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border);
   padding-top: 10px;
 }
 
@@ -1514,15 +1492,15 @@ dd {
 }
 
 .action-block.warning {
-  background: #fdf6ec;
+  background: var(--color-warning-bg);
 }
 
 .action-block.danger {
-  background: #fef0f0;
+  background: var(--color-danger-bg);
 }
 
 .action-block.mint {
-  background: #f0f9eb;
+  background: var(--color-success-bg);
 }
 
 .action-buttons {
@@ -1542,7 +1520,7 @@ dd {
   margin-bottom: 12px;
 }
 .access-no {
-  color: #909399;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1565,7 +1543,7 @@ dd {
   font-weight: 500;
 }
 .access-material .mat-return {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-size: 12px;
 }
 </style>
