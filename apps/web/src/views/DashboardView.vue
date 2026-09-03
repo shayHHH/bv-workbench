@@ -104,6 +104,7 @@ const orderActive = ref<TradeOrderVO[]>([]);
 const orderRecent = ref<TradeOrderVO[]>([]);
 const orderExceptions = ref<TradeOrderVO[]>([]);
 const supplementApps = ref<AccessApplicationVO[]>([]);
+const deferralApps = ref<AccessApplicationVO[]>([]);
 const supplementTotal = ref(0);
 const reviewStats = ref<ReviewStatsVO | null>(null);
 const reviewPending = ref<ReviewCaseVO[]>([]);
@@ -339,6 +340,7 @@ const todoRows = computed<DashboardRow[]>(() => {
   }
   const rows = orderRows(orderMine.value.items, "处理");
   if (roleKey.value === "AGENT" || roleKey.value === "OPS") {
+    rows.push(...deferralRows(deferralApps.value));
     rows.push(...supplementRows(supplementApps.value));
   }
   return rows.slice(0, 6);
@@ -385,6 +387,33 @@ function supplementRows(rows: AccessApplicationVO[]): DashboardRow[] {
     action: "补件",
     run: () => router.push(`/access/documents/${item.id}/supplement`),
   }));
+}
+
+/** 延期补件待办：客户、缺失清单、倒计时与受限额度（逾期置顶、红色） */
+function deferralRows(rows: AccessApplicationVO[]): DashboardRow[] {
+  const sorted = [...rows].sort((a, b) => {
+    const overdueDiff = Number(b.status === AccessStatus.DEFERRAL_OVERDUE) - Number(a.status === AccessStatus.DEFERRAL_OVERDUE);
+    if (overdueDiff) return overdueDiff;
+    return new Date(a.deferral?.due_at ?? 0).getTime() - new Date(b.deferral?.due_at ?? 0).getTime();
+  });
+  return sorted.slice(0, 4).map(item => {
+    const deferral = item.deferral;
+    const overdue = item.status === AccessStatus.DEFERRAL_OVERDUE ||
+      (deferral ? new Date(deferral.due_at).getTime() <= Date.now() : false);
+    const daysLeft = deferral ? Math.max(0, Math.ceil((new Date(deferral.due_at).getTime() - Date.now()) / 86_400_000)) : 0;
+    const limitText = deferral?.limit_amount
+      ? ` · 限额 ${deferral.limit_currency} ${deferral.limit_amount.toLocaleString("en-US")}`
+      : "";
+    return {
+      key: `deferral-${item.id}`,
+      title: `${item.application_no} · ${item.customer_snapshot.name}`,
+      meta: `延期补件 · 缺：${deferral?.missing_item_names.join("、") || "-"}${limitText}`,
+      status: overdue ? "补件逾期" : `延期补件 · 剩 ${daysLeft} 天`,
+      tone: overdue || daysLeft <= 3 ? "danger" : "warning",
+      action: "去补件",
+      run: () => router.push(`/access/documents/${item.id}/supplement`),
+    };
+  });
 }
 
 function reviewRows(rows: ReviewCaseVO[], action: string): DashboardRow[] {
@@ -482,6 +511,7 @@ async function loadDashboard() {
   orderRecent.value = [];
   orderExceptions.value = [];
   supplementApps.value = [];
+  deferralApps.value = [];
   supplementTotal.value = 0;
   reviewStats.value = null;
   reviewPending.value = [];
@@ -518,6 +548,16 @@ async function loadDashboard() {
       fetchApplications({ status: AccessStatus.SUPPLEMENT_REQUIRED, page: 1, page_size: 6 }).then(page => {
         supplementApps.value = page.items;
         supplementTotal.value = page.total;
+      }),
+    );
+    /* 条件性放行的延期补件待办（含逾期），强推给交易员（需求 §4） */
+    tasks.push(
+      fetchApplications({
+        status: `${AccessStatus.APPROVED_CONDITIONAL},${AccessStatus.DEFERRAL_OVERDUE}`,
+        page: 1,
+        page_size: 6,
+      }).then(page => {
+        deferralApps.value = page.items;
       }),
     );
   }
