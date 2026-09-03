@@ -307,9 +307,11 @@ export class CustomerService {
       throw new BadRequestException("仅中介下级客户可指定所属中介");
     }
 
-    const code = dto.customer_code?.trim() || null;
+    let code = dto.customer_code?.trim() || null;
     if (!code && !isSub) throw new BadRequestException("请填写客户编号");
     if (code) await this.validateCode(code);
+    /* 中介下级不生成系统编号时：编号 = 中介编号 + 两位后缀（01-99），不再留空（2026-09-02 用户要求） */
+    if (!code && isSub && parentId) code = await this.deriveSubCode(parentId);
 
     try {
       const doc = await this.customerModel.create({
@@ -339,6 +341,23 @@ export class CustomerService {
       }
       throw error;
     }
+  }
+
+  /** 中介下级派生编号：中介编号+01-99 中最小空位；中介本身无编号时维持无编号 */
+  private async deriveSubCode(parentId: Types.ObjectId): Promise<string | null> {
+    const parent = await this.customerModel.findOne({ _id: parentId }).select("customer_code").lean();
+    const base = parent?.customer_code;
+    if (!base) return null;
+    const siblings = await this.customerModel
+      .find({ customer_code: new RegExp(`^${base}\\d{2}$`), is_deleted: false })
+      .select("customer_code")
+      .lean();
+    const used = new Set(siblings.map(item => item.customer_code));
+    for (let i = 1; i <= 99; i++) {
+      const candidate = `${base}${String(i).padStart(2, "0")}`;
+      if (!used.has(candidate)) return candidate;
+    }
+    throw new ConflictException(`中介 ${base} 的下级编号后缀已用满（01-99）`);
   }
 
   async update(id: string, dto: UpdateCustomerDto, operator?: JwtPayload): Promise<CustomerVO> {

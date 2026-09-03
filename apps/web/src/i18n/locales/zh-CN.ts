@@ -149,7 +149,7 @@ export default {
       generateCode: "生成编号",
       codePh: "20001-29999",
       codeHintAssigned: "系统已分配，可修改为 20001-29999 内未占用编号。",
-      codeHintNoCode: "该下级客户将以无编号状态创建。",
+      codeHintNoCode: "不生成系统编号时，将自动按「中介编号+两位后缀」分配（如 2000501）。",
       name: "客户名称",
       namePh: "输入客户名称",
       subjectType: "主体类型",
