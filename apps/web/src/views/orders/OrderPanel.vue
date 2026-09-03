@@ -642,7 +642,7 @@ async function copyPanelDispatchText() {
                 {{ order.business_type || t("orders.panel.bizUnset") }}
               </strong>
             </div>
-            <div class="hero-cell">
+            <div class="hero-cell hero-cell-right">
               <span>{{ t("orders.common.kycStatus") }}</span>
               <strong :class="`kyc-text-${order.kyc.tone}`">{{ localizeText(order.kyc.label) }}</strong>
             </div>
@@ -1039,6 +1039,10 @@ async function copyPanelDispatchText() {
   display: block;
   color: var(--color-text-muted);
   font-size: 11px;
+}
+
+.hero-cell-right {
+  text-align: right;
 }
 
 .hero-cell em {
