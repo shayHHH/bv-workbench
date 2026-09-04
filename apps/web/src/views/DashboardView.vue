@@ -197,15 +197,15 @@ const dashboardMetrics = computed<MetricCard[]>(() => {
     : "暂无";
   const map: Record<RoleKey, MetricCard[]> = {
     AGENT: [
-      { label: "待我处理", value: stats.value?.todo ?? 0, hint: "待KYC / 待出款排单", tone: "orange" },
-      { label: "待KYC", value: statusCount(TradeOrderStatus.PENDING_KYC), hint: "等待业务准入", tone: "blue" },
+      { label: "待KYC", value: statusCount(TradeOrderStatus.PENDING_KYC), hint: "等待业务准入", tone: "orange" },
       {
         label: "待出款排单",
         value: statusCount(TradeOrderStatus.AWAITING_DISPATCH),
         hint: "需发起排单",
-        tone: "green",
+        tone: "blue",
       },
-      { label: "待补件", value: supplementTotal.value + deferralTotal.value, hint: "合规驳回补材料 / 延期补件", tone: "red" },
+      { label: "合规驳回", value: supplementTotal.value, hint: "驳回后需补充材料", tone: "red" },
+      { label: "延期补件", value: deferralTotal.value, hint: "条件性放行，限期补齐", tone: "red" },
     ],
     MANAGER: [
       { label: "进行中订单", value: stats.value?.active ?? 0, hint: "未完成 / 未取消", tone: "blue" },
