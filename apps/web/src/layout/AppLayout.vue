@@ -12,6 +12,7 @@ import {
   SwitchButton,
   Tickets,
   User,
+  Wallet,
 } from "@element-plus/icons-vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -43,6 +44,7 @@ const menu: MenuItem[] = [
   { path: "/customers", titleKey: "layout.menu.customers", icon: User },
   { path: "/orders", titleKey: "layout.menu.orders", icon: Tickets, roles: ["AGENT", "OPS", "PAYOUT", "MANAGER", "FINANCE", "WALLET", "ADMIN"] },
   { path: "/department", titleKey: "layout.menu.department", icon: Calendar, roles: ["MANAGER"] },
+  { path: "/fund-pools", titleKey: "layout.menu.fundPool", icon: Wallet, roles: ["MANAGER"] },
   {
     path: "/quote",
     titleKey: "layout.menu.quote",
@@ -240,6 +242,12 @@ watch(
                 class="menu-badge"
               >
                 {{ orderTodoCount > 99 ? "99+" : orderTodoCount }}
+              </span>
+              <span
+                v-if="item.path === '/dashboard' && rejectedAccessCount"
+                class="menu-badge"
+              >
+                {{ rejectedAccessCount > 99 ? "99+" : rejectedAccessCount }}
               </span>
             </span>
           </el-menu-item>

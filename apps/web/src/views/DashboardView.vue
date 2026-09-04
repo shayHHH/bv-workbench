@@ -105,6 +105,7 @@ const orderRecent = ref<TradeOrderVO[]>([]);
 const orderExceptions = ref<TradeOrderVO[]>([]);
 const supplementApps = ref<AccessApplicationVO[]>([]);
 const deferralApps = ref<AccessApplicationVO[]>([]);
+const deferralTotal = ref(0);
 const supplementTotal = ref(0);
 const reviewStats = ref<ReviewStatsVO | null>(null);
 const reviewPending = ref<ReviewCaseVO[]>([]);
@@ -204,7 +205,7 @@ const dashboardMetrics = computed<MetricCard[]>(() => {
         hint: "需发起排单",
         tone: "green",
       },
-      { label: "待补件", value: supplementTotal.value, hint: "合规驳回后需补充材料", tone: "red" },
+      { label: "待补件", value: supplementTotal.value + deferralTotal.value, hint: "合规驳回补材料 / 延期补件", tone: "red" },
     ],
     MANAGER: [
       { label: "进行中订单", value: stats.value?.active ?? 0, hint: "未完成 / 未取消", tone: "blue" },
@@ -513,6 +514,7 @@ async function loadDashboard() {
   supplementApps.value = [];
   deferralApps.value = [];
   supplementTotal.value = 0;
+  deferralTotal.value = 0;
   reviewStats.value = null;
   reviewPending.value = [];
   department.value = null;
@@ -558,6 +560,7 @@ async function loadDashboard() {
         page_size: 6,
       }).then(page => {
         deferralApps.value = page.items;
+        deferralTotal.value = page.total;
       }),
     );
   }
