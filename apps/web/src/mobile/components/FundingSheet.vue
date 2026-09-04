@@ -109,7 +109,6 @@ async function submit() {
   if (!form.hash.trim()) return showToast(t("orders.funding.warnHash"));
   if (!isValidTxHash(form.chain, form.hash))
     return showToast(localizeText(TX_HASH_FORMAT_HINTS[form.chain] ?? t("orders.funding.warnHash")));
-  if (!form.confirms.trim()) return showToast(t("orders.funding.warnConfirms"));
   submitting.value = true;
   try {
     const payload = {
@@ -181,7 +180,7 @@ async function submit() {
             type="digit"
             :label="t('orders.funding.confirms')"
             label-align="top"
-            required
+            :placeholder="t('orders.funding.confirmsPh')"
             class="confirms"
           />
         </div>

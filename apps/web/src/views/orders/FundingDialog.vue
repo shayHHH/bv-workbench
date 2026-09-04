@@ -126,7 +126,6 @@ async function submit() {
   if (kind.value === FundingKind.CHAIN && !form.hash.trim()) return ElMessage.warning(t("orders.funding.warnHash"));
   if (kind.value === FundingKind.CHAIN && !isValidTxHash(form.chain, form.hash))
     return ElMessage.warning(localizeText(TX_HASH_FORMAT_HINTS[form.chain] ?? t("orders.funding.warnHash")));
-  if (kind.value === FundingKind.CHAIN && !form.confirms.trim()) return ElMessage.warning(t("orders.funding.warnConfirms"));
   if (kind.value === FundingKind.CASH && !form.place.trim()) return ElMessage.warning(t("orders.funding.warnPlace"));
   if (kind.value === FundingKind.BANK && props.side === "outflow" && !form.account.trim()) return ElMessage.warning(t("orders.funding.warnAccount"));
   submitting.value = true;
@@ -182,7 +181,7 @@ async function submit() {
             </el-select>
           </el-form-item>
           <el-form-item :label="t('orders.funding.confirms')">
-            <el-input v-model="form.confirms" />
+            <el-input v-model="form.confirms" :placeholder="t('orders.funding.confirmsPh')" />
           </el-form-item>
         </div>
         <el-form-item :label="t('orders.funding.txHash')" required :error="hashError || undefined">
