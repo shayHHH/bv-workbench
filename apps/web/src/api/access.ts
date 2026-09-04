@@ -136,6 +136,8 @@ export async function deleteCustomerMaterial(id: string): Promise<void> {
 
 export interface ReviewListQuery {
   status?: "PENDING" | "PROCESSED";
+  /** 已处理工单分桶：跟踪中（驳回/条件性通过待补件）或已完结（申请终态）；仅 status=PROCESSED 生效 */
+  bucket?: "ON_HOLD" | "CLOSED";
   keyword?: string;
   audit_type?: ReviewAuditType;
   review_type?: ReviewType;

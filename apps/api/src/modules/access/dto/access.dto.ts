@@ -15,7 +15,14 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { AccessStatus, FileRef, MaterialSource, ReviewDecisionAction, ReviewType } from "@bv/shared";
+import {
+  AccessStatus,
+  FileRef,
+  MaterialSource,
+  ReviewAuditType,
+  ReviewDecisionAction,
+  ReviewType,
+} from "@bv/shared";
 
 export class CreateApplicationDto {
   @IsMongoId()
@@ -231,14 +238,19 @@ export class QueryReviewDto {
   @IsIn(["PENDING", "PROCESSED"])
   status?: "PENDING" | "PROCESSED";
 
+  /** 已处理工单的分桶：跟踪中（驳回/条件性通过待补件）或已完结（申请终态）；仅 status=PROCESSED 时生效 */
+  @IsOptional()
+  @IsIn(["ON_HOLD", "CLOSED"])
+  bucket?: "ON_HOLD" | "CLOSED";
+
   @IsOptional()
   @IsString()
   @MaxLength(100)
   keyword?: string;
 
   @IsOptional()
-  @IsIn(["NEW", "RESUBMIT"])
-  audit_type?: "NEW" | "RESUBMIT";
+  @IsIn(Object.values(ReviewAuditType))
+  audit_type?: ReviewAuditType;
 
   /** 提交模式筛选（FX 找换 / USDT U相关；双合规分工的分配过滤将基于它扩展） */
   @IsOptional()

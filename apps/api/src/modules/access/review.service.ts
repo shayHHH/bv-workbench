@@ -25,7 +25,11 @@ import { AssignmentService } from "../assignment/assignment.service";
 import { KycScenario, KycScenarioDocument } from "../kyc/kyc-scenario.schema";
 import { CustomerService } from "../customer/customer.service";
 import { OrderService } from "../order/order.service";
-import { AccessApplication, AccessApplicationDocument } from "./access-application.schema";
+import {
+  ACCESS_APPLICATION_COLLECTION,
+  AccessApplication,
+  AccessApplicationDocument,
+} from "./access-application.schema";
 import { ReviewCase, ReviewCaseDocument } from "./review-case.schema";
 import { QueryReviewDto, ReviewDecisionDto } from "./dto/access.dto";
 
@@ -46,6 +50,24 @@ const ACTION_TO_FINAL: Record<ReviewDecisionAction, ReviewFinalResult> = {
   REJECT: ReviewFinalResult.UNRESOLVED,
   TERMINATE: ReviewFinalResult.TERMINATED,
 };
+
+/**
+ * 已处理队列三分桶（2026-09-04 用户要求）：跟踪中 = 合规已处理但工单未完结（被驳回待重提、
+ * 条件性通过待补件/逾期）；已完结 = 申请到达终态。重新提交后申请回到 PENDING_REVIEW，
+ * 工单自动移出跟踪中，以新 case 出现在待处理队列。
+ */
+const ON_HOLD_APPLICATION_STATUSES: AccessStatus[] = [
+  AccessStatus.SUPPLEMENT_REQUIRED,
+  AccessStatus.APPROVED_CONDITIONAL,
+  AccessStatus.DEFERRAL_OVERDUE,
+];
+const CLOSED_APPLICATION_STATUSES: AccessStatus[] = [
+  AccessStatus.APPROVED,
+  AccessStatus.REJECTED,
+  AccessStatus.EXPIRED,
+  AccessStatus.SUSPENDED,
+  AccessStatus.CANCELLED,
+];
 
 /** demo 工单 history 文案口径 */
 const ACTION_LABEL: Record<ReviewDecisionAction, string> = {
@@ -97,7 +119,7 @@ export class ReviewService {
     const sortDirection = query.sort_order === "asc" ? 1 : -1;
     const shouldDedupeByApplication = query.status === ReviewCaseStatus.PROCESSED;
     const [items, total] = shouldDedupeByApplication
-      ? await this.listLatestProcessedCases(filter, sortField, sortDirection, page, pageSize)
+      ? await this.listLatestProcessedCases(filter, sortField, sortDirection, page, pageSize, query.bucket)
       : await Promise.all([
           this.caseModel
             .find(filter)
@@ -118,16 +140,63 @@ export class ReviewService {
     sortDirection: 1 | -1,
     page: number,
     pageSize: number,
+    bucket?: "ON_HOLD" | "CLOSED",
   ) {
     const pipeline: PipelineStage[] = [
       { $match: filter },
       { $sort: { reviewed_at: -1, submitted_at: -1, _id: -1 } },
       { $group: { _id: "$application_id", doc: { $first: "$$ROOT" } } },
       { $replaceRoot: { newRoot: "$doc" } },
+      /* 分桶按申请当前状态联查过滤：PENDING_REVIEW（已重提，工单回到待处理队列）两桶都不出现 */
+      ...(bucket
+        ? ([
+            {
+              $lookup: {
+                from: ACCESS_APPLICATION_COLLECTION,
+                localField: "application_id",
+                foreignField: "_id",
+                as: "application_docs",
+              },
+            },
+            { $addFields: { application_status: { $first: "$application_docs.status" } } },
+            { $unset: "application_docs" },
+            {
+              $match: {
+                application_status: {
+                  $in: bucket === "ON_HOLD" ? ON_HOLD_APPLICATION_STATUSES : CLOSED_APPLICATION_STATUSES,
+                },
+              },
+            },
+          ] as PipelineStage[])
+        : []),
+      /* 2026-09-04 用户要求：条件性放行永远置顶（仍有补件待办），其次驳回（交易员待重提），
+         再是审核通过，终止最后；组内再按用户选的时间排序。条件性放行组内按补件截止日由近到远。 */
+      {
+        $addFields: {
+          decision_rank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$decision.action", ReviewDecisionAction.CONDITIONAL] }, then: 0 },
+                { case: { $eq: ["$decision.action", ReviewDecisionAction.REJECT] }, then: 1 },
+                { case: { $eq: ["$decision.action", ReviewDecisionAction.APPROVE] }, then: 2 },
+                { case: { $eq: ["$decision.action", ReviewDecisionAction.TERMINATE] }, then: 3 },
+              ],
+              default: 4,
+            },
+          },
+          deferral_due: {
+            $cond: [
+              { $eq: ["$decision.action", ReviewDecisionAction.CONDITIONAL] },
+              { $ifNull: ["$decision.deferral.due_at", new Date("2999-12-31T00:00:00Z")] },
+              new Date("2999-12-31T00:00:00Z"),
+            ],
+          },
+        },
+      },
       {
         $facet: {
           items: [
-            { $sort: { [sortField]: sortDirection, _id: sortDirection } },
+            { $sort: { decision_rank: 1, deferral_due: 1, [sortField]: sortDirection, _id: sortDirection } },
             { $skip: (page - 1) * pageSize },
             { $limit: pageSize },
           ],
@@ -471,7 +540,13 @@ function fmtDate(date: Date): string {
 }
 
 function toVO(
-  doc: ReviewCase & { _id: Types.ObjectId; created_at?: Date; updated_at?: Date },
+  doc: ReviewCase & {
+    _id: Types.ObjectId;
+    created_at?: Date;
+    updated_at?: Date;
+    /** 分桶列表由 $lookup 联查带出的申请当前状态 */
+    application_status?: AccessStatus;
+  },
 ): ReviewCaseVO {
   return {
     id: String(doc._id),
@@ -503,6 +578,7 @@ function toVO(
     submitted_at: doc.submitted_at.toISOString(),
     reviewer_name: doc.reviewer_name,
     reviewed_at: doc.reviewed_at ? doc.reviewed_at.toISOString() : null,
+    application_status: doc.application_status ?? null,
   };
 }
 

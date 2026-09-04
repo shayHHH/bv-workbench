@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {
+  AccessStatusLabel,
   CustomerSubTypeLabel,
   ReviewAuditTypeLabel,
   ReviewFinalResultLabel,
   ReviewTypeLabel,
+  type AccessStatus,
   type ReviewAuditType,
   type ReviewCaseVO,
   type ReviewFinalResult,
@@ -12,14 +14,16 @@ import {
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { REVIEW_FINAL_TONE, type TagTone } from "@/components/statusTones";
+import { ACCESS_STATUS_TONE, REVIEW_FINAL_TONE, type TagTone } from "@/components/statusTones";
 import { fetchReviewCases } from "@/api/access";
 import { localizeText } from "@/i18n";
 import { formatDateTime } from "@/utils/format";
 
 const { t } = useI18n();
 const router = useRouter();
-const tab = ref<"PENDING" | "PROCESSED">("PENDING");
+/** 三分队列：待处理 / 跟踪中（驳回、条件性通过待补件）/ 已完结（申请终态） */
+type QueueTab = "PENDING" | "ON_HOLD" | "CLOSED";
+const tab = ref<QueueTab>("PENDING");
 const list = ref<ReviewCaseVO[]>([]);
 const loading = ref(false);
 const query = reactive({
@@ -44,17 +48,26 @@ const DECISION_OPTIONS = computed(() => [
   { value: "TERMINATE", label: t("compliance.queue.decision.TERMINATE") },
 ]);
 
+/** 跟踪中只会出现这两种结论（通过/终止的工单进已完结） */
+const ON_HOLD_DECISION_OPTIONS = computed(() =>
+  DECISION_OPTIONS.value.filter(opt => opt.value === "CONDITIONAL" || opt.value === "REJECT"),
+);
+const decisionOptions = computed(() =>
+  tab.value === "ON_HOLD" ? ON_HOLD_DECISION_OPTIONS.value : DECISION_OPTIONS.value,
+);
+
 async function load() {
   loading.value = true;
   try {
     const page = await fetchReviewCases({
-      status: tab.value,
+      status: tab.value === "PENDING" ? "PENDING" : "PROCESSED",
+      bucket: tab.value === "PENDING" ? undefined : tab.value,
       keyword: query.keyword || undefined,
       audit_type: query.audit_type || undefined,
       review_type: query.review_type || undefined,
-      final_result: tab.value === "PROCESSED" && query.final_result ? query.final_result : undefined,
+      final_result: tab.value === "CLOSED" && query.final_result ? query.final_result : undefined,
       decision_action:
-        tab.value === "PROCESSED" && query.decision_action ? query.decision_action : undefined,
+        tab.value !== "PENDING" && query.decision_action ? query.decision_action : undefined,
       submitted_from: query.range?.[0]?.getTime(),
       submitted_to: query.range ? query.range[1].getTime() + 86_399_999 : undefined,
       sort_by: query.sort_by,
@@ -92,6 +105,26 @@ function onSortChange({ prop, order }: { prop: string; order: "ascending" | "des
 
 function openDetail(row: ReviewCaseVO) {
   router.push(`/compliance/review/${row.id}`);
+}
+
+/** 已处理列表：条件性放行由服务端置顶，这里只给行一个淡色标识 */
+function processedRowClass({ row }: { row: ReviewCaseVO }): string {
+  return row.decision?.action === "CONDITIONAL" ? "row-conditional" : "";
+}
+
+/** 跟踪中：申请当前状态（被驳回 / 附条件通过 / 逾期受限），由服务端分桶联查带出 */
+function currentStatusText(row: ReviewCaseVO): string {
+  return row.application_status
+    ? localizeText(AccessStatusLabel[row.application_status as AccessStatus])
+    : "--";
+}
+
+const STATUS_TAG: Record<string, TagTone> = ACCESS_STATUS_TONE;
+
+/** 跟踪中：条件性放行的补件截止时间（驳回行无截止） */
+function deferralDueText(row: ReviewCaseVO): string {
+  const due = row.decision?.deferral?.due_at;
+  return due ? formatDateTime(due) : "--";
 }
 
 /** demo 已处理表格的"我的结论"（decision.action → 展示文案） */
@@ -132,8 +165,10 @@ onMounted(load);
     <el-card shadow="never">
       <el-tabs v-model="tab">
         <el-tab-pane :label="t('compliance.queue.tabPending')" name="PENDING" />
-        <el-tab-pane :label="t('compliance.queue.tabProcessed')" name="PROCESSED" />
+        <el-tab-pane :label="t('compliance.queue.tabOnHold')" name="ON_HOLD" />
+        <el-tab-pane :label="t('compliance.queue.tabClosed')" name="CLOSED" />
       </el-tabs>
+      <p v-if="tab === 'ON_HOLD'" class="tab-tip">{{ t("compliance.queue.onHoldTip") }}</p>
 
       <div class="filter-row">
         <el-input
@@ -160,17 +195,17 @@ onMounted(load);
           <el-option v-for="(label, value) in ReviewTypeLabel" :key="value" :value="value" :label="localizeText(label)" />
         </el-select>
         <el-select
-          v-if="tab === 'PROCESSED'"
+          v-if="tab !== 'PENDING'"
           v-model="query.decision_action"
           clearable
           :placeholder="t('compliance.queue.allDecision')"
           class="type-select"
           @change="search"
         >
-          <el-option v-for="opt in DECISION_OPTIONS" :key="opt.value" :value="opt.value" :label="opt.label" />
+          <el-option v-for="opt in decisionOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
         </el-select>
         <el-select
-          v-if="tab === 'PROCESSED'"
+          v-if="tab === 'CLOSED'"
           v-model="query.final_result"
           clearable
           :placeholder="t('compliance.queue.allFinal')"
@@ -229,9 +264,72 @@ onMounted(load);
         <el-empty v-if="!loading && !list.length" :description="t('compliance.queue.emptyPending')" />
       </template>
 
-      <!-- 已处理：表格（demo 7 列口径） -->
+      <!-- 跟踪中：已驳回 / 条件性通过待补件的工单，交易员重新提交后自动转回待处理 -->
+      <template v-else-if="tab === 'ON_HOLD'">
+        <el-table
+          v-loading="loading"
+          :data="list"
+          :default-sort="{ prop: 'reviewed_at', order: 'descending' }"
+          :row-class-name="processedRowClass"
+          @sort-change="onSortChange"
+        >
+          <el-table-column :label="t('compliance.queue.colCustomerName')" min-width="140">
+            <template #default="{ row }"><strong>{{ row.customer_name }}</strong></template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colCustomerCode')" min-width="100">
+            <template #default="{ row }">{{ row.customer_code || t("customer.common.noCode") }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colSubjectType')" min-width="95">
+            <template #default="{ row }">{{ subjectTypeText(row) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colMyConclusion')" min-width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.decision?.action === 'CONDITIONAL' ? 'warning' : 'danger'" size="small" effect="light">
+                {{ myConclusion(row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colCurrentStatus')" min-width="100">
+            <template #default="{ row }">
+              <el-tag
+                v-if="row.application_status"
+                :type="STATUS_TAG[row.application_status] || 'info'"
+                size="small"
+                effect="light"
+              >
+                {{ currentStatusText(row) }}
+              </el-tag>
+              <span v-else class="muted">--</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colDeferralDue')" min-width="150">
+            <template #default="{ row }">
+              <span :class="{ 'due-overdue': row.application_status === 'DEFERRAL_OVERDUE' }">
+                {{ deferralDueText(row) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reviewed_at" :label="t('compliance.queue.colReviewedAt')" min-width="160" sortable="custom">
+            <template #default="{ row }">{{ row.reviewed_at ? formatDateTime(row.reviewed_at) : "--" }}</template>
+          </el-table-column>
+          <el-table-column :label="t('compliance.queue.colActions')" min-width="90" align="right">
+            <template #default="{ row }">
+              <el-button size="small" type="primary" link @click="openDetail(row)">{{ t("compliance.queue.detail") }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!loading && !list.length" :description="t('compliance.queue.emptyOnHold')" />
+      </template>
+
+      <!-- 已完结：表格（demo 7 列口径） -->
       <template v-else>
-        <el-table v-loading="loading" :data="list" :default-sort="{ prop: 'reviewed_at', order: 'descending' }" @sort-change="onSortChange">
+        <el-table
+          v-loading="loading"
+          :data="list"
+          :default-sort="{ prop: 'reviewed_at', order: 'descending' }"
+          :row-class-name="processedRowClass"
+          @sort-change="onSortChange"
+        >
           <el-table-column :label="t('compliance.queue.colCustomerName')" min-width="140">
             <template #default="{ row }"><strong>{{ row.customer_name }}</strong></template>
           </el-table-column>
@@ -266,7 +364,7 @@ onMounted(load);
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="!loading && !list.length" :description="t('compliance.queue.emptyProcessed')" />
+        <el-empty v-if="!loading && !list.length" :description="t('compliance.queue.emptyClosed')" />
       </template>
 
       <div class="pager">
@@ -283,6 +381,21 @@ onMounted(load);
 </template>
 
 <style scoped>
+:deep(.el-table .row-conditional > td) {
+  background: var(--el-color-warning-light-9, #fdf6ec);
+}
+
+.tab-tip {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.due-overdue {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
 .page-header {
   margin-bottom: 16px;
 }

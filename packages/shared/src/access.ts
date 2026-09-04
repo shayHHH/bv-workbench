@@ -483,6 +483,8 @@ export interface ReviewCaseVO {
   submitted_at: string;
   reviewer_name: string | null;
   reviewed_at: string | null;
+  /** 队列跟踪中/已完结分桶联查的申请当前状态；仅带 bucket 的列表查询返回 */
+  application_status?: AccessStatus | null;
   /** 详情接口附带：渠道材料清单要求 + 驳回历史版本（列表不返回） */
   requirements?: ReviewRequirementVO[];
   material_history?: ReviewMaterialHistoryVO[];
