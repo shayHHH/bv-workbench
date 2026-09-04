@@ -192,6 +192,39 @@ const flatItems = computed<KycItem[]>(
   () => selectedChannel.value?.sections.flatMap(section => section.items) ?? [],
 );
 
+/** 复制收集材料说明：材料项清单 + 渠道限制，拼成可直接发给客户的文本（沿用清单繁体口径） */
+async function copyCollectText() {
+  const scenario = selectedScenario.value;
+  const channel = selectedChannel.value;
+  if (!scenario || !channel) {
+    ElMessage.warning(t("access.upload.copyCollectEmpty"));
+    return;
+  }
+  const lines: string[] = [`【${scenario.scenario_name} · ${channel.channel_name}】材料收集清單`, ""];
+  flatItems.value.forEach((item, index) => {
+    lines.push(`${index + 1}. ${item.item_name}（${item.required ? "必須" : "選填"}）`);
+    if (item.item_description) lines.push(`   ${item.item_description}`);
+  });
+  if (channel.restrictions.length) {
+    lines.push("", "渠道限制提醒：");
+    channel.restrictions.forEach((restriction, index) => {
+      lines.push(`${index + 1}. ${restriction.content}`);
+    });
+  }
+  const text = lines.join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const el = document.createElement("textarea");
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+  ElMessage.success(t("access.upload.copyCollectDone"));
+}
+
 /* ---------------- 文件（第 2 区） ---------------- */
 
 const ACCEPT = ".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx";
@@ -750,7 +783,12 @@ onMounted(async () => {
     <aside class="assistant">
       <section class="panel">
         <header class="panel-head">
-          <strong>{{ t("access.upload.kycPanelTitle") }}</strong>
+          <div class="panel-head-top">
+            <strong>{{ t("access.upload.kycPanelTitle") }}</strong>
+            <el-button size="small" text type="primary" @click="copyCollectText">
+              {{ t("access.upload.copyCollect") }}
+            </el-button>
+          </div>
           <span>{{ selectedScenario?.scenario_name ?? t("access.upload.noScenario") }}</span>
           <small v-if="selectedScenario">
             #{{ selectedScenario.scenario_code }} ·
@@ -1440,6 +1478,12 @@ h1 {
 .dock-actions {
   flex: none;
   display: flex;
+  gap: 8px;
+}
+.panel-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 </style>
